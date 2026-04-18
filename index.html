@@ -189,7 +189,7 @@ const I={
     tabProject:'Project',tabScope:'Scope',tabBudget:'Budget',tabPlanning:'Planning',tabPayment:'Betaling',tabPreview:'Preview',
     // Project tab
     projectGegevens:'Projectgegevens',projectnaam:'Projectnaam',referentie:'Referentienummer',datum:'Datum',
-    batchgrootte:'Batchgrootte (stuks)',klantGegevens:'Klantgegevens',bedrijfsnaam:'Bedrijfsnaam',
+    locatie:'Locatie',batchgrootte:'Batchgrootte (stuks)',klantGegevens:'Klantgegevens',bedrijfsnaam:'Bedrijfsnaam',
     contactpersoon:'Contactpersoon',email:'E-mail',adres:'Adres',postcode:'Postcode',plaats:'Plaats',
     omschrijving:'Omschrijving',projectOmschrijving:'Projectomschrijving',rolVanTeal:'Rol van TEAL',
     nietInbegrepen:'Niet inbegrepen / Exclusions',beschrijvingPlaceholder:'Beschrijving van het project',
@@ -226,20 +226,26 @@ const I={
     garantie:'Garantie',garantieIncl:'Garantie opnemen',
     avNL:'Algemene Voorwaarden TEAL bijvoegen (NL)',avEN:'General Terms & Conditions (EN)',
     // Preview
-    offerte:'OFFERTE',projectDetails:'Projectgegevens',referentieLabel:'Referentie',
-    klant:'Klant',versieLabel:'Versie',geldigheidLabel:'Geldigheid',dagenNaDagtekening:'dagen na dagtekening',
-    betalingLabel:'Betaling',dagen:'dagen',
-    projectBeschrijving:'Projectomschrijving',rolTeal:'Rol van TEAL',exclusions:'Niet inbegrepen',
-    scopeAanpak:'Scope en aanpak',investering:'Investering',faseCol:'Fase',omschrijvingPrev:'Omschrijving',
-    bedragExclBTW:'Bedrag excl. BTW',materialenInkoop:'Materialen en inkoop',onderaanneming:'Onderaanneming',
-    totaalLabel:'TOTAAL',prijzenExclBTW:'Prijzen exclusief BTW.',reiskosten:'Reiskosten',
-    planningLabel:'Planning',duur:'Duur',indicatieveStart:'Indicatieve start',
-    betalingsschemaLabel:'Betalingsschema',betalingstermijnTekst:'Betalingstermijn: {n} dagen na factuurdatum.',
-    voorwaardenLabel:'Voorwaarden',geldigheidTekst:'{n} dagen na dagtekening',
-    garantieLabel:'Garantie',btwTekst:'Alle genoemde prijzen zijn exclusief BTW',
-    avTekst:'De Algemene Voorwaarden van TEAL B.V. zijn van toepassing (bijgevoegd).',
-    akkoord:'Akkoord',akkoordTekst:'Ondergetekende verklaart akkoord te gaan met de voorwaarden en werkzaamheden zoals beschreven in deze offerte.',
+    offerte:'OFFERTE',klantLabel:'KLANT',detailsLabel:'DETAILS',
+    projectnaamPrev:'Projectnaam',locatie:'Locatie',scope:'Scope',
+    referentieLabel:'Offertenummer',datumPrev:'Datum',geldigTot:'Geldig tot',
+    projectBeschrijving:'PROJECTOMSCHRIJVING',rolTeal:'Rol van TEAL',
+    scopeTimeline:'SCOPE & PLANNING',indicatieveTimeline:'INDICATIEVE PLANNING',
+    financieelOverzicht:'FINANCIEEL OVERZICHT',
+    itemCol:'item',aantalCol:'aant.',prijsPerStuk:'prijs p/st',totaalCol:'totaal (\u20AC)',
+    materialenInkoop:'Materialen en inkoop',onderaanneming:'Onderaanneming',
+    totaalLabel:'Totaal (excl. BTW)',
+    voorwaardenLabel:'VOORWAARDEN',
+    betalingVw:'Betaling',exclusionsVw:'Exclusies',
+    betalingstermijnTekst:'Betalingstermijn: {n} dagen na factuurdatum.',
+    geldigheidVw:'Geldigheid',garantieLabel:'Garantie',
+    btwTekst:'Alle genoemde prijzen zijn exclusief BTW.',
+    avTekst:'Op deze offerte zijn de Algemene Voorwaarden van TEAL B.V. van toepassing (bijgevoegd).',
+    meerwerkTekst:'Meerwerk of vertraging die niet aan TEAL te wijten is, wordt apart in rekening gebracht.',
+    akkoord:'Akkoord',akkoordTekst:'Ondergetekende verklaart akkoord te gaan met de informatie in dit document en de bijgevoegde Algemene Voorwaarden.',
+    acceptedBy:'AKKOORD DOOR',
     naamHandtekening:'Naam en handtekening',datumLabel:'Datum',
+    weken:'weken',duur:'Duur',
   },
   en:{
     offertetool:'Quote Tool',deelLink:'Share link',linkKopie:'Link copied',
@@ -249,7 +255,7 @@ const I={
     nieuweOfferteBtn:'Start a new quotation? Current data remains in localStorage.',
     tabProject:'Project',tabScope:'Scope',tabBudget:'Budget',tabPlanning:'Planning',tabPayment:'Payment',tabPreview:'Preview',
     projectGegevens:'Project Details',projectnaam:'Project name',referentie:'Reference number',datum:'Date',
-    batchgrootte:'Batch size (units)',klantGegevens:'Client Details',bedrijfsnaam:'Company name',
+    locatie:'Location',batchgrootte:'Batch size (units)',klantGegevens:'Client Details',bedrijfsnaam:'Company name',
     contactpersoon:'Contact person',email:'E-mail',adres:'Address',postcode:'Postal code',plaats:'City',
     omschrijving:'Description',projectOmschrijving:'Project description',rolVanTeal:"TEAL's Role",
     nietInbegrepen:'Exclusions',beschrijvingPlaceholder:'Describe the project',
@@ -281,20 +287,26 @@ const I={
     voorwaarden:'Terms & Conditions',geldigheid:'Validity (days)',betalingstermijn:'Payment term (days)',
     garantie:'Warranty',garantieIncl:'Include warranty',
     avNL:'Algemene Voorwaarden TEAL bijvoegen (NL)',avEN:'General Terms & Conditions (EN)',
-    offerte:'QUOTATION',projectDetails:'Project Details',referentieLabel:'Reference',
-    klant:'Client',versieLabel:'Version',geldigheidLabel:'Validity',dagenNaDagtekening:'days from date of issue',
-    betalingLabel:'Payment',dagen:'days',
-    projectBeschrijving:'Project Description',rolTeal:"TEAL's Role",exclusions:'Exclusions',
-    scopeAanpak:'Scope of Work',investering:'Investment',faseCol:'Phase',omschrijvingPrev:'Description',
-    bedragExclBTW:'Amount ex. VAT (\u20AC)',materialenInkoop:'Materials and procurement',onderaanneming:'Subcontractors',
-    totaalLabel:'TOTAL',prijzenExclBTW:'Prices exclude VAT.',reiskosten:'Travel',
-    planningLabel:'Planning',duur:'Duration',indicatieveStart:'Indicative start',
-    betalingsschemaLabel:'Payment Schedule',betalingstermijnTekst:'Payment due within {n} days of invoice date.',
-    voorwaardenLabel:'Terms & Conditions',geldigheidTekst:'{n} days from date of issue',
-    garantieLabel:'Warranty',btwTekst:'All prices exclude VAT',
+    offerte:'QUOTATION',klantLabel:'CLIENT',detailsLabel:'DETAILS',
+    projectnaamPrev:'Project name',locatie:'Location',scope:'Scope',
+    referentieLabel:'Quotation Number',datumPrev:'Date',geldigTot:'Valid Until',
+    projectBeschrijving:'PROJECT DESCRIPTION',rolTeal:"TEAL's Role",
+    scopeTimeline:'SCOPE OF WORK & TIMELINE',indicatieveTimeline:'INDICATIVE TIMELINE',
+    financieelOverzicht:'FINANCIAL SUMMARY',
+    itemCol:'item',aantalCol:'qty.',prijsPerStuk:'price p/u',totaalCol:'total (\u20AC)',
+    materialenInkoop:'Materials and procurement',onderaanneming:'Subcontractors',
+    totaalLabel:'Total (excl. VAT)',
+    voorwaardenLabel:'TERMS & CONDITIONS',
+    betalingVw:'Payment',exclusionsVw:'Exclusions',
+    betalingstermijnTekst:'Payment is due within {n} days of the invoice date.',
+    geldigheidVw:'Validity',garantieLabel:'Warranty',
+    btwTekst:'All prices exclude VAT.',
     avTekst:'The General Terms and Conditions of TEAL B.V. apply (attached).',
-    akkoord:'Approval',akkoordTekst:'By signing below, the client confirms this quotation and authorizes TEAL to proceed.',
+    meerwerkTekst:'Additional work or delays not attributable to TEAL will be charged separately.',
+    akkoord:'Approval',akkoordTekst:'By signing below, you agree to the information outlined in this document and the General Terms and Conditions (attached to this document).',
+    acceptedBy:'ACCEPTED BY',
     naamHandtekening:'Name and signature',datumLabel:'Date',
+    weken:'weeks',duur:'Duration',
   },
 };
 const L_=lang=>I[lang]||I.nl;
@@ -336,7 +348,7 @@ function createProject(type){
   return{
     v:3,type,lang:'nl',
     ref:genRef(type),
-    project:{name:'',date:new Date().toISOString().slice(0,10),
+    project:{name:'',date:new Date().toISOString().slice(0,10),location:'',
       description:{nl:'',en:''},tealRole:{nl:'',en:''},exclusions:{nl:'',en:''}},
     client:{name:'',contact:'',email:'',addr:'',zip:'',city:''},
     phases,
@@ -467,6 +479,7 @@ function ProjectTab({data:d,set}){
       </div>
       <div className="row">
         <div className="fg"><label>{ll.datum}</label><input type="date" value={d.project.date} onChange={e=>up('date',e.target.value)}/></div>
+        <div className="fg"><label>{ll.locatie||'Locatie'}</label><input value={d.project.location||''} onChange={e=>up('location',e.target.value)} placeholder={d.lang==='nl'?'bijv. Den Haag':'e.g. The Hague'}/></div>
       </div>
       {d.type==='assemble'&&<div className="row">
         <div className="fg"><label>{ll.batchgrootte}</label><input type="number" value={d.batchSize||''} onChange={e=>set({...d,batchSize:parseInt(e.target.value)||0})}/></div>
@@ -791,7 +804,54 @@ function PaymentTab({data:d,set}){
   </div>;
 }
 
-// ── Preview ──
+// ── Preview (Whispers format) ──
+function buildFinancialLines(d,totals,L){
+  // Build client-friendly line items from internal budget
+  const lines=[];
+  const activePhases=d.phases.filter(p=>p.enabled!==false);
+  const pn=(ph)=>ph.customName||t(ph.name,L);
+
+  // Collect all labour items across phases, grouped by description
+  activePhases.forEach((ph,origIdx)=>{
+    const pi=d.phases.indexOf(ph);
+    const pd=totals.phaseData[pi];
+    if(!pd||pd.total===0)return;
+    ph.items.forEach(it=>{
+      if((it.qty||0)===0)return;
+      const desc=t(it.desc,L);
+      const total=(it.qty||0)*(it.extRate||0);
+      lines.push({desc:desc||pn(ph),qty:it.qty||0,unit:fmtE(it.extRate||0),total});
+    });
+    // Add contingency as hidden markup (baked into total, not shown separately)
+    if((ph.contingency||0)>0&&pd.cont>0){
+      const baseClient=pd.client;
+      // Redistribute contingency proportionally across items (already in total)
+    }
+  });
+
+  // Procurement items (shown as materials)
+  (d.procOTS||[]).forEach(it=>{
+    if(!it.amount)return;
+    const h=(it.amount||0)*(it.handlingPct||0);
+    lines.push({desc:it.desc||'Materials',qty:it.amount>0?1:0,unit:fmtE(it.amount+h),total:it.amount+h});
+  });
+  (d.procCustom||[]).forEach(it=>{
+    if(!it.amount)return;
+    const h=(it.amount||0)*(it.handlingPct||0);
+    const r=(it.amount||0)*(it.riskPct||0);
+    lines.push({desc:it.desc||'Custom materials',qty:1,unit:fmtE(it.amount+h+r),total:it.amount+h+r});
+  });
+
+  // Subcontractors
+  (d.subs||[]).forEach(it=>{
+    if(!it.amount)return;
+    const c=(it.amount||0)*(it.coordPct||COORD_MARGIN);
+    lines.push({desc:it.desc||'Subcontractor',qty:1,unit:fmtE(it.amount+c),total:it.amount+c});
+  });
+
+  return lines;
+}
+
 function PreviewTab({data:d}){
   const L=d.lang;const ll=L_(L);
   const NL=L==='nl';
@@ -799,140 +859,118 @@ function PreviewTab({data:d}){
   const grand=totals.grandClient;
   const phaseName=(ph)=>ph.customName||t(ph.name,L);
   const activePhases=d.phases.filter(p=>p.enabled!==false);
-  const versionFromRef=(d.ref||'').split('-').pop()||'1';
 
-  const fmtDateShort=ds=>{if(!ds)return'';const dt=new Date(ds);return`${dt.getDate()}.${dt.getMonth()+1}.${dt.getFullYear()}`};
-  let sec=0;
+  const fmtDateLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
+  const validUntil=()=>{if(!d.project.date)return'';const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(d.conditions.validity||30));return fmtDateLong(dt.toISOString().slice(0,10))};
+
+  const finLines=buildFinancialLines(d,totals,L);
 
   return <div className="prev" id="offerte-preview">
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:36}}>
-      <div style={{fontSize:14,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>{ll.offerte}</div>
-      <div style={{fontSize:13}}>{fmtDateShort(d.project.date)}</div>
+    {/* Header */}
+    <div style={{marginBottom:36}}>
+      <div style={{fontSize:24,fontWeight:800,letterSpacing:2}}>TEAL</div>
+      <div style={{fontSize:16,fontWeight:400,color:'#555',marginTop:2}}>{ll.offerte}</div>
     </div>
 
-    <div className="sec-h">{++sec} - {ll.projectDetails}</div>
+    {/* CLIENT block */}
+    <div className="sec-h">{ll.klantLabel}</div>
+    <div style={{marginBottom:24}}>
+      <p style={{fontWeight:600}}>{d.client.name||'[Client]'}</p>
+      {d.client.contact&&<p>{d.client.contact}</p>}
+      {d.client.email&&<p><a href={`mailto:${d.client.email}`} style={{color:'#111'}}>{d.client.email}</a></p>}
+    </div>
+
+    {/* DETAILS block */}
+    <div className="sec-h">{ll.detailsLabel}</div>
     <table>
       <tbody>
-        <tr><td className="label-cell">Project</td><td>{d.project.name||'[Projectnaam]'}</td><td className="label-cell">{ll.referentieLabel}</td><td>{d.ref}</td></tr>
-        <tr><td className="label-cell">{ll.klant}</td><td>{d.client.name||'[Klant]'}{d.client.contact?`, ${d.client.contact}`:''}</td><td className="label-cell">{ll.versieLabel}</td><td>{versionFromRef}</td></tr>
-        <tr><td className="label-cell">{ll.geldigheidLabel}</td><td>{d.conditions.validity} {ll.dagenNaDagtekening}</td><td className="label-cell">{ll.betalingLabel}</td><td>{d.conditions.paymentTerm} {ll.dagen}</td></tr>
+        <tr><td className="label-cell">{ll.projectnaamPrev}</td><td>{d.project.name||'[Project]'}</td></tr>
+        {d.project.location&&<tr><td className="label-cell">{ll.locatie}</td><td>{d.project.location}</td></tr>}
+        <tr><td className="label-cell">{ll.scope}</td><td>{d.type==='build'?'Build':'Assembly'}</td></tr>
+        <tr><td className="label-cell">{ll.referentieLabel}</td><td>{d.ref}</td></tr>
+        <tr><td className="label-cell">{ll.datumPrev}</td><td>{fmtDateLong(d.project.date)}</td></tr>
+        <tr><td className="label-cell">{ll.geldigTot}</td><td>{validUntil()}</td></tr>
       </tbody>
     </table>
 
+    {/* PROJECT DESCRIPTION */}
     {(t(d.project.description,L)||t(d.project.tealRole,L))&&<>
-      <div className="sec-h">{++sec} - {ll.projectBeschrijving}</div>
+      <div className="sec-h">{ll.projectBeschrijving}</div>
       {t(d.project.description,L)&&<p style={{whiteSpace:'pre-wrap',marginBottom:12}}>{t(d.project.description,L)}</p>}
       {t(d.project.tealRole,L)&&<><h3>{ll.rolTeal}</h3><p style={{whiteSpace:'pre-wrap',marginBottom:12}}>{t(d.project.tealRole,L)}</p></>}
-      {t(d.project.exclusions,L)&&<><h3>{ll.exclusions}</h3><p style={{whiteSpace:'pre-wrap'}}>{t(d.project.exclusions,L)}</p></>}
     </>}
 
-    <div className="sec-h">{++sec} - {ll.scopeAanpak}</div>
+    {/* SCOPE OF WORK & TIMELINE (combined) */}
+    <div className="sec-h">{ll.scopeTimeline}</div>
     {activePhases.map(ph=>{
       const desc=t(ph.description,L);
       return desc?<div key={ph.id} style={{marginBottom:14}}>
-        <h3>{ph.code} - {phaseName(ph)}</h3>
+        <h3>{phaseName(ph)}</h3>
         <p style={{whiteSpace:'pre-wrap'}}>{desc}</p>
         {ph.effort&&<p style={{marginTop:4,color:'#999',fontSize:12}}><strong>{ll.inzet}:</strong> {ph.effort}</p>}
       </div>:null;
     })}
 
-    <div className="sec-h">{++sec} - {ll.investering}</div>
+    {/* Indicative timeline (simple table inside scope section) */}
+    <h3 style={{marginTop:24}}>{ll.indicatieveTimeline}</h3>
     <table>
-      <thead><tr><th>{ll.faseCol}</th><th>{ll.omschrijvingPrev}</th><th style={{textAlign:'right'}}>{ll.bedragExclBTW}</th></tr></thead>
+      <thead><tr><th>{NL?'Fase':'Phase'}</th><th>{ll.duur}</th></tr></thead>
       <tbody>
-        {d.phases.map((ph,pi)=>{
-          if(ph.enabled===false)return null;
-          const pd=totals.phaseData[pi];
-          if(!pd||pd.total===0)return null;
-          return <tr key={ph.id}>
-            <td style={{fontWeight:600}}>{ph.code}</td>
-            <td>{phaseName(ph)}{pd.cont>0?` (incl. ${Math.round((ph.contingency||0)*100)}% contingency)`:''}</td>
-            <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(pd.total)}</td>
-          </tr>;
-        })}
-        {totals.procClient>0&&<tr>
-          <td style={{fontWeight:600}}>B</td>
-          <td>{ll.materialenInkoop}</td>
-          <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(totals.procClient)}</td>
-        </tr>}
-        {totals.subClient>0&&<tr>
-          <td style={{fontWeight:600}}>C</td>
-          <td>{ll.onderaanneming}</td>
-          <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(totals.subClient)}</td>
-        </tr>}
-        <tr style={{fontWeight:700,background:'#f0f0ee'}}>
-          <td colSpan={2} style={{textDecoration:'underline'}}>{ll.totaalLabel}</td>
-          <td style={{textAlign:'right',fontFamily:'monospace',textDecoration:'underline'}}>{fmtE(grand)}</td>
-        </tr>
-      </tbody>
-    </table>
-    <p style={{marginTop:8,fontSize:11,color:'#999',fontStyle:'italic'}}>{ll.prijzenExclBTW} {ll.reiskosten}: &euro; {d.travel?.rateNL||0.50}/km.</p>
-
-    <div className="sec-h">{++sec} - {ll.planningLabel}</div>
-    <table>
-      <thead><tr><th>{ll.faseCol}</th><th>{ll.omschrijvingPrev}</th><th>{ll.duur}</th><th>{ll.indicatieveStart}</th></tr></thead>
-      <tbody>
-        {activePhases.map(ph=>{
-          let sd='';
-          if(d.project.date&&ph.startWeek>=0){const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(ph.startWeek||0)*7);sd=dt.toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'short',year:'numeric'})}
-          return <tr key={ph.id}>
-            <td style={{fontWeight:600}}>{ph.code}</td>
-            <td>{phaseName(ph)}</td>
-            <td>{ph.durationWeeks||4} {ll.weken}</td>
-            <td>{sd}</td>
-          </tr>;
-        })}
-      </tbody>
-    </table>
-
-    <div className="sec-h">{++sec} - {ll.betalingsschemaLabel}</div>
-    <table>
-      <thead><tr><th>{ll.mijlpaal}</th><th style={{textAlign:'right'}}>%</th><th style={{textAlign:'right'}}>{ll.bedragExclBTW}</th></tr></thead>
-      <tbody>
-        {d.payment.milestones.map((ms,i)=><tr key={i}>
-          <td>{t(ms.name,L)}</td>
-          <td style={{textAlign:'right'}}>{ms.pct}%</td>
-          <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(grand*ms.pct/100)}</td>
+        {activePhases.map(ph=><tr key={ph.id}>
+          <td style={{fontWeight:500}}>{phaseName(ph)}</td>
+          <td>{ph.durationWeeks||4} {ll.weken}</td>
         </tr>)}
-        <tr style={{fontWeight:700,background:'#f0f0ee'}}>
-          <td style={{textDecoration:'underline'}}>{ll.totaalLabel}</td>
-          <td style={{textAlign:'right'}}>{d.payment.milestones.reduce((s,m)=>s+(m.pct||0),0)}%</td>
-          <td style={{textAlign:'right',fontFamily:'monospace',textDecoration:'underline'}}>{fmtE(grand)}</td>
+      </tbody>
+    </table>
+
+    {/* FINANCIAL SUMMARY */}
+    <div className="sec-h">{ll.financieelOverzicht}</div>
+    <table>
+      <thead><tr><th>{ll.itemCol}</th><th style={{textAlign:'right'}}>{ll.aantalCol}</th><th style={{textAlign:'right'}}>{ll.prijsPerStuk}</th><th style={{textAlign:'right'}}>{ll.totaalCol}</th></tr></thead>
+      <tbody>
+        {finLines.map((ln,i)=><tr key={i}>
+          <td>{ln.desc}</td>
+          <td style={{textAlign:'right'}}>{ln.qty>1?fmt(ln.qty):''}</td>
+          <td style={{textAlign:'right',fontFamily:'monospace'}}>{ln.qty>1?ln.unit:''}</td>
+          <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmt(ln.total)}</td>
+        </tr>)}
+        <tr style={{fontWeight:700,borderTop:'2px solid #111'}}>
+          <td colSpan={3}>{ll.totaalLabel}</td>
+          <td style={{textAlign:'right',fontFamily:'monospace'}}>&euro; {fmt(grand)}</td>
         </tr>
       </tbody>
     </table>
-    <p style={{marginTop:8,fontSize:11,color:'#999',fontStyle:'italic'}}>{ll.betalingstermijnTekst.replace('{n}',d.conditions.paymentTerm)}</p>
 
-    <div className="sec-h">{++sec} - {ll.voorwaardenLabel}</div>
-    <table>
-      <tbody>
-        <tr><td className="label-cell">{ll.geldigheidLabel}</td><td>{ll.geldigheidTekst.replace('{n}',d.conditions.validity)}</td></tr>
-        {d.conditions.warrantyEnabled!==false&&<tr><td className="label-cell">{ll.garantieLabel}</td><td>{t(d.conditions.warranty,L)}</td></tr>}
-        <tr><td className="label-cell">BTW</td><td>{ll.btwTekst}</td></tr>
-        {(d.conditions.avNL||d.conditions.avEN)&&<tr><td className="label-cell">{NL?'Algemene Voorwaarden':'General Terms'}</td><td>{ll.avTekst}</td></tr>}
-      </tbody>
-    </table>
+    {/* TERMS & CONDITIONS */}
+    <div className="sec-h">{ll.voorwaardenLabel}</div>
 
-    <div className="sec-h">{++sec} - {ll.akkoord}</div>
-    <p style={{marginBottom:20}}>{ll.akkoordTekst}</p>
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:32}}>
-      <div>
-        <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:4}}>CLIENT</div>
-        <p style={{fontWeight:600}}>{d.client.name||'[Klant]'}</p>
-        <div style={{marginTop:32,borderBottom:'1px solid #999',width:'80%'}}></div>
-        <p style={{fontSize:11,color:'#999',marginTop:4}}>{ll.naamHandtekening}</p>
-        <div style={{marginTop:20,borderBottom:'1px solid #999',width:'50%'}}></div>
-        <p style={{fontSize:11,color:'#999',marginTop:4}}>{ll.datumLabel}</p>
-      </div>
-      <div>
-        <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:4}}>TEAL B.V.</div>
-        <p style={{fontWeight:600}}>Erik Swaagstra</p>
-      </div>
+    <h3>{ll.betalingVw}:</h3>
+    <div style={{marginBottom:12}}>
+      {d.payment.milestones.map((ms,i)=><p key={i} style={{marginBottom:2}}>- {t(ms.name,L)}: {ms.pct}%{ms.date?` (${fmtDateLong(ms.date)})`:''}</p>)}
+      <p>- {ll.betalingstermijnTekst.replace('{n}',d.conditions.paymentTerm)}</p>
     </div>
 
+    {t(d.project.exclusions,L)&&<>
+      <h3>{ll.exclusionsVw}:</h3>
+      <p style={{whiteSpace:'pre-wrap',marginBottom:12}}>{t(d.project.exclusions,L)}</p>
+    </>}
+
+    <p style={{marginBottom:4}}>- {ll.meerwerkTekst}</p>
+    {d.conditions.warrantyEnabled!==false&&<p style={{marginBottom:4}}>- {ll.garantieLabel}: {t(d.conditions.warranty,L)}</p>}
+    {(d.conditions.avNL||d.conditions.avEN)&&<p style={{marginBottom:4}}>- {ll.avTekst}</p>}
+
+    {/* APPROVAL */}
+    <p style={{marginTop:32,marginBottom:20}}>{ll.akkoordTekst}</p>
+
+    <div style={{marginBottom:8}}>
+      <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:4}}>{ll.acceptedBy}:</div>
+      <p style={{fontWeight:700}}>{d.client.name||'[Client]'}</p>
+    </div>
+
+    {/* Footer */}
     <div className="foot">
-      <Logo color="#111" h={16}/>
-      <div>{TEAL.addr}, {TEAL.zip} | {TEAL.email} | KvK {TEAL.kvk} | BTW {TEAL.btw}</div>
+      <div>TEAL</div>
+      <div>{TEAL.addr} | {TEAL.zip}, Den Haag | KvK {TEAL.kvk} | BTW {TEAL.btw}</div>
     </div>
   </div>;
 }
@@ -973,101 +1011,129 @@ function exportPDF(d,setData){
   const line=()=>{doc.setDrawColor(212,236,230);doc.setLineWidth(.5);doc.line(m,y,190,y);y+=4;};
   const gap=(n=3)=>{y+=n};
 
-  // Header
+  const fmtDateLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
+  const validUntil=()=>{if(!d.project.date)return'';const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(d.conditions.validity||30));return fmtDateLong(dt.toISOString().slice(0,10))};
+  const finLines=buildFinancialLines(d,totals,L);
+
+  // ── Header ──
   txt('TEAL',20,{b:true});y-=2;
   doc.setFontSize(12);doc.setTextColor(85,85,85);doc.setFont('helvetica','normal');
-  doc.text(NL?'Offerte':'Quotation',m,y);y+=4;
-  doc.setFontSize(9);doc.setTextColor(153,153,153);
-  doc.text(d.ref,m,y);y+=8;
+  doc.text(ll.offerte,m,y);y+=8;
 
-  // Meta + client
-  doc.setFontSize(9);doc.setTextColor(153,153,153);
-  doc.text('Project',m,y);doc.text(NL?'Datum':'Date',m,y+5);doc.text(NL?'Geldig':'Valid',m,y+10);
-  doc.setTextColor(17,17,17);doc.setFont('helvetica','bold');
-  doc.text(d.project.name||'[Project]',m+25,y);doc.setFont('helvetica','normal');
-  doc.text(d.project.date?new Date(d.project.date).toLocaleDateString(NL?'nl-NL':'en-GB'):'-',m+25,y+5);
-  doc.text(`${d.conditions.validity} ${NL?'dagen':'days'}`,m+25,y+10);
+  // ── CLIENT ──
+  txt(ll.klantLabel,10,{b:true,c:[7,20,18]});gap();
+  doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(17,17,17);
+  doc.text(d.client.name||'[Client]',m,y);y+=5;
+  doc.setFont('helvetica','normal');
+  if(d.client.contact){doc.text(d.client.contact,m,y);y+=4;}
+  if(d.client.email){doc.text(d.client.email,m,y);y+=4;}
+  gap(4);
 
-  if(d.client.name){
-    doc.setFont('helvetica','bold');doc.text(d.client.name,120,y);doc.setFont('helvetica','normal');
-    let cy=y+5;
-    if(d.client.contact){doc.text(d.client.contact,120,cy);cy+=4;}
-    if(d.client.email){doc.text(d.client.email,120,cy);cy+=4;}
-    if(d.client.addr){doc.text(d.client.addr,120,cy);cy+=4;}
-    if(d.client.zip||d.client.city)doc.text(`${d.client.zip} ${d.client.city}`,120,cy);
+  // ── DETAILS table ──
+  txt(ll.detailsLabel,10,{b:true,c:[7,20,18]});gap();
+  const detailRows=[[ll.projectnaamPrev,d.project.name||'[Project]']];
+  if(d.project.location)detailRows.push([ll.locatie,d.project.location]);
+  detailRows.push([ll.scope,d.type==='build'?'Build':'Assembly']);
+  detailRows.push([ll.referentieLabel,d.ref]);
+  detailRows.push([ll.datumPrev,fmtDateLong(d.project.date)]);
+  detailRows.push([ll.geldigTot,validUntil()]);
+  doc.setFontSize(9);
+  detailRows.forEach(([lbl,val])=>{
+    doc.setFont('helvetica','normal');doc.setTextColor(153,153,153);doc.text(lbl,m,y);
+    doc.setTextColor(17,17,17);doc.text(val||'-',m+40,y);y+=5;
+  });
+  gap(4);line();
+
+  // ── PROJECT DESCRIPTION ──
+  if(t(d.project.description,L)||t(d.project.tealRole,L)){
+    txt(ll.projectBeschrijving,10,{b:true,c:[7,20,18]});gap();
+    if(t(d.project.description,L)){txt(t(d.project.description,L),9,{w:pw});gap(4);}
+    if(t(d.project.tealRole,L)){txt(ll.rolTeal,9,{b:true});txt(t(d.project.tealRole,L),9,{w:pw});gap(4);}
+    line();
   }
-  y+=18;line();
 
-  // Description
-  if(t(d.project.description,L)){txt(NL?'PROJECTOMSCHRIJVING':'PROJECT DESCRIPTION',10,{b:true,c:[7,20,18]});gap();
-  txt(t(d.project.description,L),9,{w:pw});gap(4);}
-  if(t(d.project.tealRole,L)){txt(NL?'Rol van TEAL':"TEAL's Role",9,{b:true});txt(t(d.project.tealRole,L),9,{w:pw});gap(4);}
-  if(t(d.project.exclusions,L)){txt(NL?'Niet inbegrepen':'Exclusions',9,{b:true});txt(t(d.project.exclusions,L),9,{w:pw});gap(4);}
-  line();
-
-  // Scope (only active phases)
-  txt(NL?'SCOPE EN AANPAK':'SCOPE OF WORK',10,{b:true,c:[7,20,18]});gap();
+  // ── SCOPE OF WORK & TIMELINE (combined) ──
+  txt(ll.scopeTimeline,10,{b:true,c:[7,20,18]});gap();
   activePhases.forEach(ph=>{
     const desc=t(ph.description,L);
-    if(desc){checkPage(20);txt(`${ph.code} - ${pn(ph)}`,9,{b:true});txt(desc,9,{w:pw});if(ph.effort)txt(`${NL?'Inzet':'Effort'}: ${ph.effort}`,8,{c:[153,153,153]});gap(3);}
+    if(desc){checkPage(20);txt(pn(ph),9,{b:true});txt(desc,9,{w:pw});if(ph.effort)txt(`${ll.inzet}: ${ph.effort}`,8,{c:[153,153,153]});gap(3);}
   });
-  line();
 
-  // Investment table (only active phases)
-  txt(NL?'INVESTERING':'INVESTMENT',10,{b:true,c:[7,20,18]});gap(4);
-  d.phases.forEach((ph,pi)=>{
-    if(ph.enabled===false)return;
-    const pd=totals.phaseData[pi];
-    if(!pd||pd.total===0)return;
+  // Indicative timeline table
+  gap(4);txt(ll.indicatieveTimeline,9,{b:true});gap(2);
+  doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(85,85,85);
+  doc.text(NL?'Fase':'Phase',m,y);doc.text(ll.duur,m+100,y);y+=4;
+  doc.setDrawColor(200,200,200);doc.setLineWidth(.3);doc.line(m,y,190,y);y+=3;
+  doc.setFont('helvetica','normal');doc.setTextColor(17,17,17);doc.setFontSize(9);
+  activePhases.forEach(ph=>{
     checkPage();
-    doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(17,17,17);
-    doc.text(`${ph.code} - ${pn(ph)}`,m,y);
-    doc.text(fmtE(pd.total),190,y,{align:'right'});y+=5;
+    doc.text(pn(ph),m,y);doc.text(`${ph.durationWeeks||4} ${ll.weken}`,m+100,y);y+=5;
   });
-  if(totals.procClient>0){checkPage();doc.setFontSize(9);doc.text(NL?'Materialen en inkoop':'Materials and procurement',m,y);doc.text(fmtE(totals.procClient),190,y,{align:'right'});y+=5;}
-  if(totals.subClient>0){checkPage();doc.text(NL?'Onderaanneming':'Subcontractors',m,y);doc.text(fmtE(totals.subClient),190,y,{align:'right'});y+=5;}
-  gap(2);
-  doc.setLineWidth(.3);doc.setDrawColor(17,17,17);doc.line(m,y,190,y);y+=4;
+  gap(2);line();
+
+  // ── FINANCIAL SUMMARY (flat line items from buildFinancialLines) ──
+  txt(ll.financieelOverzicht,10,{b:true,c:[7,20,18]});gap(2);
+  // Table header
+  const colItem=m,colQty=120,colUnit=150,colTotal=190;
+  doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(85,85,85);
+  doc.text(ll.itemCol,colItem,y);doc.text(ll.aantalCol,colQty,y,{align:'right'});
+  doc.text(ll.prijsPerStuk,colUnit,y,{align:'right'});doc.text(ll.totaalCol,colTotal,y,{align:'right'});y+=4;
+  doc.setDrawColor(200,200,200);doc.setLineWidth(.3);doc.line(m,y,190,y);y+=4;
+  // Table rows
+  doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(17,17,17);
+  finLines.forEach(ln=>{
+    checkPage();
+    doc.text(ln.desc||'',colItem,y);
+    if(ln.qty>1){doc.text(String(ln.qty),colQty,y,{align:'right'});doc.text(ln.unit,colUnit,y,{align:'right'});}
+    doc.text(fmtE(ln.total),colTotal,y,{align:'right'});y+=5;
+  });
+  // Total row
+  gap(1);doc.setLineWidth(.5);doc.setDrawColor(17,17,17);doc.line(m,y,190,y);y+=5;
   doc.setFont('helvetica','bold');doc.setFontSize(10);
-  doc.text(NL?'Totaal excl. BTW':'Total (excl. VAT)',m,y);doc.text(fmtE(grand),190,y,{align:'right'});y+=6;
+  doc.text(ll.totaalLabel,colItem,y);doc.text(fmtE(grand),colTotal,y,{align:'right'});y+=6;
   doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(153,153,153);
   doc.text(`${NL?'Reiskosten':'Travel'}: \u20AC ${d.travel?.rateNL||0.50}/km`,m,y);y+=6;
   doc.setTextColor(17,17,17);line();
 
-  // Planning (only active phases)
-  txt(NL?'PLANNING':'PLANNING',10,{b:true,c:[7,20,18]});gap(4);
-  activePhases.forEach(ph=>{
-    checkPage();
-    let sd='';
-    if(d.project.date&&ph.startWeek>=0){const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(ph.startWeek||0)*7);sd=dt.toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'short',year:'numeric'})}
-    doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(17,17,17);
-    doc.text(`${ph.code} - ${pn(ph)}`,m,y);
-    doc.text(`${ph.durationWeeks||4} ${NL?'weken':'weeks'}`,120,y);
-    doc.text(sd,155,y);
-    y+=5;
-  });
-  gap(2);line();
+  // ── TERMS & CONDITIONS ──
+  txt(ll.voorwaardenLabel,10,{b:true,c:[7,20,18]});gap();
 
-  // Payment
-  txt(NL?'BETALINGSSCHEMA':'PAYMENT SCHEDULE',10,{b:true,c:[7,20,18]});gap();
-  d.payment.milestones.forEach(ms=>{checkPage();
-    doc.setFontSize(9);doc.setFont('helvetica','normal');
-    doc.text(`${t(ms.name,L)} (${ms.pct}%)`,m,y);doc.text(fmtE(grand*ms.pct/100),190,y,{align:'right'});y+=5;
-  });
-  gap(2);doc.setFontSize(8);doc.setTextColor(153,153,153);
-  doc.text(NL?`Betalingstermijn: ${d.conditions.paymentTerm} dagen na factuurdatum.`:`Payment due within ${d.conditions.paymentTerm} days.`,m,y);y+=6;
-  doc.setTextColor(17,17,17);line();
-
-  // Conditions
-  txt(NL?'VOORWAARDEN':'TERMS & CONDITIONS',10,{b:true,c:[7,20,18]});gap();
+  // Payment sub-section
+  txt(ll.betalingVw+':',9,{b:true});gap(1);
   doc.setFontSize(9);doc.setFont('helvetica','normal');
-  const conds=[
-    NL?`- Deze offerte is geldig tot ${d.conditions.validity} dagen na dagtekening.`:`- Valid for ${d.conditions.validity} days.`,
-    NL?'- Prijzen exclusief BTW.':'- Prices exclude VAT.',
-  ];
-  if(d.conditions.warrantyEnabled!==false)conds.push(NL?`- Garantie: ${t(d.conditions.warranty,L)}.`:`- Warranty: ${t(d.conditions.warranty,L)}.`);
-  if(d.conditions.avNL||d.conditions.avEN)conds.push(NL?'- Op deze offerte zijn de Algemene Voorwaarden van TEAL B.V. van toepassing (bijgevoegd).':'- The General Terms and Conditions of TEAL B.V. apply (attached).');
-  conds.forEach(l=>{checkPage();doc.text(l,m,y);y+=5;});
+  d.payment.milestones.forEach(ms=>{checkPage();
+    const datePart=ms.date?` (${fmtDateLong(ms.date)})`:'';
+    doc.text(`- ${t(ms.name,L)}: ${ms.pct}%${datePart}`,m,y);y+=5;
+  });
+  doc.text('- '+ll.betalingstermijnTekst.replace('{n}',d.conditions.paymentTerm),m,y);y+=6;
+
+  // Exclusions sub-section
+  if(t(d.project.exclusions,L)){
+    gap(2);txt(ll.exclusionsVw+':',9,{b:true});gap(1);
+    doc.setFontSize(9);doc.setFont('helvetica','normal');
+    const exLines=doc.splitTextToSize(t(d.project.exclusions,L),pw);
+    doc.text(exLines,m,y);y+=exLines.length*4;gap(2);
+  }
+
+  // Standard conditions
+  gap(2);doc.setFontSize(9);doc.setFont('helvetica','normal');
+  doc.text('- '+ll.meerwerkTekst,m,y);y+=5;
+  if(d.conditions.warrantyEnabled!==false){doc.text(`- ${ll.garantieLabel}: ${t(d.conditions.warranty,L)}`,m,y);y+=5;}
+  if(d.conditions.avNL||d.conditions.avEN){doc.text('- '+ll.avTekst,m,y);y+=5;}
+
+  // ── ACCEPTED BY ──
+  gap(6);checkPage(30);
+  doc.setFontSize(9);doc.setFont('helvetica','normal');
+  const akLines=doc.splitTextToSize(ll.akkoordTekst,pw);
+  doc.text(akLines,m,y);y+=akLines.length*4+6;
+  doc.setFontSize(8);doc.setTextColor(153,153,153);doc.text(ll.acceptedBy+':',m,y);y+=5;
+  doc.setFontSize(9);doc.setTextColor(17,17,17);doc.setFont('helvetica','bold');
+  doc.text(d.client.name||'[Client]',m,y);y+=12;
+  doc.setFont('helvetica','normal');doc.setTextColor(153,153,153);doc.setFontSize(8);
+  doc.text('____________________________',m,y);y+=4;
+  doc.text(NL?'Handtekening':'Signature',m,y);
+  doc.text('____________________________',m+80,y-4);
+  doc.text(NL?'Datum':'Date',m+80,y);
 
   addFooter();
   doc.save(`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}_v${versionFromRef}.pdf`);
