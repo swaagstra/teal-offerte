@@ -801,46 +801,72 @@ const PLANNER_URL='https://teamteal-planner.vercel.app/';
 const GROUP_PALETTE=['#D4ECE6','#B8D8CE','#9CCAB6','#80BC9E','#64AE86','#48A06E','#6BB5A0','#4A9E84','#2D8659','#1A6B44'];
 
 function exportToPlanner(d){
-  const L=d.lang||'nl';const pn=(ph)=>ph.customName||t(ph.name,L);
+  const L=d.lang||'nl';const NL=L==='nl';
+  const pn=(ph)=>ph.customName||t(ph.name,L);
   const activePhases=(d.phases||[]).filter(p=>p.enabled!==false);
   const projectStart=(d.project||{}).date||new Date().toISOString().slice(0,10);
+  const addDays=(iso,days)=>{const dt=new Date(iso);dt.setDate(dt.getDate()+days);return dt.toISOString().slice(0,10);};
 
   // Calculate project end from phases
   const totalWeeks=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
-  const endDt=new Date(projectStart);endDt.setDate(endDt.getDate()+totalWeeks*7+14); // 2 week buffer
+  const endDate=addDays(projectStart,totalWeeks*7+14);
 
-  // Build a single group for all phases
-  const groupId='g_offerte';
+  // Each phase becomes a group; items within become tasks
+  const groups=[];
+  const tasks=[];
+  let tid=1;
 
-  // Build tasks from phases
-  const tasks=activePhases.map((ph,i)=>{
+  activePhases.forEach((ph,pi)=>{
+    const gid='g_'+ph.id;
     const sw=ph.startWeek||0;const dw=ph.durationWeeks||4;
-    const start=new Date(projectStart);start.setDate(start.getDate()+sw*7);
-    const end=new Date(projectStart);end.setDate(end.getDate()+(sw+dw)*7);
-    return{
-      id:'t_'+ph.id,
-      name:pn(ph),
-      groupId,
-      categoryId:null,
-      start:start.toISOString().slice(0,10),
-      end:end.toISOString().slice(0,10),
-      assignee:'',
-      personId:null,
-      people:1,
-      note:t(ph.description,L)||'',
-      milestone:false,
-    };
+    const phStart=addDays(projectStart,sw*7);
+    const phEnd=addDays(projectStart,(sw+dw)*7);
+
+    groups.push({id:gid,name:pn(ph),color:GROUP_PALETTE[pi%GROUP_PALETTE.length],expanded:true});
+
+    // Start milestone
+    tasks.push({id:'t_'+(tid++),name:NL?'Start '+pn(ph):'Start '+pn(ph),groupId:gid,categoryId:null,
+      start:phStart,end:phStart,assignee:'',personId:null,people:1,note:'',milestone:true});
+
+    // Tasks from role items (spread across phase duration)
+    const items=(ph.items||[]).filter(it=>it.qty>0);
+    if(items.length){
+      const slotW=Math.max(1,Math.floor(dw/items.length));
+      items.forEach((it,ii)=>{
+        const r=roleMap[it.role];
+        const taskStart=addDays(projectStart,(sw+ii*slotW)*7);
+        const taskEnd=addDays(projectStart,(sw+Math.min((ii+1)*slotW,dw))*7);
+        const label=(t(r?.name,L)||it.role)+(it.qty?' ('+it.qty+(NL?'u':'h')+')':'');
+        tasks.push({id:'t_'+(tid++),name:label,groupId:gid,categoryId:null,
+          start:taskStart,end:taskEnd,assignee:t(r?.name,L)||it.role,personId:null,people:1,
+          note:'',milestone:false});
+      });
+    }else{
+      // No items: create a single block for the phase
+      tasks.push({id:'t_'+(tid++),name:pn(ph),groupId:gid,categoryId:null,
+        start:phStart,end:phEnd,assignee:'',personId:null,people:1,
+        note:t(ph.description,L)||'',milestone:false});
+    }
+
+    // Internal review halfway
+    const midDate=addDays(projectStart,(sw+Math.floor(dw/2))*7);
+    tasks.push({id:'t_'+(tid++),name:NL?'Review':'Review',groupId:gid,categoryId:null,
+      start:midDate,end:midDate,assignee:'',personId:null,people:1,note:'',milestone:true});
+
+    // Delivery milestone at end
+    tasks.push({id:'t_'+(tid++),name:NL?'Oplevering '+pn(ph):'Delivery '+pn(ph),groupId:gid,categoryId:null,
+      start:phEnd,end:phEnd,assignee:'',personId:null,people:1,note:'',milestone:true});
   });
 
   // Build planner state (v4 schema)
   const state={
     version:4,
-    title:(d.project||{}).name||(L==='nl'?'Offerte planning':'Quotation planning'),
+    title:(d.project||{}).name||(NL?'Offerte planning':'Quotation planning'),
     start:projectStart,
-    end:endDt.toISOString().slice(0,10),
+    end:endDate,
     categories:[],
     people:[],
-    groups:[{id:groupId,name:(d.project||{}).name||'Project',color:COLORS[0],expanded:true}],
+    groups,
     tasks,
     deps:[],
     holidays:[],
