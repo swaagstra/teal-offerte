@@ -688,17 +688,19 @@ async function exportOfferteToDoc(d){
   const reqs=[];
   let idx=1; // cursor position
   const ins=(text,bold=false,fontSize=11,heading=null)=>{
-    reqs.push({insertText:{location:{index:idx},text}});
+    const txt=String(text||'');
+    if(!txt)return;
+    reqs.push({insertText:{location:{index:idx},text:txt}});
     const fields=[];const style={};
     if(bold){style.bold=true;fields.push('bold');}
     if(fontSize!==11){style.fontSize={magnitude:fontSize,unit:'PT'};fields.push('fontSize');}
     if(fields.length){
-      reqs.push({updateTextStyle:{range:{startIndex:idx,endIndex:idx+text.length},textStyle:style,fields:fields.join(',')}});
+      reqs.push({updateTextStyle:{range:{startIndex:idx,endIndex:idx+txt.length},textStyle:style,fields:fields.join(',')}});
     }
     if(heading){
-      reqs.push({updateParagraphStyle:{range:{startIndex:idx,endIndex:idx+text.length},paragraphStyle:{namedStyleType:heading},fields:'namedStyleType'}});
+      reqs.push({updateParagraphStyle:{range:{startIndex:idx,endIndex:idx+txt.length},paragraphStyle:{namedStyleType:heading},fields:'namedStyleType'}});
     }
-    idx+=text.length;
+    idx+=txt.length;
   };
   const nl=()=>{reqs.push({insertText:{location:{index:idx},text:'\n'}});idx+=1;};
 
@@ -754,7 +756,7 @@ async function exportOfferteToDoc(d){
 
   // Payment
   const milestones=d.payment?.milestones||[];
-  ins(ll.betaling,true,12,'HEADING_2');nl();
+  ins(ll.betalingsschema||'PAYMENT SCHEDULE',true,12,'HEADING_2');nl();
   const milestoneDateISOs=()=>{
     if(!proj.date||!milestones.length)return milestones.map(()=>'');
     const totalW=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
