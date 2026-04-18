@@ -515,154 +515,369 @@ async function ensureGoogleAuth(){
   await googleAuth();
 }
 
-// ── Export to Google Sheets (Budget) ──
+// ── Export to Google Sheets (Budget) ── Multi-tab template format
 async function exportBudgetToSheets(d){
   await ensureGoogleAuth();
   const L=d.lang||'nl';const NL=L==='nl';const ll=L_(L);
   const totals=calcTotals(d);
   const pn=(ph)=>ph.customName||t(ph.name,L);
-
-  // Build rows for the spreadsheet
-  const rows=[];
   const proj=d.project||{};const cl=d.client||{};
-  rows.push([NL?'TEAL Offerte - Kostenoverzicht':'TEAL Quotation - Cost Overview','','','','']);
-  rows.push([NL?'Project':'Project',proj.name||'Draft','','','']);
-  rows.push([NL?'Referentie':'Reference',d.ref||'','','','']);
-  rows.push([NL?'Klant':'Client',cl.name||'','','','']);
-  rows.push([NL?'Datum':'Date',proj.date||'','','','']);
-  rows.push(['','','','','']);
+  const isBuild=d.type==='build';
 
-  // Block A: TEAL fees
-  rows.push([NL?'BLOK A: TEAL KOSTEN':'BLOCK A: TEAL FEES','','','','']);
-  rows.push([NL?'Fase':'Phase',NL?'Rol':'Role',NL?'Aantal':'Qty',NL?'Tarief':'Rate',NL?'Subtotaal':'Subtotal']);
+  // Colour constants (RGBA 0-1)
+  const COL={
+    yellow:{red:1,green:.99,blue:.91,alpha:1},       // #FFFDE7 input cells
+    blue:{red:.92,green:.96,blue:.98,alpha:1},        // #EAF4FB calculated cells
+    header:{red:.83,green:.93,blue:.9,alpha:1},       // #D4ECE6 teal mint
+    dark:{red:.03,green:.08,blue:.07,alpha:1},        // #071412 teal dark
+    white:{red:1,green:1,blue:1,alpha:1},
+    lightGrey:{red:.94,green:.94,blue:.93,alpha:1},
+    subtotalGrey:{red:.96,green:.96,blue:.95,alpha:1},
+  };
+
+  // ─── Tab 1: Quote-Internal ───
+  const qi=[];
+  const qiFmt=[];// {row,col,endCol,bg,bold,curr}
+  qi.push(['TEAL BUDGET - INTERNAL','','','','','','','','','']);
+  qi.push([NL?'NOOIT DELEN MET KLANT':'NEVER SHARE WITH CLIENT','','','','','','','','','']);
+  qi.push(['','','','','','','','','','']);
+
+  // Header row
+  const qiH=isBuild
+    ?[NL?'Fase':'Phase',NL?'Rol':'Role',NL?'Omschrijving':'Description',NL?'Aantal':'Qty',
+      NL?'Ext. tarief':'Ext. rate',NL?'Klantprijs':'Client price',NL?'Int. tarief':'Int. rate',
+      NL?'Kosten':'Est. cost',NL?'Marge':'Margin',NL?'Notities':'Notes']
+    :[NL?'Regel':'Line item',NL?'Aantal':'Qty',NL?'Eenheid':'Unit',
+      NL?'Inkoop/eenheid':'Purchase/unit',NL?'OVH/eenheid':'OVH/unit',
+      NL?'Kostprijs/eenheid':'Cost price/unit',NL?'Marge %':'Margin %',
+      NL?'Verkoopprijs/eenheid':'Sell price/unit',NL?'Totaal':'Total',NL?'Notities':'Notes'];
+  qi.push(qiH);
+  const hdrRow=3;
+  qiFmt.push({row:hdrRow,col:0,endCol:10,bg:COL.lightGrey,bold:true});
+
+  // Labour section header
+  qi.push([NL?'ARBEID':'LABOUR','','','','','','','','','']);
+  qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.header,bold:true});
+
+  // Phase/role items
   (d.phases||[]).forEach((ph,pi)=>{
     if(ph.enabled===false)return;
     const pd=totals.phaseData[pi];if(!pd)return;
-    rows.push([pn(ph),'','','',{v:pd.total,f:fmtE(pd.total)}]);
     (ph.items||[]).forEach(it=>{
       const r=roleMap[it.role];
-      const sub=it.qty*(it.extRate||0);
-      rows.push(['',t(r?.name,L)||it.role,it.qty,{v:it.extRate,f:fmtE(it.extRate)},{v:sub,f:fmtE(sub)}]);
+      const qty=it.qty||0;const ext=it.extRate||0;const int_=it.intRate||0;
+      const clientPrice=qty*ext;const estCost=qty*int_;
+      const margin=clientPrice>0?(clientPrice-estCost)/clientPrice:0;
+      if(isBuild){
+        qi.push([pn(ph),t(r?.name,L)||it.role,t(it.desc,L)||'',qty,ext,clientPrice,int_,estCost,margin,'']);
+      }else{
+        // ASSEMBLE: flat structure with OVH
+        const ovh=4.24; // workshop overhead per hour (from rates)
+        const costPerUnit=int_+ovh;
+        const sellPerUnit=ext;
+        qi.push([t(r?.name,L)||it.role,qty,r?.unit||'uur',int_,ovh,costPerUnit,
+          clientPrice>0?(clientPrice-qty*costPerUnit)/clientPrice:0.3,sellPerUnit,clientPrice,'']);
+      }
+      // Yellow for input cols, blue for calculated
+      const row=qi.length-1;
+      if(isBuild){
+        qiFmt.push({row,col:3,endCol:5,bg:COL.yellow});// qty, ext rate
+        qiFmt.push({row,col:5,endCol:9,bg:COL.blue});// client price, int rate, cost, margin
+      }else{
+        qiFmt.push({row,col:1,endCol:4,bg:COL.yellow});// qty, unit, purchase
+        qiFmt.push({row,col:4,endCol:9,bg:COL.blue});// ovh, cost, margin, sell, total
+      }
     });
+    // Contingency row
     if(ph.contingency>0){
-      const cAmt=pd.total-ph.items.reduce((s,it)=>s+it.qty*(it.extRate||0),0);
-      rows.push(['',(NL?'Contingency ':'Contingency ')+(ph.contingency*100).toFixed(0)+'%','','',{v:cAmt,f:fmtE(cAmt)}]);
+      const cAmt=pd.total-ph.items.reduce((s,it)=>s+(it.qty||0)*(it.extRate||0),0);
+      if(isBuild){
+        qi.push([pn(ph),'Contingency '+(ph.contingency*100).toFixed(0)+'%','','','',cAmt,'','','','']);
+      }else{
+        qi.push(['Contingency '+(ph.contingency*100).toFixed(0)+'%',1,'fixed','','','','','',cAmt,'']);
+      }
+      qiFmt.push({row:qi.length-1,col:isBuild?5:8,endCol:isBuild?6:9,bg:COL.blue});
     }
   });
-  rows.push(['','',' ',NL?'Subtotaal A':'Subtotal A',{v:totals.blockAClient,f:fmtE(totals.blockAClient)}]);
-  rows.push(['','','','','']);
+  // Labour subtotal
+  qi.push([NL?'Subtotaal arbeid':'Labour subtotal','','','','','','','',totals.blockAClient,'']);
+  qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.subtotalGrey,bold:true});
 
-  // Block B: Procurement
-  rows.push([NL?'BLOK B: INKOOP':'BLOCK B: PROCUREMENT','','','','']);
-  if(d.procOTS?.length){
-    rows.push([NL?'B1: Standaard materialen':'B1: Off-the-shelf','','','','']);
-    d.procOTS.forEach(it=>{
+  qi.push(['','','','','','','','','','']);
+
+  // Materials & Procurement section
+  const hasProc=(d.procOTS||[]).length>0||(d.procCustom||[]).length>0;
+  if(hasProc){
+    qi.push([NL?'MATERIALEN & INKOOP':'MATERIALS & PROCUREMENT','','','','','','','','','']);
+    qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.header,bold:true});
+
+    const addProcRow=(it,type)=>{
       if(!it.amount)return;
-      const h=(it.amount||0)*(it.handlingPct||0);
-      rows.push(['',it.desc||'Materials',1,{v:it.amount,f:fmtE(it.amount)},{v:it.amount+h,f:fmtE(it.amount+h)}]);
-    });
+      const v=it.amount||0;
+      const h=v*(it.handlingPct!=null?it.handlingPct:getHandlingPct(v));
+      const risk=type==='custom'?v*(it.riskPct||0):0;
+      const clientTotal=v+h+risk;
+      const margin=clientTotal>0?(clientTotal-v)/clientTotal:0;
+      if(isBuild){
+        qi.push([type==='ots'?(NL?'Standaard':'Off-the-shelf'):(NL?'Maatwerk':'Custom'),
+          it.desc||'Materials',it.supplier||'','',v,clientTotal,'',v,margin,
+          type==='custom'?'Risk '+(it.riskPct*100).toFixed(0)+'%':'']);
+      }else{
+        qi.push([it.desc||'Materials',1,'lot',v,'n/a',v,margin,clientTotal,clientTotal,'']);
+      }
+      const row=qi.length-1;
+      qiFmt.push({row,col:isBuild?4:3,endCol:isBuild?5:4,bg:COL.yellow});
+      qiFmt.push({row,col:isBuild?5:6,endCol:isBuild?9:9,bg:COL.blue});
+    };
+    (d.procOTS||[]).forEach(it=>addProcRow(it,'ots'));
+    (d.procCustom||[]).forEach(it=>addProcRow(it,'custom'));
+
+    qi.push([NL?'Subtotaal materialen':'Materials subtotal','','','','','','','',totals.procClient,'']);
+    qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.subtotalGrey,bold:true});
+    qi.push(['','','','','','','','','','']);
   }
-  if(d.procCustom?.length){
-    rows.push([NL?'B2: Maatwerk materialen':'B2: Custom materials','','','','']);
-    d.procCustom.forEach(it=>{
+
+  // Subcontractors section
+  if((d.subs||[]).length>0){
+    qi.push([NL?'ONDERAANNEMERS':'SUBCONTRACTORS','','','','','','','','','']);
+    qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.header,bold:true});
+    (d.subs||[]).forEach(it=>{
       if(!it.amount)return;
-      const h=(it.amount||0)*(it.handlingPct||0);
-      const r=(it.amount||0)*(it.riskPct||0);
-      rows.push(['',it.desc||'Custom',1,{v:it.amount,f:fmtE(it.amount)},{v:it.amount+h+r,f:fmtE(it.amount+h+r)}]);
+      const v=it.amount||0;
+      const c=v*(it.coordPct!=null?it.coordPct:COORD_MARGIN);
+      const clientTotal=v+c;
+      const margin=clientTotal>0?c/clientTotal:0;
+      if(isBuild){
+        qi.push(['',it.desc||'Subcontractor','','',v,clientTotal,'',v,margin,'']);
+      }else{
+        qi.push([it.desc||'Subcontractor',1,'fixed',v,'n/a',v,margin,clientTotal,clientTotal,'']);
+      }
+      const row=qi.length-1;
+      qiFmt.push({row,col:isBuild?4:3,endCol:isBuild?5:4,bg:COL.yellow});
+      qiFmt.push({row,col:isBuild?5:6,endCol:isBuild?9:9,bg:COL.blue});
     });
-  }
-  rows.push(['','','',NL?'Subtotaal B':'Subtotal B',{v:totals.procClient,f:fmtE(totals.procClient)}]);
-  rows.push(['','','','','']);
-
-  // Block C: Subcontractors
-  if(d.subs?.length){
-    rows.push([NL?'BLOK C: ONDERAANNEMERS':'BLOCK C: SUBCONTRACTORS','','','','']);
-    d.subs.forEach(it=>{
-      if(!it.amount)return;
-      const c=(it.amount||0)*(it.coordPct||COORD_MARGIN);
-      rows.push(['',it.desc||'Sub',1,{v:it.amount,f:fmtE(it.amount)},{v:it.amount+c,f:fmtE(it.amount+c)}]);
-    });
-    rows.push(['','','',NL?'Subtotaal C':'Subtotal C',{v:totals.subClient,f:fmtE(totals.subClient)}]);
-    rows.push(['','','','','']);
+    qi.push([NL?'Subtotaal onderaannemers':'Subcontractors subtotal','','','','','','','',totals.subClient,'']);
+    qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.subtotalGrey,bold:true});
+    qi.push(['','','','','','','','','','']);
   }
 
-  // Grand total
-  rows.push(['','','',NL?'TOTAAL (excl. BTW)':'TOTAL (excl. VAT)',{v:totals.grandClient,f:fmtE(totals.grandClient)}]);
+  // Grand totals
+  qi.push(['','','','','','','','','','']);
+  qi.push([NL?'TOTAAL EXCL. BTW':'TOTAL EXCL. VAT','','','','','','','',totals.grandClient,'']);
+  qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.dark,bold:true,white:true});
+  qi.push(['','','','','','','','','','']);
 
-  // Payment schedule
-  rows.push(['','','','','']);
-  rows.push([NL?'BETAALSCHEMA':'PAYMENT SCHEDULE','','','','']);
-  rows.push([NL?'Mijlpaal':'Milestone','%',NL?'Bedrag':'Amount','','']);
-  (d.payment?.milestones||[]).forEach(ms=>{
-    const amt=totals.grandClient*(ms.pct||0)/100;
-    rows.push([t(ms.name,L),ms.pct+'%',{v:amt,f:fmtE(amt)},'','']);
+  // Margin check
+  qi.push([NL?'MARGE-OVERZICHT':'MARGIN CHECK','','','','','','','','','']);
+  qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.header,bold:true});
+  qi.push([NL?'Categorie':'Category',NL?'Kostprijs':'Cost price',NL?'Verkoopprijs':'Sell price',NL?'Marge':'Margin','Marge %','','','','','']);
+  qiFmt.push({row:qi.length-1,col:0,endCol:5,bg:COL.lightGrey,bold:true});
+  qi.push([NL?'Arbeid':'Labour',totals.blockACost,totals.blockAClient,totals.blockAClient-totals.blockACost,
+    totals.blockAClient>0?(totals.blockAClient-totals.blockACost)/totals.blockAClient:0,'','','','','']);
+  qi.push([NL?'Materialen':'Materials',totals.procCost,totals.procClient,totals.procClient-totals.procCost,
+    totals.procClient>0?(totals.procClient-totals.procCost)/totals.procClient:0,'','','','','']);
+  qi.push([NL?'Onderaannemers':'Subcontractors',totals.subFees,totals.subClient,totals.subClient-totals.subFees,
+    totals.subClient>0?(totals.subClient-totals.subFees)/totals.subClient:0,'','','','','']);
+  qi.push(['TOTAAL',totals.grandCost,totals.grandClient,totals.grandClient-totals.grandCost,totals.margin,'','','','','']);
+  qiFmt.push({row:qi.length-1,col:0,endCol:5,bold:true});
+
+  // ─── Tab 2: Quote-External (client-facing) ───
+  const qe=[];
+  const qeFmt=[];
+  qe.push(['TEAL','','','','']);
+  qe.push([NL?'OFFERTE':'QUOTATION','','','','']);
+  qe.push(['','','','','']);
+  qe.push([NL?'Klant':'Client',cl.name||'','','','']);
+  qe.push([NL?'Project':'Project',proj.name||'','','','']);
+  qe.push([NL?'Datum':'Quote date',proj.date||'','','','']);
+  qe.push([NL?'Referentie':'Reference',d.ref||'','','','']);
+  qe.push([NL?'Geldig tot':'Valid until',(d.conditions||{}).validity?d.conditions.validity+' '+(NL?'dagen':'days'):'30 '+(NL?'dagen':'days'),'','','']);
+  qe.push(['','','','','']);
+
+  // External line items header
+  qe.push([NL?'Omschrijving':'Description',NL?'Aantal':'Qty',NL?'Prijs per eenheid':'Unit price',NL?'Totaal':'Total',NL?'Notities':'Notes']);
+  qeFmt.push({row:qe.length-1,col:0,endCol:5,bg:COL.lightGrey,bold:true});
+
+  // Phases as lump sums (no rate breakdown)
+  const finLines=buildFinancialLines(d,totals,L);
+  finLines.forEach(fl=>{
+    qe.push([fl.desc,'','',fl.total,'']);
   });
 
-  // Margin row (internal only)
-  rows.push(['','','','','']);
-  rows.push([NL?'INTERNE MARGE':'INTERNAL MARGIN','','',(totals.margin*100).toFixed(1)+'%',{v:totals.grandClient-totals.grandCost,f:fmtE(totals.grandClient-totals.grandCost)}]);
+  qe.push(['','','','','']);
+  qe.push([NL?'Totaal excl. BTW':'Total excl. VAT','','',totals.grandClient,'']);
+  qeFmt.push({row:qe.length-1,col:0,endCol:5,bold:true});
+  qe.push([NL?'BTW 21%':'VAT 21%','','',totals.grandClient*0.21,'']);
+  qe.push([NL?'TOTAAL INCL. BTW':'TOTAL INCL. VAT','','',totals.grandClient*1.21,'']);
+  qeFmt.push({row:qe.length-1,col:0,endCol:5,bg:COL.dark,bold:true,white:true});
 
-  // Convert to raw values for API
-  const values=rows.map(row=>row.map(cell=>typeof cell==='object'?cell.v:cell));
+  qe.push(['','','','','']);
+  qe.push([NL?'BETAALSCHEMA':'PAYMENT STRUCTURE','','','','']);
+  qeFmt.push({row:qe.length-1,col:0,endCol:5,bg:COL.header,bold:true});
+  (d.payment?.milestones||[]).forEach(ms=>{
+    const amt=totals.grandClient*(ms.pct||0)/100;
+    qe.push([t(ms.name,L),ms.pct+'%','',amt,'']);
+  });
 
-  // Create spreadsheet
-  const title=`TEAL_${NL?'Offerte':'Quotation'}_${(proj.name||'Draft').replace(/\s+/g,'_')}_Budget`;
+  qe.push(['','','','','']);
+  qe.push([NL?'VOORWAARDEN':'TERMS & CONDITIONS','','','','']);
+  qeFmt.push({row:qe.length-1,col:0,endCol:5,bg:COL.header,bold:true});
+  const cond=d.conditions||{};
+  qe.push([NL?'Geldigheid: '+((cond.validity||30)+' dagen'):'Validity: '+((cond.validity||30)+' days'),'','','','']);
+  qe.push([NL?'Betalingstermijn: '+((cond.paymentTerm||14)+' dagen'):'Payment term: '+((cond.paymentTerm||14)+' days'),'','','','']);
+  qe.push([NL?'Alle werk valt onder de Algemene Voorwaarden van TEAL B.V.':'All work is subject to TEAL B.V. General Terms and Conditions.','','','','']);
+
+  // ─── Tab 3: Costs-Actual (empty log) ───
+  const ca=[];
+  ca.push([NL?'WERKELIJKE KOSTEN - LOG ELKE FACTUUR HIER':'ACTUAL COSTS - LOG EVERY INVOICE HERE','','','','','','','']);
+  ca.push([NL?'Voeg elke inkoopfactuur toe wanneer deze binnenkomt.':'Add each purchase when the invoice arrives.','','','','','','','']);
+  ca.push(['','','','','','','','']);
+  ca.push([NL?'Budgetregel':'Budget line',NL?'Omschrijving':'Item / description',NL?'Leverancier':'Supplier',
+    NL?'Bedrag excl. BTW':'Amount excl. VAT',NL?'Datum':'Date',NL?'Factuurreferentie':'Invoice reference',
+    NL?'Doorbelasting (J/N)':'Passthrough (Y/N)',NL?'Notities':'Notes']);
+
+  // ─── Tab 4: Balance ───
+  const bal=[];
+  const balFmt=[];
+  bal.push([NL?'PROJECT BALANS - BUDGET vs. WERKELIJK':'PROJECT BALANCE - BUDGET vs. ACTUAL','','','','']);
+  bal.push([NL?'Live overzicht. Werk bij door facturen te loggen in Costs-Actual.':'Live view. Update by logging invoices in Costs-Actual tab.','','','','']);
+  bal.push(['','','','','']);
+  bal.push([NL?'Regel':'Line',NL?'Budget':'Budget',NL?'Werkelijk':'Actual',NL?'Verschil':'Variance',NL?'Status':'Status']);
+  balFmt.push({row:3,col:0,endCol:5,bg:COL.lightGrey,bold:true});
+
+  // Budget lines from totals
+  const balLines=[
+    [NL?'Arbeid':'Labour',totals.blockAClient,0,totals.blockAClient,'\u2713 OK'],
+    [NL?'Materialen':'Materials',totals.procClient,0,totals.procClient,'\u2713 OK'],
+    [NL?'Onderaannemers':'Subcontractors',totals.subClient,0,totals.subClient,'\u2713 OK'],
+  ];
+  balLines.forEach(l=>bal.push(l));
+  bal.push(['','','','','']);
+  bal.push(['TOTAAL',totals.grandClient,0,totals.grandClient,NL?'\u2713 BINNEN BUDGET':'\u2713 WITHIN BUDGET']);
+  balFmt.push({row:bal.length-1,col:0,endCol:5,bold:true});
+
+  bal.push(['','','','','']);
+  bal.push([NL?'MARGE-OVERZICHT':'MARGIN OVERVIEW','','','','']);
+  balFmt.push({row:bal.length-1,col:0,endCol:5,bg:COL.header,bold:true});
+  bal.push([NL?'Offertetotaal excl. BTW':'Quote total excl. VAT',totals.grandClient,'',NL?'Uit interne offerte':'From internal quote','']);
+  bal.push([NL?'Werkelijke kosten':'Actual cost (logged)',0,'',NL?'Uit kostenlog':'From costs log','']);
+  bal.push([NL?'Marge':'Margin',totals.grandClient-totals.grandCost,'','','']);
+  bal.push(['Marge %',totals.margin,'',NL?'Doel: 20-30%':'Target: 20-30%','']);
+
+  // ─── Tab 5: Rates ───
+  const rates=[];
+  const ratesFmt=[];
+  rates.push([NL?'TEAL - TARIEVEN & OVERHEAD':'TEAL - RATES & OVERHEAD','','','','','']);
+  rates.push([NL?'Blauw = invoer, zwart = formule. Pas tarieven hier aan.':'Blue = input, black = formula. Update rates here.','','','','','']);
+  rates.push(['','','','','','']);
+  rates.push([NL?'Rol':'Role',NL?'Inkoop/uur':'Purchase rate/hr',NL?'+ Workshop OVH/uur':'+ Workshop OVH/hr',
+    NL?'= Kostprijs/uur':'= Cost price/hr',NL?'Extern tarief/uur':'External rate/hr',NL?'Marge %':'Margin %']);
+  ratesFmt.push({row:3,col:0,endCol:6,bg:COL.lightGrey,bold:true});
+
+  ROLES.forEach(r=>{
+    const ovh=4.24;
+    const costPrice=r.int+ovh;
+    const margin=r.ext>0?(r.ext-costPrice)/r.ext:0;
+    rates.push([t(r.name,L),r.int,ovh,costPrice,r.ext,margin]);
+    const row=rates.length-1;
+    ratesFmt.push({row,col:1,endCol:3,bg:COL.yellow});
+    ratesFmt.push({row,col:3,endCol:6,bg:COL.blue});
+  });
+
+  rates.push(['','','','','','']);
+  rates.push([NL?'STANDAARD MARGES':'DEFAULT MARGINS','','','','','']);
+  ratesFmt.push({row:rates.length-1,col:0,endCol:6,bg:COL.header,bold:true});
+  const defaultMargins=[
+    [NL?'Eigen uren':'Own hours','30%',NL?'Op verkoopprijs':'On sell price'],
+    [NL?'Freelancer uren':'Freelancer hours','28%',NL?'Op verkoopprijs':'On sell price'],
+    [NL?'Materialen/inkoop':'Materials/sourcing','40%',NL?'Hogere inkoopinspanning = hogere marge. 30-50%':'Higher sourcing effort = higher margin. 30-50%'],
+    [NL?'Klant doorbelasting':'Client passthrough','10%',NL?'Alleen admin fee':'Admin fee only'],
+    [NL?'Contingency (intern)':'Contingency (internal)','10%',NL?'Altijd 10% van subtotaal. Nooit tonen aan klant.':'Always 10% of subtotal. Never shown to client.'],
+  ];
+  defaultMargins.forEach(m=>rates.push(m));
+
+  // ─── Create spreadsheet with all tabs ───
+  const title=`Offerte ${d.ref||'Draft'} - TEAL Budget`;
+  const sheetDefs=[
+    {title:'Quote - Internal',rows:qi,fmt:qiFmt,cols:10},
+    {title:'Quote - External',rows:qe,fmt:qeFmt,cols:5},
+    {title:'Costs - Actual',rows:ca,fmt:[],cols:8},
+    {title:'Balance',rows:bal,fmt:balFmt,cols:5},
+    {title:isBuild?'Data':'Rates',rows:rates,fmt:ratesFmt,cols:6},
+  ];
+
   const resp=await gapi.client.sheets.spreadsheets.create({
     resource:{
       properties:{title},
-      sheets:[{
-        properties:{title:NL?'Kostenoverzicht':'Cost Overview',gridProperties:{rowCount:values.length+5,columnCount:5}},
-      }]
+      sheets:sheetDefs.map((sd,i)=>({
+        properties:{title:sd.title,index:i,
+          gridProperties:{rowCount:Math.max(sd.rows.length+20,50),columnCount:sd.cols+2}},
+      }))
     }
   });
   const ssId=resp.result.spreadsheetId;
-  const sid=resp.result.sheets[0].properties.sheetId;
-  const sheetName=NL?'Kostenoverzicht':'Cost Overview';
+  const sheetIds=resp.result.sheets.map(s=>s.properties.sheetId);
 
-  // Write data
-  await gapi.client.sheets.spreadsheets.values.update({
-    spreadsheetId:ssId,range:`'${sheetName}'!A1`,
-    valueInputOption:'RAW',resource:{values}
+  // Write data to all tabs
+  const batchData=sheetDefs.map((sd,i)=>({
+    range:`'${sd.title}'!A1`,
+    values:sd.rows,
+  }));
+  await gapi.client.sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId:ssId,
+    resource:{valueInputOption:'RAW',data:batchData}
   });
 
-  // Format: bold headers, currency format, column widths
-  const requests=[
-    // Title row bold
-    {repeatCell:{range:{sheetId:sid,startRowIndex:0,endRowIndex:1,startColumnIndex:0,endColumnIndex:5},
-      cell:{userEnteredFormat:{textFormat:{bold:true,fontSize:14}}},fields:'userEnteredFormat.textFormat'}},
-    // Section headers bold
-    ...rows.reduce((acc,row,i)=>{
-      const first=typeof row[0]==='string'?row[0]:'';
-      if(first.startsWith('BLOK')||first.startsWith('BLOCK')||first==='BETAALSCHEMA'||first==='PAYMENT SCHEDULE'||first==='INTERNE MARGE'||first==='INTERNAL MARGIN'){
-        acc.push({repeatCell:{range:{sheetId:sid,startRowIndex:i,endRowIndex:i+1,startColumnIndex:0,endColumnIndex:5},
-          cell:{userEnteredFormat:{textFormat:{bold:true},backgroundColor:{red:.83,green:.93,blue:.9}}},fields:'userEnteredFormat(textFormat,backgroundColor)'}});
+  // Build formatting requests for all tabs
+  const requests=[];
+  sheetDefs.forEach((sd,si)=>{
+    const sid=sheetIds[si];
+    // Title rows bold
+    requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:0,endRowIndex:1,startColumnIndex:0,endColumnIndex:sd.cols},
+      cell:{userEnteredFormat:{textFormat:{bold:true,fontSize:14}}},fields:'userEnteredFormat.textFormat'}});
+
+    // Apply cell-level formatting
+    sd.fmt.forEach(f=>{
+      const cell={userEnteredFormat:{}};const fields=[];
+      if(f.bg){cell.userEnteredFormat.backgroundColor=f.bg;fields.push('userEnteredFormat.backgroundColor');}
+      if(f.bold){cell.userEnteredFormat.textFormat={...cell.userEnteredFormat.textFormat||{},bold:true};fields.push('userEnteredFormat.textFormat.bold');}
+      if(f.white){cell.userEnteredFormat.textFormat={...cell.userEnteredFormat.textFormat||{},foregroundColor:COL.white};fields.push('userEnteredFormat.textFormat.foregroundColor');}
+      if(fields.length){
+        requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:f.row,endRowIndex:f.row+1,
+          startColumnIndex:f.col,endColumnIndex:f.endCol},cell,fields:fields.join(',')}});
       }
-      // Column header rows
-      if((typeof row[1]==='string')&&(row[1]==='Rol'||row[1]==='Role'||row[1]==='Milestone'||row[1]==='Mijlpaal')){
-        acc.push({repeatCell:{range:{sheetId:sid,startRowIndex:i,endRowIndex:i+1,startColumnIndex:0,endColumnIndex:5},
-          cell:{userEnteredFormat:{textFormat:{bold:true},backgroundColor:{red:.94,green:.94,blue:.93}}},fields:'userEnteredFormat(textFormat,backgroundColor)'}});
-      }
-      return acc;
-    },[]),
-    // Total row
-    ...rows.reduce((acc,row,i)=>{
-      const fourth=typeof row[3]==='string'?row[3]:'';
-      if(fourth.startsWith('TOTAAL')||fourth.startsWith('TOTAL')){
-        acc.push({repeatCell:{range:{sheetId:sid,startRowIndex:i,endRowIndex:i+1,startColumnIndex:0,endColumnIndex:5},
-          cell:{userEnteredFormat:{textFormat:{bold:true,fontSize:12,foregroundColor:{red:1,green:1,blue:1}},backgroundColor:{red:.03,green:.08,blue:.07}}},fields:'userEnteredFormat(textFormat,backgroundColor)'}});
-      }
-      return acc;
-    },[]),
-    // Column widths
-    {updateDimensionProperties:{range:{sheetId:sid,dimension:'COLUMNS',startIndex:0,endIndex:1},properties:{pixelSize:220},fields:'pixelSize'}},
-    {updateDimensionProperties:{range:{sheetId:sid,dimension:'COLUMNS',startIndex:1,endIndex:2},properties:{pixelSize:280},fields:'pixelSize'}},
-    {updateDimensionProperties:{range:{sheetId:sid,dimension:'COLUMNS',startIndex:2,endIndex:3},properties:{pixelSize:80},fields:'pixelSize'}},
-    {updateDimensionProperties:{range:{sheetId:sid,dimension:'COLUMNS',startIndex:3,endIndex:4},properties:{pixelSize:160},fields:'pixelSize'}},
-    {updateDimensionProperties:{range:{sheetId:sid,dimension:'COLUMNS',startIndex:4,endIndex:5},properties:{pixelSize:160},fields:'pixelSize'}},
-    // Number format for amount columns
-    {repeatCell:{range:{sheetId:sid,startRowIndex:0,endRowIndex:values.length,startColumnIndex:3,endColumnIndex:5},
-      cell:{userEnteredFormat:{numberFormat:{type:'CURRENCY',pattern:'\u20AC #,##0.00'}}},fields:'userEnteredFormat.numberFormat'}},
-  ];
+    });
+
+    // Currency format on amount columns
+    if(si===0){// Quote-Internal
+      const currCols=isBuild?[[4,9]]:[[ 3,9]];
+      currCols.forEach(([s,e])=>{
+        requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:4,endRowIndex:sd.rows.length,startColumnIndex:s,endColumnIndex:e},
+          cell:{userEnteredFormat:{numberFormat:{type:'CURRENCY',pattern:'\u20AC #,##0.00'}}},fields:'userEnteredFormat.numberFormat'}});
+      });
+      // Percentage format on margin column
+      const mCol=isBuild?8:6;
+      requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:4,endRowIndex:sd.rows.length,startColumnIndex:mCol,endColumnIndex:mCol+1},
+        cell:{userEnteredFormat:{numberFormat:{type:'PERCENT',pattern:'0%'}}},fields:'userEnteredFormat.numberFormat'}});
+    }
+    if(si===1){// Quote-External: currency on col D
+      requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:9,endRowIndex:sd.rows.length,startColumnIndex:3,endColumnIndex:4},
+        cell:{userEnteredFormat:{numberFormat:{type:'CURRENCY',pattern:'\u20AC #,##0.00'}}},fields:'userEnteredFormat.numberFormat'}});
+    }
+    if(si===3){// Balance: currency on cols B-D
+      requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:4,endRowIndex:sd.rows.length,startColumnIndex:1,endColumnIndex:4},
+        cell:{userEnteredFormat:{numberFormat:{type:'CURRENCY',pattern:'\u20AC #,##0.00'}}},fields:'userEnteredFormat.numberFormat'}});
+    }
+    if(si===4){// Rates: currency on cols B-E, percent on col F
+      requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:4,endRowIndex:sd.rows.length,startColumnIndex:1,endColumnIndex:5},
+        cell:{userEnteredFormat:{numberFormat:{type:'CURRENCY',pattern:'\u20AC #,##0.00'}}},fields:'userEnteredFormat.numberFormat'}});
+      requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:4,endRowIndex:sd.rows.length,startColumnIndex:5,endColumnIndex:6},
+        cell:{userEnteredFormat:{numberFormat:{type:'PERCENT',pattern:'0%'}}},fields:'userEnteredFormat.numberFormat'}});
+    }
+
+    // Auto-resize column widths
+    requests.push({autoResizeDimensions:{dimensions:{sheetId:sid,dimension:'COLUMNS',startIndex:0,endIndex:sd.cols}}});
+  });
 
   await gapi.client.sheets.spreadsheets.batchUpdate({spreadsheetId:ssId,resource:{requests}});
 
@@ -684,17 +899,19 @@ async function exportOfferteToDoc(d){
   const proj=d.project||{};const cond=d.conditions||{};
 
   // Create doc
-  const title=`TEAL_${NL?'Offerte':'Quotation'}_${(proj.name||'Draft').replace(/\s+/g,'_')}`;
+  const title=`Offerte ${d.ref||'Draft'} - TEAL`;
   const createResp=await gapi.client.docs.documents.create({resource:{title}});
   const docId=createResp.result.documentId;
 
   // Build requests to populate the doc
   const reqs=[];
   let idx=1; // cursor position
+  let lastWasHeading=false;
   const ins=(text,bold=false,fontSize=11,heading=null)=>{
     const txt=String(text||'');
     if(!txt)return;
     reqs.push({insertText:{location:{index:idx},text:txt}});
+    // Apply text style (bold, fontSize)
     const fields=[];const style={};
     if(bold){style.bold=true;fields.push('bold');}
     if(fontSize!==11){style.fontSize={magnitude:fontSize,unit:'PT'};fields.push('fontSize');}
@@ -702,29 +919,34 @@ async function exportOfferteToDoc(d){
       reqs.push({updateTextStyle:{range:{startIndex:idx,endIndex:idx+txt.length},textStyle:style,fields:fields.join(',')}});
     }
     if(heading){
+      // Set heading style
       reqs.push({updateParagraphStyle:{range:{startIndex:idx,endIndex:idx+txt.length},paragraphStyle:{namedStyleType:heading},fields:'namedStyleType'}});
+    }else if(lastWasHeading){
+      // Reset to normal text so heading style doesn't bleed into this paragraph
+      reqs.push({updateParagraphStyle:{range:{startIndex:idx,endIndex:idx+txt.length},paragraphStyle:{namedStyleType:'NORMAL_TEXT'},fields:'namedStyleType'}});
     }
+    lastWasHeading=!!heading;
     idx+=txt.length;
   };
   const nl=()=>{reqs.push({insertText:{location:{index:idx},text:'\n'}});idx+=1;};
 
   // Header
-  ins('TEAL',true,20);nl();
-  ins(NL?'OFFERTE':'QUOTATION',true,16,'HEADING_1');nl();
+  ins('TEAL',true,22);nl();
+  ins(NL?'OFFERTE':'QUOTATION',false,14);nl();
   nl();
 
-  // Client + details
+  // Reference line
+  ins(`${ll.referentieLabel}: ${d.ref||''}`,false,10);nl();
+  ins(`${ll.datumPrev}: ${fmtDateLong(proj.date)}`,false,10);nl();
+  ins(`${ll.geldigTot}: ${cond.validity||30} ${NL?'dagen':'days'}`,false,10);nl();
+  nl();
+
+  // Client details
   ins(ll.klantLabel,true,12,'HEADING_2');nl();
-  if(cl.name){ins(cl.name);nl();}
-  if(cl.contact){ins(cl.contact);nl();}
+  if(cl.name){ins(cl.name,true);nl();}
+  if(cl.contact&&cl.contact!==cl.name){ins(cl.contact);nl();}
   if(cl.email){ins(cl.email);nl();}
   if(cl.addr){ins(`${cl.addr}, ${cl.zip||''} ${cl.city||''}`);nl();}
-  nl();
-
-  ins(ll.detailsLabel,true,12,'HEADING_2');nl();
-  ins(`${ll.referentieLabel}: ${d.ref||''}`);nl();
-  ins(`${ll.datumPrev}: ${fmtDateLong(proj.date)}`);nl();
-  ins(`${ll.geldigTot}: ${cond.validity||30} ${NL?'dagen':'days'}`);nl();
   if(proj.location){ins(`${ll.locatie}: ${proj.location}`);nl();}
   nl();
 
@@ -739,43 +961,47 @@ async function exportOfferteToDoc(d){
   }
 
   // Scope & phases
-  ins(ll.scopeTimeline,true,12,'HEADING_2');nl();
-  activePhases.forEach(ph=>{
-    const desc=t(ph.description,L);
-    ins(`${pn(ph)}`,true);nl();
-    if(desc){ins(desc);nl();}
-    nl();
-  });
+  if(activePhases.length){
+    ins(ll.scopeTimeline,true,12,'HEADING_2');nl();
+    activePhases.forEach(ph=>{
+      const desc=t(ph.description,L);
+      ins(`${pn(ph)}`,true);nl();
+      if(desc){ins(desc);nl();}
+      nl();
+    });
+  }
 
   // Financial overview
   ins(ll.kostenLabel,true,12,'HEADING_2');nl();
   finLines.forEach(fl=>{
-    ins(`${fl.desc}: ${fmtE(fl.total)}`);nl();
+    ins(`${fl.desc}`,true);ins(`\t${fmtE(fl.total)}`);nl();
   });
   nl();
-  ins(`${NL?'Totaal (excl. BTW)':'Total (excl. VAT)'}: ${fmtE(totals.grandClient)}`,true,13);nl();
+  ins(`${NL?'Totaal (excl. BTW)':'Total (excl. VAT)'}`,true,13);ins(`\t${fmtE(totals.grandClient)}`,true,13);nl();
   nl();
 
   // Payment
   const milestones=d.payment?.milestones||[];
-  ins(ll.betalingsschema||'PAYMENT SCHEDULE',true,12,'HEADING_2');nl();
-  const milestoneDateISOs=()=>{
-    if(!proj.date||!milestones.length)return milestones.map(()=>'');
-    const totalW=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
-    const n=milestones.length;
-    return milestones.map((_,i)=>{
-      const wk=Math.round((i/(n-1||1))*totalW);
-      const dt=new Date(proj.date);dt.setDate(dt.getDate()+wk*7);
-      return dt.toISOString().slice(0,10);
+  if(milestones.length){
+    ins(ll.betalingsschema||'PAYMENT SCHEDULE',true,12,'HEADING_2');nl();
+    const milestoneDateISOs=()=>{
+      if(!proj.date||!milestones.length)return milestones.map(()=>'');
+      const totalW=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
+      const n=milestones.length;
+      return milestones.map((_,i)=>{
+        const wk=Math.round((i/(n-1||1))*totalW);
+        const dt=new Date(proj.date);dt.setDate(dt.getDate()+wk*7);
+        return dt.toISOString().slice(0,10);
+      });
+    };
+    const mDates=milestoneDateISOs();
+    milestones.forEach((ms,i)=>{
+      const amt=totals.grandClient*(ms.pct||0)/100;
+      const dateStr=mDates[i]?', '+fmtMonth(mDates[i]):'';
+      ins(`${t(ms.name,L)}: ${ms.pct}% (${fmtE(amt)}${dateStr})`);nl();
     });
-  };
-  const mDates=milestoneDateISOs();
-  milestones.forEach((ms,i)=>{
-    const amt=totals.grandClient*(ms.pct||0)/100;
-    const dateStr=mDates[i]?', '+fmtMonth(mDates[i]):'';
-    ins(`${t(ms.name,L)}: ${ms.pct}% (${fmtE(amt)}${dateStr})`);nl();
-  });
-  nl();
+    nl();
+  }
 
   // Terms
   ins(ll.voorwaardenLabel,true,12,'HEADING_2');nl();
@@ -1544,7 +1770,7 @@ function exportPDF(d,setData){
   const pn=(ph)=>ph.customName||t(ph.name,L);
   const activePhases=d.phases.filter(p=>p.enabled!==false);
   const versionFromRef=(d.ref||'').split('-').pop()||'1';
-  const pdfFilename=`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}_v${versionFromRef}.pdf`;
+  const pdfFilename=`Offerte ${d.ref||'Draft'} - TEAL.pdf`;
 
   const addFooter=()=>{
     const pc=doc.getNumberOfPages();
