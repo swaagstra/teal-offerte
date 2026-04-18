@@ -22,7 +22,6 @@
   .app{min-height:100vh;display:flex;flex-direction:column}
   .hdr{background:var(--teal-dark);color:var(--teal-mint);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
   .hdr-left{display:flex;align-items:center;gap:12px}
-  .hdr h1{font-size:18px;font-weight:700;letter-spacing:2px}
   .hdr .sub{color:var(--mid-grey);font-size:13px;font-weight:400}
   .tabs{display:flex;gap:2px;background:var(--teal-dark);padding:0 28px;overflow-x:auto}
   .tab{padding:10px 18px;background:0;color:var(--mid-grey);border:0;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:.15s;font-family:inherit}
@@ -84,7 +83,7 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const{useState,useEffect,useCallback,useMemo}=React;
+const{useState,useEffect,useCallback}=React;
 
 // ── Logo SVG inline ──
 const Logo=({color='#D4ECE6',h=24})=><svg height={h} viewBox="0 0 1815 864" style={{display:'block'}}><g transform="matrix(1,0,0,1,0,-1399.19)"><g transform="matrix(1,0,0,1,-274.091,1240.3)"><clipPath id="lc"><rect x="274.091" y="158.9" width="1814.02" height="863.303"/></clipPath><g clipPath="url(#lc)"><g transform="matrix(2.77287,0,0,2.77287,-1956.66,-1047.42)"><g transform="matrix(0.622415,0,0,0.622415,665.764,213.102)"><path d="M523.118,506.267L523.118,556.267L473.118,556.267L473.118,706.267L423.118,706.267L423.118,556.267L373.118,556.267L373.118,506.267L523.118,506.267Z" style={{fill:color,fillRule:'nonzero'}}/></g><g transform="matrix(0.622415,0,0,0.622415,665.881,213.102)"><path d="M723.118,506.267L723.118,556.267L673.118,556.267L673.118,606.267L623.118,606.267L623.118,656.267L723.118,656.267L723.118,706.267L573.118,706.267L573.118,506.267L723.118,506.267Z" style={{fill:color,fillRule:'nonzero'}}/></g><g transform="matrix(0.622415,0,0,0.622415,665.881,213.102)"><path d="M923.118,506.267L923.118,706.267L873.118,706.267L873.118,656.267L823.118,656.267L823.118,706.267L773.118,706.267L773.118,506.267L923.118,506.267ZM823.118,556.267L823.118,606.267L873.118,606.267L873.118,556.267L823.118,556.267Z" style={{fill:color,fillRule:'nonzero'}}/></g><g transform="matrix(0.622415,0,0,0.622415,665.881,213.102)"><path d="M1023.12,506.267L1023.12,656.267L1123.12,656.267L1123.12,706.267L973.118,706.267L973.118,506.267L1023.12,506.267Z" style={{fill:color,fillRule:'nonzero'}}/></g><g transform="matrix(0.656049,0,0,0.52407,71.8753,252.375)"><path d="M2113.9,942.639L1116.71,942.639L1116.71,348.559L2113.9,348.559L2113.9,942.639ZM2066.26,408.188L1164.34,408.188L1164.34,883.009L2066.26,883.009L2066.26,408.188Z" style={{fill:color}}/></g></g></g></g></g></svg>;
@@ -228,7 +227,7 @@ const I={
     avNL:'Algemene Voorwaarden TEAL bijvoegen (NL)',avEN:'General Terms & Conditions (EN)',
     // Preview
     offerte:'OFFERTE',klantLabel:'KLANT',detailsLabel:'DETAILS',
-    projectnaamPrev:'Projectnaam',locatie:'Locatie',scope:'Scope',
+    projectnaamPrev:'Projectnaam',scope:'Scope',
     referentieLabel:'Offertenummer',datumPrev:'Datum',geldigTot:'Geldig tot',
     projectBeschrijving:'PROJECTOMSCHRIJVING',rolTeal:'Rol van TEAL',
     scopeTimeline:'SCOPE & PLANNING',indicatieveTimeline:'INDICATIEVE PLANNING',
@@ -240,7 +239,6 @@ const I={
     voorwaardenLabel:'VOORWAARDEN',
     exclusionsVw:'Exclusies',
     geldigheidVw:'Geldigheid',garantieLabel:'Garantie',
-    btwTekst:'Alle genoemde prijzen zijn exclusief BTW.',
     avTekst:'Op deze offerte zijn de Algemene Voorwaarden van TEAL van toepassing (separaat bijgevoegd).',
     meerwerkTekst:'Meerwerk of vertraging die niet aan TEAL te wijten is, wordt apart in rekening gebracht.',
     akkoord:'Akkoord',akkoordTekst:'Ondergetekende verklaart akkoord te gaan met de informatie in dit document en de bijgevoegde Algemene Voorwaarden.',
@@ -289,7 +287,7 @@ const I={
     garantie:'Warranty',garantieIncl:'Include warranty',
     avNL:'Algemene Voorwaarden TEAL bijvoegen (NL)',avEN:'General Terms & Conditions (EN)',
     offerte:'QUOTATION',klantLabel:'CLIENT',detailsLabel:'DETAILS',
-    projectnaamPrev:'Project name',locatie:'Location',scope:'Scope',
+    projectnaamPrev:'Project name',scope:'Scope',
     referentieLabel:'Quotation Number',datumPrev:'Date',geldigTot:'Valid Until',
     projectBeschrijving:'PROJECT DESCRIPTION',rolTeal:"TEAL's Role",
     scopeTimeline:'SCOPE OF WORK & TIMELINE',indicatieveTimeline:'INDICATIVE TIMELINE',
@@ -301,7 +299,6 @@ const I={
     voorwaardenLabel:'TERMS & CONDITIONS',
     exclusionsVw:'Exclusions',
     geldigheidVw:'Validity',garantieLabel:'Warranty',
-    btwTekst:'All prices exclude VAT.',
     avTekst:'The General Terms and Conditions of TEAL apply (provided separately).',
     meerwerkTekst:'Additional work or delays not attributable to TEAL will be charged separately.',
     akkoord:'Approval',akkoordTekst:'By signing below, you agree to the information outlined in this document and the General Terms and Conditions (attached to this document).',
@@ -426,7 +423,7 @@ const AK='teal.offerte.all'; // archive key
 const save=d=>{try{localStorage.setItem(SK,JSON.stringify(d))}catch(e){}};
 const load=()=>{try{const r=localStorage.getItem(SK);return r?JSON.parse(r):null}catch(e){return null}};
 const loadHash=()=>{try{const h=location.hash.slice(1);if(!h)return null;const p=new URLSearchParams(h);const dd=p.get('data');if(!dd)return null;const j=LZString.decompressFromEncodedURIComponent(dd);return j?JSON.parse(j):null}catch(e){return null}};
-const shareUrl=d=>{const c=LZString.compressToEncodedURIComponent(JSON.stringify(d));return`${location.origin}${location.pathname}#data=${c}`};
+const shareUrl=d=>{const{_archiveId,...clean}=d;const c=LZString.compressToEncodedURIComponent(JSON.stringify(clean));return`${location.origin}${location.pathname}#data=${c}`};
 
 // ── Archive (all quotations) ──
 const loadArchive=()=>{try{const r=localStorage.getItem(AK);return r?JSON.parse(r):[];}catch(e){return[];}};
@@ -887,7 +884,6 @@ function PreviewTab({data:d}){
   const activePhases=d.phases.filter(p=>p.enabled!==false);
 
   const fmtDateLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
-  const validUntil=()=>{if(!d.project.date)return'';const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(d.conditions.validity||30));return fmtDateLong(dt.toISOString().slice(0,10))};
 
   const finLines=buildFinancialLines(d,totals,L);
 
@@ -957,7 +953,7 @@ function PreviewTab({data:d}){
     <h3 style={{marginTop:24}}>{ll.indicatieveTimeline}</h3>
     {(()=>{
       const totalWeeksGantt=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
-      const colors=['#D4ECE6','#B8DDD4','#9DCEC2','#82BFB0','#67B09E'];
+      const colors=COLORS;
       return <div style={{marginTop:12}}>
         {activePhases.map((ph,i)=>{
           const sw=ph.startWeek||0;const dw=ph.durationWeeks||4;
@@ -1075,6 +1071,7 @@ function exportPDF(d,setData){
   const pn=(ph)=>ph.customName||t(ph.name,L);
   const activePhases=d.phases.filter(p=>p.enabled!==false);
   const versionFromRef=(d.ref||'').split('-').pop()||'1';
+  const pdfFilename=`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}_v${versionFromRef}.pdf`;
 
   const addFooter=()=>{
     const pc=doc.getNumberOfPages();
@@ -1098,7 +1095,6 @@ function exportPDF(d,setData){
   const gap=(n=3)=>{y+=n};
 
   const fmtDateLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
-  const validUntil=()=>{if(!d.project.date)return'';const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(d.conditions.validity||30));return fmtDateLong(dt.toISOString().slice(0,10))};
   const finLines=buildFinancialLines(d,totals,L);
 
   // ── Header with logo ──
@@ -1151,7 +1147,7 @@ function exportPDF(d,setData){
   const ganttLeft=m+45,ganttRight=190,ganttW=ganttRight-ganttLeft;
   const totalWeeksGantt=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
   const barH=6,barGap=2;
-  const ganttColors=[[212,236,230],[184,221,212],[157,206,194],[130,191,176],[103,176,158]];
+  const hexToRgb=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
   activePhases.forEach((ph,i)=>{
     checkPage(barH+barGap+4);
     const sw=ph.startWeek||0;const dw=ph.durationWeeks||4;
@@ -1163,7 +1159,7 @@ function exportPDF(d,setData){
     // Bar background track
     doc.setDrawColor(230,230,230);doc.setFillColor(245,245,243);doc.rect(ganttLeft,y,ganttW,barH,'F');
     // Bar
-    const clr=ganttColors[i%ganttColors.length];
+    const clr=hexToRgb(COLORS[i%COLORS.length]);
     doc.setFillColor(...clr);doc.rect(barX,y,barW,barH,'F');
     // Duration text inside bar
     doc.setFontSize(7);doc.setFont('helvetica','bold');doc.setTextColor(7,20,18);
@@ -1268,13 +1264,13 @@ function exportPDF(d,setData){
           const blob=new Blob([mergedBytes],{type:'application/pdf'});
           const url=URL.createObjectURL(blob);
           const a=document.createElement('a');a.href=url;
-          a.download=`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}_v${versionFromRef}.pdf`;
+          a.download=pdfFilename;
           a.click();URL.revokeObjectURL(url);
-        }catch(e){console.error('AV merge failed, exporting without AV:',e);doc.save(`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}_v${versionFromRef}.pdf`);}
+        }catch(e){console.error('AV merge failed, exporting without AV:',e);doc.save(pdfFilename);}
       })();
-    }else{doc.save(`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}_v${versionFromRef}.pdf`);}
+    }else{doc.save(pdfFilename);}
   }else{
-    doc.save(`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}_v${versionFromRef}.pdf`);
+    doc.save(pdfFilename);
   }
 
   // Auto-increment version in ref for next export
