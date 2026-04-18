@@ -456,12 +456,13 @@ function archiveDelete(id){
   saveArchive(all);
 }
 
-function archiveLogExport(d){
+function archiveLogAction(d,action){
   if(!d._archiveId)return;
   const all=loadArchive();
   const idx=all.findIndex(x=>x.id===d._archiveId);
-  if(idx>=0){all[idx].changelog.push({action:'pdf_exported',date:new Date().toISOString()});all[idx].updatedAt=new Date().toISOString();saveArchive(all);}
+  if(idx>=0){all[idx].changelog.push({action,date:new Date().toISOString()});all[idx].updatedAt=new Date().toISOString();saveArchive(all);}
 }
+function archiveLogExport(d){archiveLogAction(d,'pdf_exported');}
 
 // ── Google API Integration ──
 const GOOGLE_CID_KEY='teal.google.clientId';
@@ -884,9 +885,8 @@ async function exportBudgetToSheets(d){
   return `https://docs.google.com/spreadsheets/d/${ssId}`;
 }
 
-// ── Export to Google Docs (Offerte) ──
-async function exportOfferteToDoc(d){
-  await ensureGoogleAuth();
+// ── Generate Offerte as Markdown (copy to clipboard) ──
+function generateOfferteMD(d){
   const L=d.lang||'nl';const NL=L==='nl';const ll=L_(L);
   const totals=calcTotals(d);
   const pn=(ph)=>ph.customName||t(ph.name,L);
@@ -897,93 +897,69 @@ async function exportOfferteToDoc(d){
 
   const cl=d.client||{};
   const proj=d.project||{};const cond=d.conditions||{};
-
-  // Create doc
-  const title=`Offerte ${d.ref||'Draft'} - TEAL`;
-  const createResp=await gapi.client.docs.documents.create({resource:{title}});
-  const docId=createResp.result.documentId;
-
-  // Build requests to populate the doc
-  const reqs=[];
-  let idx=1; // cursor position
-  let lastWasHeading=false;
-  const ins=(text,bold=false,fontSize=11,heading=null)=>{
-    const txt=String(text||'');
-    if(!txt)return;
-    reqs.push({insertText:{location:{index:idx},text:txt}});
-    // Apply text style (bold, fontSize)
-    const fields=[];const style={};
-    if(bold){style.bold=true;fields.push('bold');}
-    if(fontSize!==11){style.fontSize={magnitude:fontSize,unit:'PT'};fields.push('fontSize');}
-    if(fields.length){
-      reqs.push({updateTextStyle:{range:{startIndex:idx,endIndex:idx+txt.length},textStyle:style,fields:fields.join(',')}});
-    }
-    if(heading){
-      // Set heading style
-      reqs.push({updateParagraphStyle:{range:{startIndex:idx,endIndex:idx+txt.length},paragraphStyle:{namedStyleType:heading},fields:'namedStyleType'}});
-    }else if(lastWasHeading){
-      // Reset to normal text so heading style doesn't bleed into this paragraph
-      reqs.push({updateParagraphStyle:{range:{startIndex:idx,endIndex:idx+txt.length},paragraphStyle:{namedStyleType:'NORMAL_TEXT'},fields:'namedStyleType'}});
-    }
-    lastWasHeading=!!heading;
-    idx+=txt.length;
-  };
-  const nl=()=>{reqs.push({insertText:{location:{index:idx},text:'\n'}});idx+=1;};
+  const lines=[];
+  const add=(...s)=>lines.push(s.join(''));
+  const blank=()=>lines.push('');
 
   // Header
-  ins('TEAL',true,22);nl();
-  ins(NL?'OFFERTE':'QUOTATION',false,14);nl();
-  nl();
+  add('# TEAL');
+  add('## ',NL?'OFFERTE':'QUOTATION');
+  blank();
+  add(ll.referentieLabel,': ',d.ref||'');
+  add(ll.datumPrev,': ',fmtDateLong(proj.date));
+  add(ll.geldigTot,': ',cond.validity||30,' ',NL?'dagen':'days');
+  blank();
 
-  // Reference line
-  ins(`${ll.referentieLabel}: ${d.ref||''}`,false,10);nl();
-  ins(`${ll.datumPrev}: ${fmtDateLong(proj.date)}`,false,10);nl();
-  ins(`${ll.geldigTot}: ${cond.validity||30} ${NL?'dagen':'days'}`,false,10);nl();
-  nl();
-
-  // Client details
-  ins(ll.klantLabel,true,12,'HEADING_2');nl();
-  if(cl.name){ins(cl.name,true);nl();}
-  if(cl.contact&&cl.contact!==cl.name){ins(cl.contact);nl();}
-  if(cl.email){ins(cl.email);nl();}
-  if(cl.addr){ins(`${cl.addr}, ${cl.zip||''} ${cl.city||''}`);nl();}
-  if(proj.location){ins(`${ll.locatie}: ${proj.location}`);nl();}
-  nl();
+  // Client
+  add('## ',ll.klantLabel);
+  if(cl.name)add('**',cl.name,'**');
+  if(cl.contact&&cl.contact!==cl.name)add(cl.contact);
+  if(cl.email)add(cl.email);
+  if(cl.addr)add(cl.addr,', ',cl.zip||'',' ',cl.city||'');
+  if(proj.location)add(ll.locatie,': ',proj.location);
+  blank();
 
   // Project description
   if(t(proj.description,L)){
-    ins(ll.projectBeschrijving,true,12,'HEADING_2');nl();
-    ins(t(proj.description,L));nl();nl();
+    add('## ',ll.projectBeschrijving);
+    add(t(proj.description,L));
+    blank();
   }
   if(t(proj.tealRole,L)){
-    ins(ll.rolTeal,true,11);nl();
-    ins(t(proj.tealRole,L));nl();nl();
+    add('**',ll.rolTeal,'**');
+    add(t(proj.tealRole,L));
+    blank();
   }
 
   // Scope & phases
   if(activePhases.length){
-    ins(ll.scopeTimeline,true,12,'HEADING_2');nl();
+    add('## ',ll.scopeTimeline);
     activePhases.forEach(ph=>{
       const desc=t(ph.description,L);
-      ins(`${pn(ph)}`,true);nl();
-      if(desc){ins(desc);nl();}
-      nl();
+      add('**',pn(ph),'**');
+      if(desc)add(desc);
+      blank();
     });
   }
 
   // Financial overview
-  ins(ll.kostenLabel,true,12,'HEADING_2');nl();
+  add('## ',ll.kostenLabel);
+  blank();
+  add('| ',NL?'Omschrijving':'Description',' | ',NL?'Bedrag':'Amount',' |');
+  add('| --- | ---: |');
   finLines.forEach(fl=>{
-    ins(`${fl.desc}`,true);ins(`\t${fmtE(fl.total)}`);nl();
+    add('| ',fl.desc,' | ',fmtE(fl.total),' |');
   });
-  nl();
-  ins(`${NL?'Totaal (excl. BTW)':'Total (excl. VAT)'}`,true,13);ins(`\t${fmtE(totals.grandClient)}`,true,13);nl();
-  nl();
+  add('| **',NL?'Totaal (excl. BTW)':'Total (excl. VAT)','** | **',fmtE(totals.grandClient),'** |');
+  blank();
 
   // Payment
   const milestones=d.payment?.milestones||[];
   if(milestones.length){
-    ins(ll.betalingsschema||'PAYMENT SCHEDULE',true,12,'HEADING_2');nl();
+    add('## ',ll.betalingsschema||'PAYMENT SCHEDULE');
+    blank();
+    add('| ',NL?'Mijlpaal':'Milestone',' | % | ',NL?'Bedrag':'Amount',' |');
+    add('| --- | ---: | ---: |');
     const milestoneDateISOs=()=>{
       if(!proj.date||!milestones.length)return milestones.map(()=>'');
       const totalW=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
@@ -997,33 +973,156 @@ async function exportOfferteToDoc(d){
     const mDates=milestoneDateISOs();
     milestones.forEach((ms,i)=>{
       const amt=totals.grandClient*(ms.pct||0)/100;
-      const dateStr=mDates[i]?', '+fmtMonth(mDates[i]):'';
-      ins(`${t(ms.name,L)}: ${ms.pct}% (${fmtE(amt)}${dateStr})`);nl();
+      const dateStr=mDates[i]?' ('+fmtMonth(mDates[i])+')':'';
+      add('| ',t(ms.name,L),dateStr,' | ',ms.pct,'% | ',fmtE(amt),' |');
     });
-    nl();
+    blank();
   }
 
   // Terms
-  ins(ll.voorwaardenLabel,true,12,'HEADING_2');nl();
-  ins(`${ll.geldigheidVw}: ${cond.validity||30} ${NL?'dagen':'days'}`);nl();
-  ins(`${ll.betalingstermijn}: ${cond.paymentTerm||14} ${NL?'dagen':'days'}`);nl();
-  if(t(cond.warranty,L)){ins(`${ll.garantieLabel}: ${t(cond.warranty,L)}`);nl();}
-  if(t(proj.exclusions,L)){ins(`${ll.exclusionsVw}: ${t(proj.exclusions,L)}`);nl();}
-  ins(ll.avTekst);nl();
-  ins(ll.meerwerkTekst);nl();
-  nl();
+  add('## ',ll.voorwaardenLabel);
+  add('- ',ll.geldigheidVw,': ',cond.validity||30,' ',NL?'dagen':'days');
+  add('- ',ll.betalingstermijn,': ',cond.paymentTerm||14,' ',NL?'dagen':'days');
+  if(t(cond.warranty,L))add('- ',ll.garantieLabel,': ',t(cond.warranty,L));
+  if(t(proj.exclusions,L))add('- ',ll.exclusionsVw,': ',t(proj.exclusions,L));
+  add('- ',ll.avTekst);
+  add('- ',ll.meerwerkTekst);
+  blank();
 
   // Signature
-  ins(ll.akkoord,true,12,'HEADING_2');nl();
-  ins(ll.akkoordTekst);nl();
-  nl();
-  ins('____________________________          ____________________________');nl();
-  ins(`${NL?'Handtekening':'Signature'}                                        ${NL?'Datum':'Date'}`);nl();
+  add('## ',ll.akkoord);
+  add(ll.akkoordTekst);
+  blank();
+  add('____________________________&emsp;&emsp;&emsp;&emsp;____________________________');
+  add(NL?'Handtekening':'Signature','&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;',NL?'Datum':'Date');
 
-  // Execute all requests
-  await gapi.client.docs.documents.batchUpdate({documentId:docId,resource:{requests:reqs}});
+  return lines.join('\n');
+}
 
-  return `https://docs.google.com/document/d/${docId}`;
+// ── Generate Budget as TSV (copy to clipboard, paste into Sheets template) ──
+function generateBudgetTSV(d){
+  const L=d.lang||'nl';const NL=L==='nl';
+  const totals=calcTotals(d);
+  const pn=(ph)=>ph.customName||t(ph.name,L);
+  const proj=d.project||{};const cl=d.client||{};
+  const isBuild=d.type==='build';
+  const n=v=>typeof v==='number'?v.toFixed(2).replace('.',','):'';
+  const pct=v=>typeof v==='number'?(v*100).toFixed(0)+'%':'';
+
+  const rows=[];
+  const add=(...cols)=>rows.push(cols.join('\t'));
+
+  // Header info
+  add(NL?'TEAL BUDGET':'TEAL BUDGET');
+  add('');
+  add(NL?'Project':'Project',proj.name||'');
+  add(NL?'Klant':'Client',cl.name||'');
+  add(NL?'Referentie':'Reference',d.ref||'');
+  add(NL?'Datum':'Date',proj.date||'');
+  add(NL?'Type':'Type',isBuild?'Build':'Assemble');
+  add('');
+
+  // Column headers (matches Quote-Internal template)
+  if(isBuild){
+    add(NL?'Fase':'Phase',NL?'Rol':'Role',NL?'Omschrijving':'Description',
+      NL?'Aantal':'Qty',NL?'Ext. tarief':'Ext. rate',NL?'Klantprijs':'Client price',
+      NL?'Int. tarief':'Int. rate',NL?'Kosten':'Est. cost',NL?'Marge %':'Margin %',NL?'Notities':'Notes');
+  }else{
+    add(NL?'Regel':'Line item',NL?'Aantal':'Qty',NL?'Eenheid':'Unit',
+      NL?'Inkoop/eenheid':'Purchase/unit',NL?'Kostprijs/eenheid':'Cost price/unit',
+      NL?'Marge %':'Margin %',NL?'Verkoopprijs/eenheid':'Sell price/unit',
+      NL?'Totaal':'Total',NL?'Notities':'Notes');
+  }
+
+  // LABOUR
+  add('');
+  add(NL?'ARBEID':'LABOUR');
+  (d.phases||[]).forEach((ph,pi)=>{
+    if(ph.enabled===false)return;
+    const pd=totals.phaseData[pi];if(!pd)return;
+    (ph.items||[]).forEach(it=>{
+      const r=roleMap[it.role];
+      const qty=it.qty||0;const ext=it.extRate||0;const int_=it.intRate||0;
+      const clientPrice=qty*ext;const estCost=qty*int_;
+      const margin=clientPrice>0?(clientPrice-estCost)/clientPrice:0;
+      if(isBuild){
+        add(pn(ph),t(r?.name,L)||it.role,t(it.desc,L)||'',qty,n(ext),n(clientPrice),n(int_),n(estCost),pct(margin),'');
+      }else{
+        const costPerUnit=int_;
+        add(t(r?.name,L)||it.role,qty,r?.unit||'uur',n(int_),n(costPerUnit),pct(margin),n(ext),n(clientPrice),'');
+      }
+    });
+    if(ph.contingency>0){
+      const cAmt=pd.total-ph.items.reduce((s,it)=>s+(it.qty||0)*(it.extRate||0),0);
+      if(isBuild){
+        add(pn(ph),'Contingency '+(ph.contingency*100).toFixed(0)+'%','','','',n(cAmt),'','','','');
+      }else{
+        add('Contingency '+(ph.contingency*100).toFixed(0)+'%','','','','','','',n(cAmt),'');
+      }
+    }
+  });
+  add(NL?'Subtotaal arbeid':'Labour subtotal','','','','',n(totals.blockAClient),'','','','');
+
+  // MATERIALS
+  if((d.procOTS||[]).length||(d.procCustom||[]).length){
+    add('');
+    add(NL?'MATERIALEN & INKOOP':'MATERIALS & PROCUREMENT');
+    const addProc=(it,type)=>{
+      if(!it.amount)return;
+      const v=it.amount||0;
+      const h=v*(it.handlingPct!=null?it.handlingPct:getHandlingPct(v));
+      const risk=type==='custom'?v*(it.riskPct||0):0;
+      const clientTotal=v+h+risk;
+      const margin=clientTotal>0?(clientTotal-v)/clientTotal:0;
+      if(isBuild){
+        add(type==='ots'?(NL?'Standaard':'Off-the-shelf'):(NL?'Maatwerk':'Custom'),
+          it.desc||'',it.supplier||'','',n(v),n(clientTotal),'',n(v),pct(margin),
+          type==='custom'?'Risk '+(it.riskPct*100).toFixed(0)+'%':'');
+      }else{
+        add(it.desc||'Materials',1,'lot',n(v),n(v),pct(margin),n(clientTotal),n(clientTotal),'');
+      }
+    };
+    (d.procOTS||[]).forEach(it=>addProc(it,'ots'));
+    (d.procCustom||[]).forEach(it=>addProc(it,'custom'));
+    add(NL?'Subtotaal materialen':'Materials subtotal','','','','',n(totals.procClient),'','','','');
+  }
+
+  // SUBCONTRACTORS
+  if((d.subs||[]).length){
+    add('');
+    add(NL?'ONDERAANNEMERS':'SUBCONTRACTORS');
+    (d.subs||[]).forEach(it=>{
+      if(!it.amount)return;
+      const v=it.amount||0;
+      const c=v*(it.coordPct!=null?it.coordPct:COORD_MARGIN);
+      const clientTotal=v+c;
+      const margin=clientTotal>0?c/clientTotal:0;
+      if(isBuild){
+        add('',it.desc||'','','',n(v),n(clientTotal),'',n(v),pct(margin),'');
+      }else{
+        add(it.desc||'',1,'fixed',n(v),n(v),pct(margin),n(clientTotal),n(clientTotal),'');
+      }
+    });
+    add(NL?'Subtotaal onderaannemers':'Subcontractors subtotal','','','','',n(totals.subClient),'','','','');
+  }
+
+  // GRAND TOTAL
+  add('');
+  add(NL?'TOTAAL EXCL. BTW':'TOTAL EXCL. VAT','','','','',n(totals.grandClient),'','','','');
+
+  // MARGIN CHECK
+  add('');
+  add(NL?'MARGE-OVERZICHT':'MARGIN CHECK');
+  add(NL?'Categorie':'Category',NL?'Kostprijs':'Cost price',NL?'Verkoopprijs':'Sell price',NL?'Marge':'Margin',NL?'Marge %':'Margin %');
+  add(NL?'Arbeid':'Labour',n(totals.blockACost),n(totals.blockAClient),n(totals.blockAClient-totals.blockACost),
+    pct(totals.blockAClient>0?(totals.blockAClient-totals.blockACost)/totals.blockAClient:0));
+  add(NL?'Materialen':'Materials',n(totals.procCost),n(totals.procClient),n(totals.procClient-totals.procCost),
+    pct(totals.procClient>0?(totals.procClient-totals.procCost)/totals.procClient:0));
+  add(NL?'Onderaannemers':'Subcontractors',n(totals.subFees),n(totals.subClient),n(totals.subClient-totals.subFees),
+    pct(totals.subClient>0?(totals.subClient-totals.subFees)/totals.subClient:0));
+  add('TOTAAL',n(totals.grandCost),n(totals.grandClient),n(totals.grandClient-totals.grandCost),pct(totals.margin));
+
+  return rows.join('\n');
 }
 
 // ── Export Planning to TEAL Planner ──
@@ -1133,33 +1232,28 @@ function GoogleSettingsModal({open,onClose}){
   </div>;
 }
 
-function ExportDropdown({data:d,onGoogleExport}){
+function ExportDropdown({data:d,onExport}){
   const[open,setOpen]=useState(false);
   const NL=d?.lang==='nl';
   const items=[
-    {key:'sheets',label:NL?'Budget naar Sheets':'Budget to Sheets',icon:'📊'},
-    {key:'docs',label:NL?'Offerte naar Docs':'Quotation to Docs',icon:'📄'},
-    {key:'planning',label:NL?'Open in Planner':'Open in Planner',icon:'📅'},
+    {key:'sheets',label:NL?'Budget kopiëren (Sheets)':'Copy budget (Sheets)',icon:'📊',hint:NL?'Plak in je template':'Paste into your template'},
+    {key:'docs',label:NL?'Offerte kopiëren (Markdown)':'Copy quotation (Markdown)',icon:'📄',hint:NL?'Plak in Docs/Notion':'Paste into Docs/Notion'},
+    {key:'planning',label:NL?'Open in Planner':'Open in Planner',icon:'📅',hint:''},
   ];
   return <div style={{position:'relative'}}>
     <button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}}
-      onClick={()=>setOpen(!open)}>Google Export ▾</button>
-    {open&&<div style={{position:'absolute',right:0,top:'100%',marginTop:4,background:'#fff',border:'1px solid #d0d0ce',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:200,minWidth:220,overflow:'hidden'}}>
+      onClick={()=>setOpen(!open)}>Export ▾</button>
+    {open&&<><div style={{position:'fixed',inset:0,zIndex:199}} onClick={()=>setOpen(false)}/><div style={{position:'absolute',right:0,top:'100%',marginTop:4,background:'#fff',border:'1px solid #d0d0ce',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:200,minWidth:260,overflow:'hidden'}}>
       {items.map(it=><button key={it.key} style={{display:'block',width:'100%',padding:'10px 16px',border:0,background:'none',textAlign:'left',fontSize:13,fontFamily:'inherit',cursor:'pointer',borderBottom:'1px solid #eee'}}
         onMouseOver={e=>e.currentTarget.style.background='var(--mint-light)'}
         onMouseOut={e=>e.currentTarget.style.background='none'}
-        onClick={()=>{setOpen(false);onGoogleExport(it.key);}}
-      >{it.icon} {it.label}</button>)}
-      <button style={{display:'block',width:'100%',padding:'10px 16px',border:0,background:'none',textAlign:'left',fontSize:12,fontFamily:'inherit',cursor:'pointer',color:'#999'}}
-        onMouseOver={e=>e.currentTarget.style.background='var(--warm-grey)'}
-        onMouseOut={e=>e.currentTarget.style.background='none'}
-        onClick={()=>{setOpen(false);onGoogleExport('settings');}}
-      >⚙ Google API instellingen</button>
-    </div>}
+        onClick={()=>{setOpen(false);onExport(it.key);}}
+      ><span>{it.icon} {it.label}</span>{it.hint&&<div style={{fontSize:11,color:'#999',marginTop:2}}>{it.hint}</div>}</button>)}
+    </div></>}
   </div>;
 }
 
-function Header({data:d,onPdf,onGoogleExport,setData}){
+function Header({data:d,onPdf,onExport,setData}){
   const ll=d?L_(d.lang):I.nl;
   return <div className="hdr">
     <div className="hdr-left">
@@ -1171,8 +1265,8 @@ function Header({data:d,onPdf,onGoogleExport,setData}){
         const newLang=d.lang==='nl'?'en':'nl';
         setData({...d,lang:newLang,conditions:{...d.conditions,avNL:newLang==='nl',avEN:newLang==='en'}});
       }}>{d.lang==='nl'?'EN':'NL'}</button>}
-      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>{navigator.clipboard.writeText(shareUrl(d));alert(ll.linkKopie)}}>{ll.deelLink}</button>}
-      {d&&<ExportDropdown data={d} onGoogleExport={onGoogleExport}/>}
+      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>{navigator.clipboard.writeText(shareUrl(d));archiveLogAction(d,'shared');alert(ll.linkKopie)}}>{ll.deelLink}</button>}
+      {d&&<ExportDropdown data={d} onExport={onExport}/>}
       {d&&<button className="btn btn-s" onClick={onPdf}>PDF</button>}
     </div>
   </div>;
@@ -1988,7 +2082,15 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete}){
   const refresh=()=>setArchive(loadArchive());
   const sorted=[...archive].sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
   const fmtDt=iso=>{if(!iso)return'-';const d=new Date(iso);return d.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});};
-  const actionLabel={created:'Aangemaakt',updated:'Bewerkt',pdf_exported:'PDF geëxporteerd'};
+  const actionLabel={
+    created:'Aangemaakt',updated:'Bewerkt',
+    pdf_exported:'PDF geëxporteerd',
+    sheets_exported:'Google Sheets geëxporteerd',
+    docs_exported:'Google Docs geëxporteerd',
+    planner_exported:'Planning geëxporteerd',
+    duplicated:'Gedupliceerd',
+    shared:'Link gedeeld',
+  };
 
   return <div>
     <div className="between mb16">
@@ -2067,30 +2169,30 @@ function App(){
 
   const openQuote=(data)=>{const saved=archiveSave(data,'updated');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const newQuote=(type)=>{const proj=createProject(type);const saved=archiveSave(proj,'created');save(saved);setD(saved);setTab('project');setShowDash(false);};
-  const duplicateQuote=(data)=>{const copy={...JSON.parse(JSON.stringify(data)),_archiveId:undefined};delete copy._archiveId;const ref=data.ref.split('-');ref[ref.length-1]='1';copy.ref=ref.join('-')+'-copy';archiveSave(copy,'created');};
+  const duplicateQuote=(data)=>{const copy={...JSON.parse(JSON.stringify(data)),_archiveId:undefined};delete copy._archiveId;const ref=data.ref.split('-');ref[ref.length-1]='1';copy.ref=ref.join('-')+'-copy';archiveSave(copy,'created');archiveLogAction(data,'duplicated');};
   const deleteQuote=(id)=>{archiveDelete(id);if(d&&d._archiveId===id){setD(null);save(null);}};
   const goToDash=()=>{if(d)archiveSave(d,'updated');setShowDash(true);};
 
   const handlePdf=()=>{exportPDF(d,setDWithArchive);archiveLogExport(d);};
 
-  const[gSettings,setGSettings]=useState(false);
-  const[gExporting,setGExporting]=useState(null);
-
-  const handleGoogleExport=async(type)=>{
-    if(type==='settings'){setGSettings(true);return;}
-    if(!d){return;}
-    if(type==='planning'){window.open(exportToPlanner(d),'_blank');return;}
-    if(!getGoogleClientId()){setGSettings(true);return;}
-    setGExporting(type);
-    try{
-      let url;
-      if(type==='sheets')url=await exportBudgetToSheets(d);
-      else if(type==='docs')url=await exportOfferteToDoc(d);
-      if(url)window.open(url,'_blank');
-    }catch(e){
-      if(e.message==='NO_CLIENT_ID'){setGSettings(true);}
-      else{const msg=e?.result?.error?.message||e?.message||JSON.stringify(e);alert('Google export mislukt: '+msg);console.error('Export error:',e);}
-    }finally{setGExporting(null);}
+  const NL_=d?.lang==='nl';
+  const handleExport=async(type)=>{
+    if(!d)return;
+    if(type==='planning'){window.open(exportToPlanner(d),'_blank');archiveLogAction(d,'planner_exported');return;}
+    if(type==='docs'){
+      const md=generateOfferteMD(d);
+      await navigator.clipboard.writeText(md);
+      archiveLogAction(d,'docs_exported');
+      alert(NL_?'Offerte als Markdown gekopieerd. Plak in Google Docs of Notion.':'Quotation copied as Markdown. Paste into Google Docs or Notion.');
+      return;
+    }
+    if(type==='sheets'){
+      const tsv=generateBudgetTSV(d);
+      await navigator.clipboard.writeText(tsv);
+      archiveLogAction(d,'sheets_exported');
+      alert(NL_?'Budget gekopieerd. Plak in je Google Sheets template (Ctrl+V).':'Budget copied. Paste into your Google Sheets template (Ctrl+V).');
+      return;
+    }
   };
 
   const ll=d?L_(d.lang):I.nl;
@@ -2101,14 +2203,7 @@ function App(){
   ];
 
   return <div className="app">
-    <GoogleSettingsModal open={gSettings} onClose={()=>setGSettings(false)}/>
-    {gExporting&&<div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,.4)',zIndex:900,display:'flex',alignItems:'center',justifyContent:'center'}}>
-      <div className="card" style={{margin:0,textAlign:'center',padding:32}}>
-        <div style={{fontSize:24,marginBottom:12,animation:'spin 1s linear infinite'}}>&#8635;</div>
-        <p style={{fontWeight:600}}>{gExporting==='sheets'?'Budget exporteren naar Google Sheets...':'Offerte exporteren naar Google Docs...'}</p>
-      </div>
-    </div>}
-    <Header data={showDash?null:d} onPdf={handlePdf} onGoogleExport={handleGoogleExport} setData={setDWithArchive}/>
+    <Header data={showDash?null:d} onPdf={handlePdf} onExport={handleExport} setData={setDWithArchive}/>
     {!showDash&&d&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
     <div className="main">
       {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onDuplicate={duplicateQuote} onDelete={deleteQuote}/>:
