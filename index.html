@@ -518,27 +518,28 @@ async function ensureGoogleAuth(){
 // ── Export to Google Sheets (Budget) ──
 async function exportBudgetToSheets(d){
   await ensureGoogleAuth();
-  const L=d.lang;const NL=L==='nl';const ll=L_(L);
+  const L=d.lang||'nl';const NL=L==='nl';const ll=L_(L);
   const totals=calcTotals(d);
   const pn=(ph)=>ph.customName||t(ph.name,L);
 
   // Build rows for the spreadsheet
   const rows=[];
+  const proj=d.project||{};const cl=d.client||{};
   rows.push([NL?'TEAL Offerte - Kostenoverzicht':'TEAL Quotation - Cost Overview','','','','']);
-  rows.push([NL?'Project':'Project',d.project.name||'Draft','','','']);
-  rows.push([NL?'Referentie':'Reference',d.ref,'','','']);
-  rows.push([NL?'Klant':'Client',d.client.name||'','','','']);
-  rows.push([NL?'Datum':'Date',d.project.date||'','','','']);
+  rows.push([NL?'Project':'Project',proj.name||'Draft','','','']);
+  rows.push([NL?'Referentie':'Reference',d.ref||'','','','']);
+  rows.push([NL?'Klant':'Client',cl.name||'','','','']);
+  rows.push([NL?'Datum':'Date',proj.date||'','','','']);
   rows.push(['','','','','']);
 
   // Block A: TEAL fees
   rows.push([NL?'BLOK A: TEAL KOSTEN':'BLOCK A: TEAL FEES','','','','']);
   rows.push([NL?'Fase':'Phase',NL?'Rol':'Role',NL?'Aantal':'Qty',NL?'Tarief':'Rate',NL?'Subtotaal':'Subtotal']);
-  d.phases.forEach((ph,pi)=>{
+  (d.phases||[]).forEach((ph,pi)=>{
     if(ph.enabled===false)return;
     const pd=totals.phaseData[pi];if(!pd)return;
     rows.push([pn(ph),'','','',{v:pd.total,f:fmtE(pd.total)}]);
-    ph.items.forEach(it=>{
+    (ph.items||[]).forEach(it=>{
       const r=roleMap[it.role];
       const sub=it.qty*(it.extRate||0);
       rows.push(['',t(r?.name,L)||it.role,it.qty,{v:it.extRate,f:fmtE(it.extRate)},{v:sub,f:fmtE(sub)}]);
@@ -592,7 +593,7 @@ async function exportBudgetToSheets(d){
   rows.push(['','','','','']);
   rows.push([NL?'BETAALSCHEMA':'PAYMENT SCHEDULE','','','','']);
   rows.push([NL?'Mijlpaal':'Milestone','%',NL?'Bedrag':'Amount','','']);
-  (d.payment.milestones||[]).forEach(ms=>{
+  (d.payment?.milestones||[]).forEach(ms=>{
     const amt=totals.grandClient*(ms.pct||0)/100;
     rows.push([t(ms.name,L),ms.pct+'%',{v:amt,f:fmtE(amt)},'','']);
   });
@@ -605,7 +606,7 @@ async function exportBudgetToSheets(d){
   const values=rows.map(row=>row.map(cell=>typeof cell==='object'?cell.v:cell));
 
   // Create spreadsheet
-  const title=`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}_Budget`;
+  const title=`TEAL_${NL?'Offerte':'Quotation'}_${(proj.name||'Draft').replace(/\s+/g,'_')}_Budget`;
   const resp=await gapi.client.sheets.spreadsheets.create({
     resource:{
       properties:{title},
@@ -670,16 +671,16 @@ async function exportBudgetToSheets(d){
 // ── Export to Google Docs (Offerte) ──
 async function exportOfferteToDoc(d){
   await ensureGoogleAuth();
-  const L=d.lang;const NL=L==='nl';const ll=L_(L);
+  const L=d.lang||'nl';const NL=L==='nl';const ll=L_(L);
   const totals=calcTotals(d);
   const pn=(ph)=>ph.customName||t(ph.name,L);
   const fmtDateLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
   const finLines=buildFinancialLines(d,totals,L);
-  const activePhases=d.phases.filter(p=>p.enabled!==false);
+  const activePhases=(d.phases||[]).filter(p=>p.enabled!==false);
   const fmtMonth=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{month:'long',year:'numeric'}):'';
 
   // Create doc
-  const title=`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}`;
+  const title=`TEAL_${NL?'Offerte':'Quotation'}_${(proj.name||'Draft').replace(/\s+/g,'_')}`;
   const createResp=await gapi.client.docs.documents.create({resource:{title}});
   const docId=createResp.result.documentId;
 
@@ -708,27 +709,29 @@ async function exportOfferteToDoc(d){
 
   // Client + details
   ins(ll.klantLabel,true,12,'HEADING_2');nl();
-  if(d.client.name){ins(d.client.name);nl();}
-  if(d.client.contact){ins(d.client.contact);nl();}
-  if(d.client.email){ins(d.client.email);nl();}
-  if(d.client.addr){ins(`${d.client.addr}, ${d.client.zip} ${d.client.city}`);nl();}
+  const cl=d.client||{};
+  if(cl.name){ins(cl.name);nl();}
+  if(cl.contact){ins(cl.contact);nl();}
+  if(cl.email){ins(cl.email);nl();}
+  if(cl.addr){ins(`${cl.addr}, ${cl.zip||''} ${cl.city||''}`);nl();}
   nl();
 
   ins(ll.detailsLabel,true,12,'HEADING_2');nl();
-  ins(`${ll.referentieLabel}: ${d.ref}`);nl();
-  ins(`${ll.datumPrev}: ${fmtDateLong(d.project.date)}`);nl();
-  ins(`${ll.geldigTot}: ${d.conditions.validity||30} ${NL?'dagen':'days'}`);nl();
-  if(d.project.location){ins(`${ll.locatie}: ${d.project.location}`);nl();}
+  const proj=d.project||{};const cond=d.conditions||{};
+  ins(`${ll.referentieLabel}: ${d.ref||''}`);nl();
+  ins(`${ll.datumPrev}: ${fmtDateLong(proj.date)}`);nl();
+  ins(`${ll.geldigTot}: ${cond.validity||30} ${NL?'dagen':'days'}`);nl();
+  if(proj.location){ins(`${ll.locatie}: ${proj.location}`);nl();}
   nl();
 
   // Project description
-  if(t(d.project.description,L)){
+  if(t(proj.description,L)){
     ins(ll.projectBeschrijving,true,12,'HEADING_2');nl();
-    ins(t(d.project.description,L));nl();nl();
+    ins(t(proj.description,L));nl();nl();
   }
-  if(t(d.project.tealRole,L)){
+  if(t(proj.tealRole,L)){
     ins(ll.rolTeal,true,11);nl();
-    ins(t(d.project.tealRole,L));nl();nl();
+    ins(t(proj.tealRole,L));nl();nl();
   }
 
   // Scope & phases
@@ -750,19 +753,20 @@ async function exportOfferteToDoc(d){
   nl();
 
   // Payment
+  const milestones=d.payment?.milestones||[];
   ins(ll.betaling,true,12,'HEADING_2');nl();
   const milestoneDateISOs=()=>{
-    if(!d.project.date)return d.payment.milestones.map(()=>'');
+    if(!proj.date||!milestones.length)return milestones.map(()=>'');
     const totalW=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
-    const n=d.payment.milestones.length;
-    return d.payment.milestones.map((_,i)=>{
+    const n=milestones.length;
+    return milestones.map((_,i)=>{
       const wk=Math.round((i/(n-1||1))*totalW);
-      const dt=new Date(d.project.date);dt.setDate(dt.getDate()+wk*7);
+      const dt=new Date(proj.date);dt.setDate(dt.getDate()+wk*7);
       return dt.toISOString().slice(0,10);
     });
   };
   const mDates=milestoneDateISOs();
-  d.payment.milestones.forEach((ms,i)=>{
+  milestones.forEach((ms,i)=>{
     const amt=totals.grandClient*(ms.pct||0)/100;
     const dateStr=mDates[i]?', '+fmtMonth(mDates[i]):'';
     ins(`${t(ms.name,L)}: ${ms.pct}% (${fmtE(amt)}${dateStr})`);nl();
@@ -771,10 +775,10 @@ async function exportOfferteToDoc(d){
 
   // Terms
   ins(ll.voorwaardenLabel,true,12,'HEADING_2');nl();
-  ins(`${ll.geldigheidVw}: ${d.conditions.validity||30} ${NL?'dagen':'days'}`);nl();
-  ins(`${ll.betalingstermijn}: ${d.conditions.paymentTerm||14} ${NL?'dagen':'days'}`);nl();
-  if(t(d.conditions.warranty,L)){ins(`${ll.garantieLabel}: ${t(d.conditions.warranty,L)}`);nl();}
-  if(t(d.project.exclusions,L)){ins(`${ll.exclusionsVw}: ${t(d.project.exclusions,L)}`);nl();}
+  ins(`${ll.geldigheidVw}: ${cond.validity||30} ${NL?'dagen':'days'}`);nl();
+  ins(`${ll.betalingstermijn}: ${cond.paymentTerm||14} ${NL?'dagen':'days'}`);nl();
+  if(t(cond.warranty,L)){ins(`${ll.garantieLabel}: ${t(cond.warranty,L)}`);nl();}
+  if(t(proj.exclusions,L)){ins(`${ll.exclusionsVw}: ${t(proj.exclusions,L)}`);nl();}
   ins(ll.avTekst);nl();
   ins(ll.meerwerkTekst);nl();
   nl();
@@ -797,9 +801,9 @@ const PLANNER_URL='https://teamteal-planner.vercel.app/';
 const GROUP_PALETTE=['#D4ECE6','#B8D8CE','#9CCAB6','#80BC9E','#64AE86','#48A06E','#6BB5A0','#4A9E84','#2D8659','#1A6B44'];
 
 function exportToPlanner(d){
-  const L=d.lang;const pn=(ph)=>ph.customName||t(ph.name,L);
-  const activePhases=d.phases.filter(p=>p.enabled!==false);
-  const projectStart=d.project.date||new Date().toISOString().slice(0,10);
+  const L=d.lang||'nl';const pn=(ph)=>ph.customName||t(ph.name,L);
+  const activePhases=(d.phases||[]).filter(p=>p.enabled!==false);
+  const projectStart=(d.project||{}).date||new Date().toISOString().slice(0,10);
 
   // Calculate project end from phases
   const totalWeeks=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
@@ -831,12 +835,12 @@ function exportToPlanner(d){
   // Build planner state (v4 schema)
   const state={
     version:4,
-    title:d.project.name||(d.lang==='nl'?'Offerte planning':'Quotation planning'),
+    title:(d.project||{}).name||(L==='nl'?'Offerte planning':'Quotation planning'),
     start:projectStart,
     end:endDt.toISOString().slice(0,10),
     categories:[],
     people:[],
-    groups:[{id:groupId,name:d.project.name||'Project',color:COLORS[0],expanded:true}],
+    groups:[{id:groupId,name:(d.project||{}).name||'Project',color:COLORS[0],expanded:true}],
     tasks,
     deps:[],
     holidays:[],
