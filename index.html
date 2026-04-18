@@ -648,7 +648,7 @@ async function exportBudgetToSheets(d){
       const fourth=typeof row[3]==='string'?row[3]:'';
       if(fourth.startsWith('TOTAAL')||fourth.startsWith('TOTAL')){
         acc.push({repeatCell:{range:{sheetId:0,startRowIndex:i,endRowIndex:i+1,startColumnIndex:0,endColumnIndex:5},
-          cell:{userEnteredFormat:{textFormat:{bold:true,fontSize:12},backgroundColor:{red:.03,green:.08,blue:.07},foregroundColorStyle:{rgbColor:{red:1,green:1,blue:1}}}},fields:'userEnteredFormat(textFormat,backgroundColor,foregroundColorStyle)'}});
+          cell:{userEnteredFormat:{textFormat:{bold:true,fontSize:12,foregroundColor:{red:1,green:1,blue:1}},backgroundColor:{red:.03,green:.08,blue:.07}}},fields:'userEnteredFormat(textFormat,backgroundColor)'}});
       }
       return acc;
     },[]),
