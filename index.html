@@ -373,10 +373,10 @@ function createProject(type){
 // ── Totals helper ──
 function calcTotals(d){
   // Block A: TEAL fees (skip disabled phases)
-  const phaseData=d.phases.map(p=>{
+  const phaseData=(d.phases||[]).map(p=>{
     if(p.enabled===false)return{client:0,cost:0,cont:0,total:0};
-    const client=p.items.reduce((s,it)=>s+(it.qty||0)*(it.extRate||0),0);
-    const cost=p.items.reduce((s,it)=>s+(it.qty||0)*(it.intRate||0),0);
+    const client=(p.items||[]).reduce((s,it)=>s+(it.qty||0)*(it.extRate||0),0);
+    const cost=(p.items||[]).reduce((s,it)=>s+(it.qty||0)*(it.intRate||0),0);
     const cont=client*(p.contingency||0);
     return{client,cost,cont,total:client+cont};
   });
@@ -881,13 +881,13 @@ function ExportDropdown({data:d,onGoogleExport}){
   const[open,setOpen]=useState(false);
   const NL=d?.lang==='nl';
   const items=[
-    {key:'sheets',label:NL?'Budget naar Sheets':'Budget to Sheets',icon:'\uD83D\uDCCA'},
-    {key:'docs',label:NL?'Offerte naar Docs':'Quotation to Docs',icon:'\uD83D\uDCC4'},
-    {key:'planning',label:NL?'Open in Planner':'Open in Planner',icon:'\uD83D\uDCC5'},
+    {key:'sheets',label:NL?'Budget naar Sheets':'Budget to Sheets',icon:'📊'},
+    {key:'docs',label:NL?'Offerte naar Docs':'Quotation to Docs',icon:'📄'},
+    {key:'planning',label:NL?'Open in Planner':'Open in Planner',icon:'📅'},
   ];
   return <div style={{position:'relative'}}>
     <button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}}
-      onClick={()=>setOpen(!open)}>Google Export \u25BE</button>
+      onClick={()=>setOpen(!open)}>Google Export ▾</button>
     {open&&<div style={{position:'absolute',right:0,top:'100%',marginTop:4,background:'#fff',border:'1px solid #d0d0ce',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:200,minWidth:220,overflow:'hidden'}}>
       {items.map(it=><button key={it.key} style={{display:'block',width:'100%',padding:'10px 16px',border:0,background:'none',textAlign:'left',fontSize:13,fontFamily:'inherit',cursor:'pointer',borderBottom:'1px solid #eee'}}
         onMouseOver={e=>e.currentTarget.style.background='var(--mint-light)'}
@@ -1288,7 +1288,7 @@ function buildFinancialLines(d,totals,L){
   const pn=(ph)=>ph.customName||t(ph.name,L);
 
   // Phase totals as lump sums (includes contingency, no rate breakdown)
-  d.phases.forEach((ph,pi)=>{
+  (d.phases||[]).forEach((ph,pi)=>{
     if(ph.enabled===false)return;
     const pd=totals.phaseData[pi];
     if(!pd||pd.total===0)return;
@@ -1833,7 +1833,7 @@ function App(){
       if(url)window.open(url,'_blank');
     }catch(e){
       if(e.message==='NO_CLIENT_ID'){setGSettings(true);}
-      else{alert('Google export mislukt: '+e.message);console.error(e);}
+      else{const msg=e?.result?.error?.message||e?.message||JSON.stringify(e);alert('Google export mislukt: '+msg);console.error('Export error:',e);}
     }finally{setGExporting(null);}
   };
 
