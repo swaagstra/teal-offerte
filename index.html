@@ -10,20 +10,21 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   :root {
     --teal-black:#111;--teal-mint:#D4ECE6;--teal-dark:#071412;--teal-white:#FFF;
     --warm-grey:#F2F2F0;--mid-grey:#999;--dark-grey:#555;--mint-light:#EDF7F4;
     --red:#E54D42;--green:#2D8659;--yellow:#D4A017;
   }
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Inter','Helvetica Neue',Arial,sans-serif;background:var(--warm-grey);color:var(--teal-black);line-height:1.5;font-size:14px}
+  body{font-family:'Inter',sans-serif;background:var(--warm-grey);color:var(--teal-black);line-height:1.5;font-size:14px}
   .app{min-height:100vh;display:flex;flex-direction:column}
   .hdr{background:var(--teal-dark);color:var(--teal-mint);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+  .hdr-left{display:flex;align-items:center;gap:12px}
   .hdr h1{font-size:18px;font-weight:700;letter-spacing:2px}
-  .hdr .sub{color:var(--mid-grey);font-size:13px;font-weight:400;margin-left:8px}
+  .hdr .sub{color:var(--mid-grey);font-size:13px;font-weight:400}
   .tabs{display:flex;gap:2px;background:var(--teal-dark);padding:0 28px;overflow-x:auto}
-  .tab{padding:10px 18px;background:0;color:var(--mid-grey);border:0;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:.15s}
+  .tab{padding:10px 18px;background:0;color:var(--mid-grey);border:0;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:.15s;font-family:inherit}
   .tab:hover{color:var(--teal-mint)}.tab.on{color:var(--teal-mint);border-bottom-color:var(--teal-mint)}
   .main{max-width:1200px;margin:0 auto;padding:24px;width:100%;flex:1}
   .card{background:var(--teal-white);border-radius:8px;padding:24px;margin-bottom:16px;border:1px solid #e0e0de}
@@ -35,12 +36,11 @@
   .fg input,.fg select,.fg textarea{padding:8px 12px;border:1px solid #d0d0ce;border-radius:4px;font-size:14px;font-family:inherit;background:var(--teal-white);transition:.15s}
   .fg input:focus,.fg select:focus,.fg textarea:focus{outline:0;border-color:var(--teal-dark)}
   .fg textarea{resize:vertical;min-height:80px}
-  .btn{padding:8px 16px;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;border:0;transition:.15s;display:inline-flex;align-items:center;gap:6px}
+  .btn{padding:8px 16px;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;border:0;transition:.15s;display:inline-flex;align-items:center;gap:6px;font-family:inherit}
   .btn-p{background:var(--teal-dark);color:var(--teal-mint)}.btn-p:hover{background:#0a1f1b}
   .btn-s{background:var(--teal-mint);color:var(--teal-dark)}.btn-s:hover{background:#c2e3da}
   .btn-g{background:0;color:var(--dark-grey);border:1px solid #d0d0ce}.btn-g:hover{background:var(--warm-grey)}
   .btn-sm{padding:4px 10px;font-size:12px}
-  /* Budget table */
   .bt{width:100%;border-collapse:collapse;font-size:13px}
   .bt th{text-align:left;padding:8px 12px;background:var(--warm-grey);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dark-grey);border-bottom:2px solid #d0d0ce}
   .bt td{padding:6px 12px;border-bottom:1px solid #eee;vertical-align:middle}
@@ -50,17 +50,15 @@
   .bt .sub{background:var(--warm-grey);font-weight:600}
   .bt .tot{background:var(--teal-dark);color:var(--teal-white);font-weight:700;font-size:14px}
   .bt .tot td{padding:12px;border:0}
-  .bt input{width:100%;padding:4px 8px;border:1px solid #d0d0ce;border-radius:3px;font-size:13px;font-family:inherit;background:0}
-  .bt input:focus{outline:0;border-color:var(--teal-dark);background:#fff}
+  .bt input,.bt select{width:100%;padding:4px 8px;border:1px solid #d0d0ce;border-radius:3px;font-size:13px;font-family:inherit;background:0}
+  .bt input:focus,.bt select:focus{outline:0;border-color:var(--teal-dark);background:#fff}
   .bt input[type=number]{text-align:right}
   .mbar{display:flex;align-items:center;gap:12px;padding:14px;border-radius:6px;font-weight:600;margin-top:16px}
   .mbar.ok{background:#e8f5e9;color:var(--green)}.mbar.warn{background:#fff8e1;color:var(--yellow)}.mbar.bad{background:#fce4ec;color:var(--red)}
-  /* Gantt */
   .gantt-r{display:flex;align-items:center;margin-bottom:4px}
   .gantt-l{width:180px;flex-shrink:0;font-size:13px;font-weight:500;padding:8px 0}
   .gantt-t{flex:1;height:32px;position:relative;background:var(--warm-grey);border-radius:4px}
   .gantt-b{position:absolute;height:100%;border-radius:4px;display:flex;align-items:center;padding:0 8px;font-size:11px;font-weight:600;color:var(--teal-dark);min-width:40px}
-  /* Start */
   .start{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center}
   .start h2{font-size:28px;margin-bottom:8px;color:var(--teal-dark)}
   .start p{color:var(--dark-grey);margin-bottom:32px;max-width:500px}
@@ -68,20 +66,17 @@
   .tc{flex:1;padding:20px;border:2px solid #d0d0ce;border-radius:8px;cursor:pointer;transition:.15s;text-align:center}
   .tc:hover{border-color:var(--teal-dark)}.tc.on{border-color:var(--teal-dark);background:var(--mint-light)}
   .tc h3{font-size:16px;margin-bottom:4px}.tc p{font-size:12px;color:var(--dark-grey)}
-  /* Preview */
-  .prev{background:#fff;padding:48px;max-width:800px;margin:0 auto;border:1px solid #d0d0ce;box-shadow:0 2px 8px rgba(0,0,0,.06);font-size:13px;line-height:1.6}
-  .prev h1{font-size:22px;margin-bottom:4px}
-  .prev h2{font-size:14px;text-transform:uppercase;letter-spacing:1px;color:var(--teal-dark);margin:28px 0 8px;padding-bottom:4px;border-bottom:2px solid var(--teal-mint)}
-  .prev h3{font-size:13px;margin:16px 0 4px;font-weight:600}
-  .prev table{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px}
-  .prev table th{background:var(--warm-grey);padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #d0d0ce}
-  .prev table td{padding:6px 10px;border-bottom:1px solid #eee}
-  .prev .meta{color:var(--mid-grey);font-size:12px;margin-bottom:16px}
-  .prev .foot{margin-top:40px;padding-top:16px;border-top:1px solid #d0d0ce;font-size:10px;color:var(--mid-grey);display:flex;justify-content:space-between}
-  /* Utility */
+  .prev{background:#fff;padding:56px 52px;max-width:800px;margin:0 auto;border:1px solid #d0d0ce;box-shadow:0 2px 8px rgba(0,0,0,.06);font-size:13px;line-height:1.7;color:#111}
+  .prev .sec-h{font-size:18px;font-weight:600;margin:32px 0 14px;color:#111}
+  .prev h3{font-size:13px;margin:14px 0 4px;font-weight:700}
+  .prev table{width:100%;border-collapse:collapse;margin:10px 0;font-size:12px}
+  .prev table th{background:#f0f0ee;padding:8px 12px;text-align:left;font-size:12px;font-weight:600;border-bottom:1px solid #d0d0ce}
+  .prev table td{padding:8px 12px;border-bottom:1px solid #eee}
+  .prev table .label-cell{background:#f0f0ee;font-weight:500;width:160px}
+  .prev .foot{margin-top:48px;padding-top:12px;border-top:1px solid #ddd;font-size:9px;color:#999;display:flex;justify-content:space-between;align-items:flex-end}
   .flex{display:flex}.between{display:flex;justify-content:space-between;align-items:center}
   .g8{gap:8px}.g16{gap:16px}.mt16{margin-top:16px}.mt24{margin-top:24px}.mb16{margin-bottom:16px}
-  .tr{text-align:right}.mono{font-family:'SF Mono',Consolas,monospace}.sm{font-size:12px}.muted{color:var(--mid-grey)}
+  .tr{text-align:right}.mono{font-family:'SF Mono',Consolas,monospace;font-size:12px}.sm{font-size:12px}.muted{color:var(--mid-grey)}
   @media(max-width:768px){.row,.row3,.row4{grid-template-columns:1fr}.tsel{flex-direction:column}.main{padding:16px}.hdr{padding:12px 16px}.tabs{padding:0 16px}.prev{padding:24px}}
 </style>
 </head>
@@ -90,48 +85,94 @@
 <script type="text/babel">
 const{useState,useEffect,useCallback,useMemo}=React;
 
+// ── Logo SVG inline ──
+const Logo=({color='#D4ECE6',h=24})=><svg height={h} viewBox="0 0 1815 864" style={{display:'block'}}><g transform="matrix(1,0,0,1,0,-1399.19)"><g transform="matrix(1,0,0,1,-274.091,1240.3)"><clipPath id="lc"><rect x="274.091" y="158.9" width="1814.02" height="863.303"/></clipPath><g clipPath="url(#lc)"><g transform="matrix(2.77287,0,0,2.77287,-1956.66,-1047.42)"><g transform="matrix(0.622415,0,0,0.622415,665.764,213.102)"><path d="M523.118,506.267L523.118,556.267L473.118,556.267L473.118,706.267L423.118,706.267L423.118,556.267L373.118,556.267L373.118,506.267L523.118,506.267Z" style={{fill:color,fillRule:'nonzero'}}/></g><g transform="matrix(0.622415,0,0,0.622415,665.881,213.102)"><path d="M723.118,506.267L723.118,556.267L673.118,556.267L673.118,606.267L623.118,606.267L623.118,656.267L723.118,656.267L723.118,706.267L573.118,706.267L573.118,506.267L723.118,506.267Z" style={{fill:color,fillRule:'nonzero'}}/></g><g transform="matrix(0.622415,0,0,0.622415,665.881,213.102)"><path d="M923.118,506.267L923.118,706.267L873.118,706.267L873.118,656.267L823.118,656.267L823.118,706.267L773.118,706.267L773.118,506.267L923.118,506.267ZM823.118,556.267L823.118,606.267L873.118,606.267L873.118,556.267L823.118,556.267Z" style={{fill:color,fillRule:'nonzero'}}/></g><g transform="matrix(0.622415,0,0,0.622415,665.881,213.102)"><path d="M1023.12,506.267L1023.12,656.267L1123.12,656.267L1123.12,706.267L973.118,706.267L973.118,506.267L1023.12,506.267Z" style={{fill:color,fillRule:'nonzero'}}/></g><g transform="matrix(0.656049,0,0,0.52407,71.8753,252.375)"><path d="M2113.9,942.639L1116.71,942.639L1116.71,348.559L2113.9,348.559L2113.9,942.639ZM2066.26,408.188L1164.34,408.188L1164.34,883.009L2066.26,883.009L2066.26,408.188Z" style={{fill:color}}/></g></g></g></g></g></svg>;
+
 // ── Constants ──
-const TEAL_INFO={
-  name:'TEAL B.V.',addr:'Binckhorstlaan 151a',zip:'2516 BA Den Haag',country:'The Netherlands',
+const TEAL={
+  name:'TEAL B.V.',addr:'Jupiterkade 10',zip:'2516 BS Den Haag',country:'The Netherlands',
   kvk:'75630931',btw:'NL860345774B01',iban:'NL87 KNAB 0259 4940 97',
-  email:'info@teal.productions',web:'teamteal.nl',
-  addrOld:'Vinkensteynstraat 136',zipOld:'2562 TV, Den Haag'
+  email:'erik@teamteal.nl',web:'teamteal.nl'
 };
 
+const ROLES=[
+  {id:'design',name:{nl:'Design/Engineering',en:'Design/Engineering'},ext:120,int:75,unit:'uur'},
+  {id:'pm',name:{nl:'Projectmanager',en:'Project Manager'},ext:95,int:55,unit:'uur'},
+  {id:'assembly',name:{nl:'Assembly',en:'Assembly'},ext:45,int:30,unit:'uur'},
+  {id:'assemblylead',name:{nl:'Assembly Lead',en:'Assembly Lead'},ext:65,int:42.5,unit:'uur'},
+  {id:'install_nl',name:{nl:'Installatie NL',en:'Installation NL'},ext:600,int:250,unit:'dag'},
+  {id:'travel_int',name:{nl:'Reisdag internationaal',en:'Travel Day International'},ext:550,int:325,unit:'dag'},
+  {id:'install_int',name:{nl:'Installatie internationaal',en:'Installation International'},ext:900,int:450,unit:'dag'},
+  {id:'overtime',name:{nl:'Overuren/spoed',en:'Overtime/Urgent'},ext:130,int:90,unit:'uur'},
+];
+const roleMap=Object.fromEntries(ROLES.map(r=>[r.id,r]));
+
+const HANDLING_BRACKETS=[
+  {max:5000,pct:.20},{max:25000,pct:.15},{max:100000,pct:.12},{max:Infinity,pct:.08}
+];
+function getHandlingPct(v){for(const b of HANDLING_BRACKETS)if(v<=b.max)return b.pct;return .08}
+
+const COORD_MARGIN=.12;
+
 const BUILD_PHASES=[
-  {id:'b0',name:{nl:'Fase 0',en:'Phase 0'},full:{nl:'Fase 0 - Scoping',en:'Phase 0 - Scoping'},buffer:.25,
-    items:[{desc:{nl:'Technisch onderzoek / materiaalanalyse',en:'Technical research / material analysis'},unit:'uur',qty:0,rate:0},
-           {desc:{nl:'Risicoanalyse en Go/No-go rapport',en:'Risk analysis and Go/No-go report'},unit:'uur',qty:0,rate:0}]},
-  {id:'b1',name:{nl:'Engineering',en:'Engineering'},full:{nl:'B1 - Engineering',en:'B1 - Engineering'},buffer:.20,
-    items:[{desc:{nl:'Constructieve berekeningen',en:'Structural calculations'},unit:'uur',qty:0,rate:0},
-           {desc:{nl:'Technische tekeningen (CAD)',en:'Technical drawings (CAD)'},unit:'uur',qty:0,rate:0},
-           {desc:{nl:'Materiaalspecificatie',en:'Material specification'},unit:'uur',qty:0,rate:0}]},
-  {id:'b2',name:{nl:'Procurement',en:'Procurement'},full:{nl:'B2 - Procurement & Fabrication',en:'B2 - Procurement & Fabrication'},buffer:.15,
-    items:[{desc:{nl:'Leveranciersselectie',en:'Supplier selection'},unit:'uur',qty:0,rate:0},
-           {desc:{nl:'Ingangscontrole',en:'First article inspection'},unit:'uur',qty:0,rate:0}]},
-  {id:'b3',name:{nl:'Assembly',en:'Assembly'},full:{nl:'B3 - Assembly',en:'B3 - Assembly'},buffer:.15,
-    items:[{desc:{nl:'Assemblage en integratie',en:'Assembly and integration'},unit:'uur',qty:0,rate:0},
-           {desc:{nl:'Factory Acceptance Test',en:'Factory Acceptance Test'},unit:'uur',qty:0,rate:0}]},
-  {id:'b4',name:{nl:'Installatie',en:'Installation'},full:{nl:'B4 - Installatie',en:'B4 - Installation'},buffer:.20,
-    items:[{desc:{nl:'Transport en site prep',en:'Transport and site prep'},unit:'uur',qty:0,rate:0},
-           {desc:{nl:'Installatie on-site',en:'On-site installation'},unit:'uur',qty:0,rate:0},
-           {desc:{nl:'Site Acceptance Test (SAT)',en:'Site Acceptance Test (SAT)'},unit:'uur',qty:0,rate:0}]},
+  {id:'b0',code:'B0',name:{nl:'Intake & Scope',en:'Intake & Scope'},
+    desc:{nl:'Maakbaarheidscheck en risico-inventarisatie. Go/no-go rapport met technische haalbaarheid, kostenbandbreedte en projectrisico\'s.',en:'Feasibility check and risk inventory. Go/no-go report covering technical viability, cost range, and project risks.'},
+    items:[
+      {role:'design',desc:{nl:'Technisch onderzoek en maakbaarheidsanalyse',en:'Technical research and feasibility analysis'},qty:16},
+      {role:'pm',desc:{nl:'Projectdefinitie en risicoanalyse',en:'Project definition and risk analysis'},qty:8},
+    ]},
+  {id:'b1',code:'B1',name:{nl:'Design & Engineering',en:'Design & Engineering'},
+    desc:{nl:'Constructief ontwerp, technische tekeningen (CAD), materiaalspecificaties en productiedossier.',en:'Structural design, technical drawings (CAD), material specifications, and production dossier.'},
+    items:[
+      {role:'design',desc:{nl:'Concept design en systeemarchitectuur',en:'Concept design and system architecture'},qty:80},
+      {role:'pm',desc:{nl:'Projectcoordinatie',en:'Project coordination'},qty:24},
+    ]},
+  {id:'b2',code:'B2',name:{nl:'Procurement & Fabrication',en:'Procurement & Fabrication'},
+    desc:{nl:'Leveranciersselectie, inkoop van materialen en componenten, en begeleiding van maakwerkproductie bij toeleveranciers.',en:'Supplier selection, procurement of materials and components, and supervision of custom fabrication at suppliers.'},
+    items:[
+      {role:'pm',desc:{nl:'Inkoopmanagement',en:'Procurement management'},qty:40},
+    ]},
+  {id:'b3',code:'B3',name:{nl:'Assembly & Integration',en:'Assembly & Integration'},
+    desc:{nl:'Mechanische assemblage, elektrotechnische integratie, en Factory Acceptance Test (FAT) in de TEAL werkplaats.',en:'Mechanical assembly, electrical integration, and Factory Acceptance Test (FAT) at the TEAL workshop.'},
+    items:[
+      {role:'assemblylead',desc:{nl:'Assemblage supervisie',en:'Assembly supervision'},qty:80},
+      {role:'assembly',desc:{nl:'Mechanische assemblage',en:'Mechanical assembly'},qty:200},
+    ]},
+  {id:'b4',code:'B4',name:{nl:'Installation & Handover',en:'Installation & Handover'},
+    desc:{nl:'Transport, installatie op locatie, Site Acceptance Test (SAT) en oplevering met documentatie.',en:'Transport, on-site installation, Site Acceptance Test (SAT), and handover with documentation.'},
+    items:[
+      {role:'pm',desc:{nl:'On-site projectmanagement',en:'On-site project management'},qty:16},
+      {role:'install_nl',desc:{nl:'Installatie op locatie',en:'On-site installation'},qty:5},
+    ]},
 ];
 
 const ASSEMBLE_PHASES=[
-  {id:'a0',name:{nl:'Setup',en:'Setup'},full:{nl:'Fase 0 - Intake & Setup',en:'Phase 0 - Intake & Setup'},buffer:0,
-    items:[{desc:{nl:'Maakbaarheidsanalyse',en:'Feasibility analysis'},unit:'uur',qty:0,rate:0},
-           {desc:{nl:'Tooling / jigs / mallen',en:'Tooling / jigs'},unit:'vaste kost',qty:1,rate:0},
-           {desc:{nl:'Werkinstructies + QC-protocol',en:'Work instructions + QC protocol'},unit:'uur',qty:0,rate:0}]},
-  {id:'a1',name:{nl:'Pilot',en:'Pilot'},full:{nl:'A1 - Pilotbatch',en:'A1 - Pilot batch'},buffer:0,
-    items:[{desc:{nl:'Arbeid pilot',en:'Pilot labour'},unit:'uur',qty:0,rate:0},
-           {desc:{nl:'Materialen pilot',en:'Pilot materials'},unit:'stuks',qty:0,rate:0}]},
-  {id:'a2',name:{nl:'Productie',en:'Production'},full:{nl:'A2 - Serieproductie',en:'A2 - Serial production'},buffer:0,
-    items:[{desc:{nl:'Assemblage per stuk',en:'Assembly per unit'},unit:'uur',qty:0,rate:0},
-           {desc:{nl:'QC per stuk',en:'QC per unit'},unit:'uur',qty:0,rate:0}]},
-  {id:'a3',name:{nl:'Verpakking',en:'Packing'},full:{nl:'A3 - Verpakking & QC',en:'A3 - Packing & QC'},buffer:0,
-    items:[{desc:{nl:'Verpakking',en:'Packing'},unit:'uur',qty:0,rate:0},
-           {desc:{nl:'Eindcontrole',en:'Final inspection'},unit:'uur',qty:0,rate:0}]},
+  {id:'a0',code:'A0',name:{nl:'Intake & Setup',en:'Intake & Setup'},
+    desc:{nl:'Maakbaarheidsanalyse, ontwerp van tooling/jigs/mallen, werkinstructies en QC-protocol.',en:'Feasibility analysis, tooling/jigs design, work instructions, and QC protocol.'},
+    items:[
+      {role:'design',desc:{nl:'Maakbaarheidsanalyse',en:'Feasibility analysis'},qty:16},
+      {role:'design',desc:{nl:'Tooling / jigs / mallen ontwerp',en:'Tooling / jigs design'},qty:24},
+      {role:'pm',desc:{nl:'Werkinstructies en QC-protocol',en:'Work instructions and QC protocol'},qty:16},
+    ]},
+  {id:'a1',code:'A1',name:{nl:'Pilotbatch',en:'Pilot Batch'},
+    desc:{nl:'Productie van een pilotbatch om het proces te valideren, doorlooptijd te meten en kwaliteit te toetsen.',en:'Production of a pilot batch to validate the process, measure throughput, and verify quality.'},
+    items:[
+      {role:'assemblylead',desc:{nl:'Pilot assemblage en procesvalidatie',en:'Pilot assembly and process validation'},qty:40},
+      {role:'assembly',desc:{nl:'Assemblage pilot',en:'Pilot assembly'},qty:80},
+    ]},
+  {id:'a2',code:'A2',name:{nl:'Serieproductie',en:'Serial Production'},
+    desc:{nl:'Serieproductie volgens gevalideerd proces met doorlopende kwaliteitscontrole.',en:'Serial production following validated process with ongoing quality control.'},
+    items:[
+      {role:'assemblylead',desc:{nl:'Productie supervisie',en:'Production supervision'},qty:0},
+      {role:'assembly',desc:{nl:'Assemblage per stuk',en:'Assembly per unit'},qty:0},
+      {role:'assembly',desc:{nl:'QC per stuk',en:'QC per unit'},qty:0},
+    ]},
+  {id:'a3',code:'A3',name:{nl:'Verpakking & Levering',en:'Packing & Delivery'},
+    desc:{nl:'Verpakking, eindcontrole en verzending.',en:'Packing, final inspection, and shipping.'},
+    items:[
+      {role:'assembly',desc:{nl:'Verpakking',en:'Packing'},qty:0},
+      {role:'assembly',desc:{nl:'Eindcontrole',en:'Final inspection'},qty:0},
+    ]},
 ];
 
 const COLORS=['#D4ECE6','#B8D8CE','#9CCAB6','#80BC9E','#64AE86','#48A06E'];
@@ -147,78 +188,127 @@ function genRef(type){
   const yy=String(d.getFullYear()).slice(2);
   const mm=String(d.getMonth()+1).padStart(2,'0');
   const dd=String(d.getDate()).padStart(2,'0');
-  const prefix=type==='build'?'B':'A';
-  return `${prefix}-${yy}${mm}${dd}-1`;
-}
-
-function calcHandling(v){
-  if(v<=25000)return v*.20;
-  if(v<=100000)return 25000*.20+(v-25000)*.12;
-  return 25000*.20+75000*.12+(v-100000)*.08;
+  return `${type==='build'?'B':'A'}-${yy}${mm}${dd}-1`;
 }
 
 function marginStatus(p){return p>=.20?'ok':p>=.10?'warn':'bad'}
 
 function createProject(type){
-  const phases=(type==='build'?BUILD_PHASES:ASSEMBLE_PHASES).map(p=>({
-    ...p,startWeek:0,durationWeeks:2,
-    description:{nl:'',en:''},
+  const tpl=type==='build'?BUILD_PHASES:ASSEMBLE_PHASES;
+  const phases=tpl.map(p=>({
+    ...p,startWeek:0,durationWeeks:4,
+    description:{...p.desc},
     effort:'',
-    items:p.items.map(it=>({...it,id:uid()})),
-    clientAmount:0 // what the client sees
+    contingency:.10,
+    items:p.items.map(it=>{
+      const r=roleMap[it.role];
+      return{id:uid(),role:it.role,desc:{...it.desc},qty:it.qty||0,extRate:r?.ext||0,intRate:r?.int||0,unit:r?.unit||'uur'};
+    }),
   }));
   return{
-    v:2,type,lang:'nl',
+    v:3,type,lang:'nl',
     ref:genRef(type),
-    project:{name:'',date:new Date().toISOString().slice(0,10),version:'1.0',description:{nl:'',en:''},tealRole:{nl:'',en:''},exclusions:{nl:'',en:''}},
+    project:{name:'',date:new Date().toISOString().slice(0,10),version:'1.0',
+      description:{nl:'',en:''},tealRole:{nl:'',en:''},exclusions:{nl:'',en:''}},
     client:{name:'',contact:'',email:'',addr:'',zip:'',city:''},
     phases,
-    procurement:{items:[],total:0},
-    subcontractors:{items:[],total:0,margin:.20},
-    extras:{travel:{enabled:true,rate:0.35,note:{nl:'Reiskosten binnen Nederland',en:'Travel costs within the Netherlands'}},
-            outOfPocket:{enabled:true,note:{nl:'Out-of-pocket kosten en facturen derden worden maandelijks doorgefactureerd.',en:'Out-of-pocket costs and third-party invoices are invoiced monthly.'}}},
+    procOTS:[],   // off-the-shelf procurement
+    procCustom:[], // custom/maatwerk procurement
+    subs:[],       // subcontractors
+    travel:{rateNL:.50,note:{nl:'Reiskosten: \u20AC 0,50/km',en:'Travel: \u20AC 0.50/km'}},
     payment:{milestones:type==='build'
-      ?[{name:{nl:'Opdrachtverstrekking',en:'Project start'},pct:30,date:''},{name:{nl:'Gereedmelding',en:'Production complete'},pct:40,date:''},{name:{nl:'Oplevering',en:'Delivery'},pct:30,date:''}]
+      ?[{name:{nl:'Opdrachtverstrekking',en:'Project start'},pct:30,date:''},{name:{nl:'Gereedmelding productie',en:'Production complete'},pct:40,date:''},{name:{nl:'Oplevering',en:'Delivery'},pct:30,date:''}]
       :[{name:{nl:'Opdrachtverstrekking',en:'Project start'},pct:50,date:''},{name:{nl:'Oplevering',en:'Delivery'},pct:50,date:''}]
     },
-    conditions:{validity:30,paymentTerm:30,warranty:{nl:'2 jaar',en:'2 years'},customTerms:[]},
+    conditions:{validity:30,paymentTerm:14,
+      warranty:{nl:'2 jaar na oplevering',en:'2 years after delivery'},
+      avNL:true,avEN:false,
+    },
     batchSize:type==='assemble'?100:0,
-    targetMargin:.30,
   };
 }
 
+// ── Totals helper ──
+function calcTotals(d){
+  // Block A: TEAL fees
+  const phaseData=d.phases.map(p=>{
+    const client=p.items.reduce((s,it)=>s+(it.qty||0)*(it.extRate||0),0);
+    const cost=p.items.reduce((s,it)=>s+(it.qty||0)*(it.intRate||0),0);
+    const cont=client*(p.contingency||0);
+    return{client,cost,cont,total:client+cont};
+  });
+  const blockAClient=phaseData.reduce((s,p)=>s+p.total,0);
+  const blockACost=phaseData.reduce((s,p)=>s+p.cost,0);
+
+  // Block B1: Off-the-shelf
+  let b1Purchase=0,b1Handling=0;
+  (d.procOTS||[]).forEach(it=>{
+    const v=it.amount||0;
+    b1Purchase+=v;
+    b1Handling+=v*(it.handlingPct!=null?it.handlingPct:getHandlingPct(v));
+  });
+
+  // Block B2: Custom
+  let b2Purchase=0,b2Handling=0,b2Risk=0;
+  (d.procCustom||[]).forEach(it=>{
+    const v=it.amount||0;
+    b2Purchase+=v;
+    b2Handling+=v*(it.handlingPct!=null?it.handlingPct:getHandlingPct(v));
+    b2Risk+=v*(it.riskPct||0);
+  });
+
+  // Block C: Subcontractors
+  let subFees=0,subCoord=0;
+  (d.subs||[]).forEach(it=>{
+    const v=it.amount||0;
+    subFees+=v;
+    subCoord+=v*(it.coordPct!=null?it.coordPct:COORD_MARGIN);
+  });
+
+  const procClient=b1Purchase+b1Handling+b2Purchase+b2Handling+b2Risk;
+  const procCost=b1Purchase+b2Purchase;
+  const subClient=subFees+subCoord;
+
+  const grandClient=blockAClient+procClient+subClient;
+  const grandCost=blockACost+procCost+subFees;
+  const margin=grandClient>0?(grandClient-grandCost)/grandClient:0;
+
+  return{phaseData,blockAClient,blockACost,b1Purchase,b1Handling,b2Purchase,b2Handling,b2Risk,
+    procClient,procCost,subFees,subCoord,subClient,grandClient,grandCost,margin};
+}
+
 // ── Persistence ──
-const SK='teal.offerte.v2';
+const SK='teal.offerte.v3';
 const save=d=>{try{localStorage.setItem(SK,JSON.stringify(d))}catch(e){}};
 const load=()=>{try{const r=localStorage.getItem(SK);return r?JSON.parse(r):null}catch(e){return null}};
-const loadHash=()=>{try{const h=location.hash.slice(1);if(!h)return null;const p=new URLSearchParams(h);const d=p.get('data');if(!d)return null;const j=LZString.decompressFromEncodedURIComponent(d);return j?JSON.parse(j):null}catch(e){return null}};
+const loadHash=()=>{try{const h=location.hash.slice(1);if(!h)return null;const p=new URLSearchParams(h);const dd=p.get('data');if(!dd)return null;const j=LZString.decompressFromEncodedURIComponent(dd);return j?JSON.parse(j):null}catch(e){return null}};
 const shareUrl=d=>{const c=LZString.compressToEncodedURIComponent(JSON.stringify(d));return`${location.origin}${location.pathname}#data=${c}`};
 
 // ── Components ──
-
-function Header({data,onPdf,onShare}){
+function Header({data:d,onPdf,setData}){
   return <div className="hdr">
-    <div className="flex" style={{alignItems:'baseline'}}>
-      <h1>TEAL</h1><span className="sub">Offerte Tool</span>
+    <div className="hdr-left">
+      <Logo color="#D4ECE6" h={28}/>
+      <span className="sub">Offerte Tool</span>
     </div>
     <div className="flex g8">
-      {data&&<button className="btn btn-g" onClick={()=>{const d={...data,lang:data.lang==='nl'?'en':'nl'};onShare(d)}}>{data.lang==='nl'?'EN':'NL'}</button>}
-      {data&&<button className="btn btn-g" onClick={()=>{navigator.clipboard.writeText(shareUrl(data));alert('Link gekopieerd')}}>Deel link</button>}
-      {data&&<button className="btn btn-s" onClick={onPdf}>Download PDF</button>}
+      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>setData({...d,lang:d.lang==='nl'?'en':'nl'})}>{d.lang==='nl'?'EN':'NL'}</button>}
+      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>{navigator.clipboard.writeText(shareUrl(d));alert('Link gekopieerd')}}>Deel link</button>}
+      {d&&<button className="btn btn-s" onClick={onPdf}>PDF</button>}
     </div>
   </div>;
 }
 
 function TabNav({tabs,active,onChange}){
-  return <div className="tabs">{tabs.map(t=><button key={t.id} className={`tab ${active===t.id?'on':''}`} onClick={()=>onChange(t.id)}>{t.label}</button>)}</div>;
+  return <div className="tabs">{tabs.map(tb=><button key={tb.id} className={`tab ${active===tb.id?'on':''}`} onClick={()=>onChange(tb.id)}>{tb.label}</button>)}</div>;
 }
 
-// ── Start ──
 function Start({onSelect}){
   const recent=load();
   return <div className="start">
-    <h2>Nieuwe offerte</h2>
-    <p>Kies het type project. De tool laadt automatisch de juiste fases, prijsstructuur en betalingsschema.</p>
+    <Logo color="#071412" h={48}/>
+    <h2 style={{marginTop:16}}>Nieuwe offerte</h2>
+    <p>Kies het type project. De tool laadt de juiste fases, tarieven en betalingsschema.</p>
     <div className="tsel">
       <div className="tc" onClick={()=>onSelect('build')}><h3>Build</h3><p>Eenmalig technisch project (B0-B4)</p></div>
       <div className="tc" onClick={()=>onSelect('assemble')}><h3>Assemble</h3><p>Serieproductie (A0-A3)</p></div>
@@ -246,10 +336,8 @@ function ProjectTab({data:d,set}){
       </div>
       {d.type==='assemble'&&<div className="row">
         <div className="fg"><label>Batchgrootte (stuks)</label><input type="number" value={d.batchSize||''} onChange={e=>set({...d,batchSize:parseInt(e.target.value)||0})}/></div>
-        <div className="fg"><label>Doelmarge %</label><input type="number" value={Math.round((d.targetMargin||.30)*100)} onChange={e=>set({...d,targetMargin:(parseInt(e.target.value)||30)/100})}/></div>
       </div>}
     </div>
-
     <div className="card">
       <div className="card-h">Klantgegevens</div>
       <div className="row">
@@ -265,7 +353,6 @@ function ProjectTab({data:d,set}){
         <div className="fg"><label>Plaats</label><input value={d.client.city} onChange={e=>upC('city',e.target.value)}/></div>
       </div>
     </div>
-
     <div className="card">
       <div className="card-h">Omschrijving ({L.toUpperCase()})</div>
       <div className="row full"><div className="fg"><label>Projectomschrijving</label>
@@ -283,113 +370,188 @@ function ScopeTab({data:d,set}){
   const L=d.lang;
   const upPhase=(i,k,v)=>{const p=[...d.phases];p[i]={...p[i],[k]:v};set({...d,phases:p})};
   const upDesc=(i,v)=>{const p=[...d.phases];const o=p[i].description||{nl:'',en:''};const n=typeof o==='string'?{nl:o,en:o}:{...o};n[L]=v;p[i]={...p[i],description:n};set({...d,phases:p})};
-
   return <div className="card">
     <div className="card-h">Scope per fase ({L.toUpperCase()})</div>
-    <p className="sm muted mb16">Beschrijf per fase de activiteiten en inzet. Dit verschijnt in de offerte.</p>
+    <p className="sm muted mb16">Beschrijf per fase de activiteiten. Dit verschijnt in de offerte.</p>
     {d.phases.map((ph,i)=><div key={ph.id} style={{marginBottom:24,paddingBottom:16,borderBottom:'1px solid #eee'}}>
       <div className="between mb16">
-        <strong>{t(ph.full,L)}</strong>
+        <strong>{ph.code} - {t(ph.name,L)}</strong>
         <div className="fg" style={{width:200}}>
-          <label>Inzet (bijv. "+/- 4 uur/week")</label>
+          <label>Inzet</label>
           <input value={ph.effort||''} onChange={e=>upPhase(i,'effort',e.target.value)} placeholder="bijv. 2 weken fulltime"/>
         </div>
       </div>
       <div className="fg">
         <label>Activiteiten / beschrijving</label>
-        <textarea value={t(ph.description,L)} onChange={e=>upDesc(i,e.target.value)}
-          placeholder="Beschrijf de werkzaamheden in deze fase" rows={3}/>
+        <textarea value={t(ph.description,L)} onChange={e=>upDesc(i,e.target.value)} rows={3}/>
       </div>
     </div>)}
   </div>;
 }
 
-// ── Budget Tab (internal) ──
+// ── Budget Tab ──
 function BudgetTab({data:d,set}){
-  const upItem=(pi,ii,k,v)=>{const p=[...d.phases];const items=[...p[pi].items];items[ii]={...items[ii],[k]:v};p[pi]={...p[pi],items};set({...d,phases:p})};
-  const addItem=pi=>{const p=[...d.phases];p[pi]={...p[pi],items:[...p[pi].items,{id:uid(),desc:{nl:'',en:''},unit:'uur',qty:0,rate:0}]};set({...d,phases:p})};
-  const rmItem=(pi,ii)=>{const p=[...d.phases];p[pi]={...p[pi],items:p[pi].items.filter((_,i)=>i!==ii)};set({...d,phases:p})};
-  const upClient=(pi,v)=>{const p=[...d.phases];p[pi]={...p[pi],clientAmount:parseFloat(v)||0};set({...d,phases:p})};
+  const L=d.lang;
+  const totals=calcTotals(d);
 
-  const pTotals=d.phases.map(p=>p.items.reduce((s,it)=>s+(it.qty||0)*(it.rate||0),0));
-  const blockA=pTotals.reduce((s,t)=>s+t,0);
-  const procTot=(d.procurement?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
-  const procFee=calcHandling(procTot);
-  const subTot=(d.subcontractors?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
-  const subFee=subTot*(d.subcontractors?.margin||.20);
-  const grand=blockA+(d.type==='build'?procTot+procFee+subTot+subFee:0);
-  const clientTotal=d.phases.reduce((s,p)=>s+(p.clientAmount||0),0)+(d.type==='build'?procTot+procFee+subTot+subFee:0);
-  const margin=clientTotal>0?(clientTotal-grand)/clientTotal:0;
+  const upItem=(pi,ii,k,v)=>{const p=[...d.phases];const items=[...p[pi].items];items[ii]={...items[ii],[k]:v};p[pi]={...p[pi],items};set({...d,phases:p})};
+  const addItem=pi=>{const p=[...d.phases];p[pi]={...p[pi],items:[...p[pi].items,{id:uid(),role:'design',desc:{nl:'',en:''},qty:0,extRate:120,intRate:75,unit:'uur'}]};set({...d,phases:p})};
+  const rmItem=(pi,ii)=>{const p=[...d.phases];p[pi]={...p[pi],items:p[pi].items.filter((_,i)=>i!==ii)};set({...d,phases:p})};
+  const upCont=(pi,v)=>{const p=[...d.phases];p[pi]={...p[pi],contingency:v};set({...d,phases:p})};
+
+  const changeRole=(pi,ii,roleId)=>{
+    const r=roleMap[roleId];
+    if(!r)return;
+    upItem(pi,ii,'role',roleId);
+    upItem(pi,ii,'extRate',r.ext);
+    upItem(pi,ii,'intRate',r.int);
+    upItem(pi,ii,'unit',r.unit);
+  };
+
+  // Procurement helpers
+  const upOTS=(i,k,v)=>{const a=[...(d.procOTS||[])];a[i]={...a[i],[k]:v};if(k==='amount')a[i].handlingPct=getHandlingPct(v);set({...d,procOTS:a})};
+  const addOTS=()=>set({...d,procOTS:[...(d.procOTS||[]),{id:uid(),desc:'',supplier:'',amount:0,handlingPct:.20}]});
+  const rmOTS=i=>set({...d,procOTS:(d.procOTS||[]).filter((_,idx)=>idx!==i)});
+
+  const upCust=(i,k,v)=>{const a=[...(d.procCustom||[])];a[i]={...a[i],[k]:v};if(k==='amount')a[i].handlingPct=getHandlingPct(v);set({...d,procCustom:a})};
+  const addCust=()=>set({...d,procCustom:[...(d.procCustom||[]),{id:uid(),desc:'',supplier:'',amount:0,handlingPct:.12,riskPct:.10}]});
+  const rmCust=i=>set({...d,procCustom:(d.procCustom||[]).filter((_,idx)=>idx!==i)});
+
+  const upSub=(i,k,v)=>{const a=[...(d.subs||[])];a[i]={...a[i],[k]:v};set({...d,subs:a})};
+  const addSub=()=>set({...d,subs:[...(d.subs||[]),{id:uid(),desc:'',company:'',amount:0,coordPct:COORD_MARGIN}]});
+  const rmSub=i=>set({...d,subs:(d.subs||[]).filter((_,idx)=>idx!==i)});
 
   return <>
+    {/* Block A */}
     <div className="card">
-      <div className="card-h">Intern budget (uren x tarief)</div>
+      <div className="card-h">Block A: TEAL Fees (uren x tarief)</div>
+      <p className="sm muted mb16">Klantprijs = uren x extern tarief. Kostprijs = uren x intern tarief. Marge = verschil.</p>
       <table className="bt">
-        <thead><tr><th style={{width:'30%'}}>Omschrijving</th><th style={{width:'10%'}}>Eenheid</th><th style={{width:'10%'}}>Aantal</th><th style={{width:'12%'}}>Tarief</th><th style={{width:'12%'}}>Subtotaal</th><th style={{width:'14%'}}>Klantprijs</th><th style={{width:'6%'}}></th></tr></thead>
+        <thead><tr><th style={{width:'20%'}}>Omschrijving</th><th style={{width:'12%'}}>Rol</th><th style={{width:'7%'}}>Aantal</th><th style={{width:'7%'}}>Eenh.</th><th style={{width:'9%'}}>Ext. tarief</th><th style={{width:'10%'}}>Klantprijs</th><th style={{width:'9%'}}>Int. tarief</th><th style={{width:'10%'}}>Kostprijs</th><th style={{width:'10%'}}>Marge</th><th style={{width:'4%'}}></th></tr></thead>
         <tbody>
           {d.phases.map((ph,pi)=><React.Fragment key={ph.id}>
-            <tr className="ph"><td colSpan={5}>{t(ph.full,d.lang)}{ph.buffer>0&&<span style={{opacity:.7,marginLeft:8,fontSize:11}}>buffer {Math.round(ph.buffer*100)}%</span>}</td>
-              <td></td><td style={{textAlign:'right'}}><button className="btn btn-sm" style={{background:'rgba(212,236,230,.2)',color:'var(--teal-mint)',border:0}} onClick={()=>addItem(pi)}>+</button></td></tr>
-            {ph.items.map((it,ii)=>{const sub=(it.qty||0)*(it.rate||0);
+            <tr className="ph"><td colSpan={9}>{ph.code} - {t(ph.name,L)}
+              <span style={{opacity:.6,marginLeft:12,fontSize:11}}>contingency: <input type="number" value={Math.round((ph.contingency||0)*100)} onChange={e=>upCont(pi,(parseInt(e.target.value)||0)/100)} style={{width:40,textAlign:'center',background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.2)',borderRadius:3,color:'var(--teal-mint)',fontSize:11,padding:'2px 4px'}}/>%</span>
+            </td><td style={{textAlign:'right'}}><button className="btn btn-sm" style={{background:'rgba(212,236,230,.15)',color:'var(--teal-mint)',border:0}} onClick={()=>addItem(pi)}>+</button></td></tr>
+            {ph.items.map((it,ii)=>{
+              const cp=(it.qty||0)*(it.extRate||0);
+              const ip=(it.qty||0)*(it.intRate||0);
               return <tr key={it.id}>
-                <td><input value={t(it.desc,d.lang)} onChange={e=>{const o=it.desc;const n=typeof o==='string'?{nl:o,en:o}:{...o};n[d.lang]=e.target.value;upItem(pi,ii,'desc',n)}}/></td>
-                <td><select value={it.unit} onChange={e=>upItem(pi,ii,'unit',e.target.value)} style={{padding:'4px 6px',border:'1px solid #d0d0ce',borderRadius:3,fontSize:13,background:0,width:'100%'}}>
-                  <option value="uur">uur</option><option value="stuks">stuks</option><option value="set">set</option><option value="vaste kost">vaste kost</option><option value="dag">dag</option></select></td>
+                <td><input value={t(it.desc,L)} onChange={e=>{const o=it.desc;const n=typeof o==='string'?{nl:o,en:o}:{...o};n[L]=e.target.value;upItem(pi,ii,'desc',n)}}/></td>
+                <td><select value={it.role} onChange={e=>changeRole(pi,ii,e.target.value)}>
+                  {ROLES.map(r=><option key={r.id} value={r.id}>{t(r.name,L)}</option>)}</select></td>
                 <td><input type="number" value={it.qty||''} onChange={e=>upItem(pi,ii,'qty',parseFloat(e.target.value)||0)}/></td>
-                <td><input type="number" value={it.rate||''} onChange={e=>upItem(pi,ii,'rate',parseFloat(e.target.value)||0)}/></td>
-                <td className="tr mono">{fmt(sub)}</td>
-                <td></td>
+                <td className="sm muted">{it.unit}</td>
+                <td><input type="number" value={it.extRate||''} onChange={e=>upItem(pi,ii,'extRate',parseFloat(e.target.value)||0)}/></td>
+                <td className="tr mono">{fmt(cp)}</td>
+                <td><input type="number" value={it.intRate||''} onChange={e=>upItem(pi,ii,'intRate',parseFloat(e.target.value)||0)}/></td>
+                <td className="tr mono">{fmt(ip)}</td>
+                <td className="tr mono" style={{color:cp-ip>=0?'var(--green)':'var(--red)'}}>{fmt(cp-ip)}</td>
                 <td className="tr"><button className="btn btn-sm btn-g" onClick={()=>rmItem(pi,ii)}>&times;</button></td>
               </tr>})}
-            <tr className="sub"><td colSpan={4}>Subtotaal intern</td><td className="tr mono">{fmt(pTotals[pi])}</td>
-              <td><input type="number" value={ph.clientAmount||''} onChange={e=>upClient(pi,e.target.value)} placeholder="Klantprijs" style={{fontWeight:600}}/></td><td></td></tr>
+            <tr className="sub"><td colSpan={5}>Subtotaal {ph.code}</td>
+              <td className="tr mono">{fmt(totals.phaseData[pi]?.client||0)}</td><td></td>
+              <td className="tr mono">{fmt(totals.phaseData[pi]?.cost||0)}</td>
+              <td className="tr mono">{fmt((totals.phaseData[pi]?.client||0)-(totals.phaseData[pi]?.cost||0))}</td><td></td></tr>
+            {(ph.contingency||0)>0&&<tr className="sub"><td colSpan={5} className="sm">Contingency {Math.round((ph.contingency||0)*100)}%</td>
+              <td className="tr mono sm">{fmt(totals.phaseData[pi]?.cont||0)}</td><td colSpan={4}></td></tr>}
           </React.Fragment>)}
-          <tr className="tot"><td colSpan={4}>Totaal intern</td><td className="tr mono">{fmtE(blockA)}</td><td className="tr mono" style={{color:'var(--teal-mint)'}}>{fmtE(clientTotal)}</td><td></td></tr>
+          <tr className="tot"><td colSpan={5}>Totaal Block A</td>
+            <td className="tr mono">{fmtE(totals.blockAClient)}</td><td></td>
+            <td className="tr mono">{fmtE(totals.blockACost)}</td>
+            <td className="tr mono">{fmtE(totals.blockAClient-totals.blockACost)}</td><td></td></tr>
         </tbody>
       </table>
     </div>
 
-    {d.type==='build'&&<>
-      <div className="card">
-        <div className="card-h">Inkoop + handling fee</div>
-        <p className="sm muted mb16">Degressief: 20% tot 25k, 12% 25-100k, 8% boven 100k</p>
-        <table className="bt">
-          <thead><tr><th>Omschrijving</th><th style={{width:'20%'}}>Bedrag</th><th style={{width:'8%'}}></th></tr></thead>
-          <tbody>
-            {(d.procurement?.items||[]).map((it,i)=><tr key={i}>
-              <td><input value={it.desc||''} onChange={e=>{const items=[...(d.procurement?.items||[])];items[i]={...items[i],desc:e.target.value};set({...d,procurement:{...d.procurement,items}})}}/></td>
-              <td><input type="number" value={it.amount||''} onChange={e=>{const items=[...(d.procurement?.items||[])];items[i]={...items[i],amount:parseFloat(e.target.value)||0};set({...d,procurement:{...d.procurement,items}})}}/></td>
-              <td className="tr"><button className="btn btn-sm btn-g" onClick={()=>{const items=(d.procurement?.items||[]).filter((_,idx)=>idx!==i);set({...d,procurement:{...d.procurement,items}})}}>&times;</button></td>
-            </tr>)}
-            <tr className="sub"><td>Inkoopwaarde</td><td className="tr mono">{fmt(procTot)}</td><td></td></tr>
-            <tr className="sub"><td>Handling fee</td><td className="tr mono">{fmt(procFee)}</td><td></td></tr>
-          </tbody>
-        </table>
-        <button className="btn btn-sm btn-g mt16" onClick={()=>{const items=[...(d.procurement?.items||[]),{desc:'',amount:0}];set({...d,procurement:{...d.procurement,items}})}}>+ Inkooppost</button>
-      </div>
-
-      <div className="card">
-        <div className="card-h">Onderaannemers + 20% marge</div>
-        <table className="bt">
-          <thead><tr><th>Omschrijving</th><th style={{width:'20%'}}>Bedrag</th><th style={{width:'8%'}}></th></tr></thead>
-          <tbody>
-            {(d.subcontractors?.items||[]).map((it,i)=><tr key={i}>
-              <td><input value={it.desc||''} onChange={e=>{const items=[...(d.subcontractors?.items||[])];items[i]={...items[i],desc:e.target.value};set({...d,subcontractors:{...d.subcontractors,items}})}}/></td>
-              <td><input type="number" value={it.amount||''} onChange={e=>{const items=[...(d.subcontractors?.items||[])];items[i]={...items[i],amount:parseFloat(e.target.value)||0};set({...d,subcontractors:{...d.subcontractors,items}})}}/></td>
-              <td className="tr"><button className="btn btn-sm btn-g" onClick={()=>{const items=(d.subcontractors?.items||[]).filter((_,idx)=>idx!==i);set({...d,subcontractors:{...d.subcontractors,items}})}}>&times;</button></td>
-            </tr>)}
-            <tr className="sub"><td>Subtotaal + marge ({Math.round((d.subcontractors?.margin||.20)*100)}%)</td><td className="tr mono">{fmt(subTot+subFee)}</td><td></td></tr>
-          </tbody>
-        </table>
-        <button className="btn btn-sm btn-g mt16" onClick={()=>{const items=[...(d.subcontractors?.items||[]),{desc:'',amount:0}];set({...d,subcontractors:{...d.subcontractors,items}})}}>+ Onderaannemer</button>
-      </div>
-    </>}
-
+    {/* Block B1: Off-the-shelf */}
     <div className="card">
-      <div className="card-h">Marge-analyse</div>
-      <div className={`mbar ${marginStatus(margin)}`}>
-        <span>Marge: {Math.round(margin*100)}%</span>
-        <span style={{fontSize:12,fontWeight:400}}>Target: {Math.round((d.targetMargin||.30)*100)}% {margin>=(d.targetMargin||.30)?'(bereikt)':'(niet bereikt)'}</span>
+      <div className="card-h">Block B1: Inkoop (off-the-shelf)</div>
+      <p className="sm muted mb16">Standaard catalogusartikelen. Handling fee automatisch op basis van inkoopwaarde.</p>
+      <table className="bt">
+        <thead><tr><th>Item</th><th style={{width:'14%'}}>Leverancier</th><th style={{width:'12%'}}>Inkoopwaarde</th><th style={{width:'8%'}}>Hand. %</th><th style={{width:'12%'}}>Handling fee</th><th style={{width:'12%'}}>Klantprijs</th><th style={{width:'4%'}}></th></tr></thead>
+        <tbody>
+          {(d.procOTS||[]).map((it,i)=>{
+            const h=(it.amount||0)*(it.handlingPct||0);
+            return <tr key={it.id||i}>
+              <td><input value={it.desc||''} onChange={e=>upOTS(i,'desc',e.target.value)}/></td>
+              <td><input value={it.supplier||''} onChange={e=>upOTS(i,'supplier',e.target.value)}/></td>
+              <td><input type="number" value={it.amount||''} onChange={e=>upOTS(i,'amount',parseFloat(e.target.value)||0)}/></td>
+              <td className="tr mono">{Math.round((it.handlingPct||0)*100)}%</td>
+              <td className="tr mono">{fmt(h)}</td>
+              <td className="tr mono">{fmt((it.amount||0)+h)}</td>
+              <td><button className="btn btn-sm btn-g" onClick={()=>rmOTS(i)}>&times;</button></td>
+            </tr>})}
+          <tr className="sub"><td colSpan={2}>Subtotaal B1</td><td className="tr mono">{fmt(totals.b1Purchase)}</td><td></td><td className="tr mono">{fmt(totals.b1Handling)}</td><td className="tr mono">{fmt(totals.b1Purchase+totals.b1Handling)}</td><td></td></tr>
+        </tbody>
+      </table>
+      <button className="btn btn-sm btn-g mt16" onClick={addOTS}>+ Inkooppost</button>
+    </div>
+
+    {/* Block B2: Custom */}
+    <div className="card">
+      <div className="card-h">Block B2: Inkoop (maatwerk)</div>
+      <p className="sm muted mb16">TEAL schrijft de spec, TEAL draagt het risico. Handling fee + risk buffer per regel.</p>
+      <table className="bt">
+        <thead><tr><th>Item</th><th style={{width:'12%'}}>Leverancier</th><th style={{width:'10%'}}>Inkoopwaarde</th><th style={{width:'7%'}}>Hand. %</th><th style={{width:'9%'}}>Hand. fee</th><th style={{width:'7%'}}>Risk %</th><th style={{width:'9%'}}>Risk buffer</th><th style={{width:'10%'}}>Klantprijs</th><th style={{width:'4%'}}></th></tr></thead>
+        <tbody>
+          {(d.procCustom||[]).map((it,i)=>{
+            const h=(it.amount||0)*(it.handlingPct||0);
+            const r=(it.amount||0)*(it.riskPct||0);
+            return <tr key={it.id||i}>
+              <td><input value={it.desc||''} onChange={e=>upCust(i,'desc',e.target.value)}/></td>
+              <td><input value={it.supplier||''} onChange={e=>upCust(i,'supplier',e.target.value)}/></td>
+              <td><input type="number" value={it.amount||''} onChange={e=>upCust(i,'amount',parseFloat(e.target.value)||0)}/></td>
+              <td className="tr mono">{Math.round((it.handlingPct||0)*100)}%</td>
+              <td className="tr mono">{fmt(h)}</td>
+              <td><input type="number" value={Math.round((it.riskPct||0)*100)} onChange={e=>upCust(i,'riskPct',(parseInt(e.target.value)||0)/100)} style={{width:50}}/></td>
+              <td className="tr mono">{fmt(r)}</td>
+              <td className="tr mono">{fmt((it.amount||0)+h+r)}</td>
+              <td><button className="btn btn-sm btn-g" onClick={()=>rmCust(i)}>&times;</button></td>
+            </tr>})}
+          <tr className="sub"><td colSpan={2}>Subtotaal B2</td><td className="tr mono">{fmt(totals.b2Purchase)}</td><td></td><td className="tr mono">{fmt(totals.b2Handling)}</td><td></td><td className="tr mono">{fmt(totals.b2Risk)}</td><td className="tr mono">{fmt(totals.b2Purchase+totals.b2Handling+totals.b2Risk)}</td><td></td></tr>
+        </tbody>
+      </table>
+      <button className="btn btn-sm btn-g mt16" onClick={addCust}>+ Maatwerk inkooppost</button>
+    </div>
+
+    {/* Block C: Subcontractors */}
+    <div className="card">
+      <div className="card-h">Block C: Onderaannemers (12% coordinatiemarge)</div>
+      <table className="bt">
+        <thead><tr><th>Omschrijving</th><th style={{width:'14%'}}>Onderaannemer</th><th style={{width:'12%'}}>Bedrag</th><th style={{width:'8%'}}>Coord. %</th><th style={{width:'12%'}}>Coord. fee</th><th style={{width:'12%'}}>Klantprijs</th><th style={{width:'4%'}}></th></tr></thead>
+        <tbody>
+          {(d.subs||[]).map((it,i)=>{
+            const c=(it.amount||0)*(it.coordPct||COORD_MARGIN);
+            return <tr key={it.id||i}>
+              <td><input value={it.desc||''} onChange={e=>upSub(i,'desc',e.target.value)}/></td>
+              <td><input value={it.company||''} onChange={e=>upSub(i,'company',e.target.value)}/></td>
+              <td><input type="number" value={it.amount||''} onChange={e=>upSub(i,'amount',parseFloat(e.target.value)||0)}/></td>
+              <td className="tr mono">{Math.round((it.coordPct||COORD_MARGIN)*100)}%</td>
+              <td className="tr mono">{fmt(c)}</td>
+              <td className="tr mono">{fmt((it.amount||0)+c)}</td>
+              <td><button className="btn btn-sm btn-g" onClick={()=>rmSub(i)}>&times;</button></td>
+            </tr>})}
+          <tr className="sub"><td colSpan={2}>Subtotaal C</td><td className="tr mono">{fmt(totals.subFees)}</td><td></td><td className="tr mono">{fmt(totals.subCoord)}</td><td className="tr mono">{fmt(totals.subClient)}</td><td></td></tr>
+        </tbody>
+      </table>
+      <button className="btn btn-sm btn-g mt16" onClick={addSub}>+ Onderaannemer</button>
+    </div>
+
+    {/* Totals + Margin */}
+    <div className="card">
+      <div className="card-h">Totaaloverzicht</div>
+      <table className="bt">
+        <tbody>
+          <tr><td>Block A: TEAL Fees</td><td className="tr mono">{fmtE(totals.blockAClient)}</td><td className="tr mono muted">(kost: {fmtE(totals.blockACost)})</td></tr>
+          <tr><td>Block B: Inkoop (incl. handling + risk)</td><td className="tr mono">{fmtE(totals.procClient)}</td><td className="tr mono muted">(kost: {fmtE(totals.procCost)})</td></tr>
+          <tr><td>Block C: Onderaannemers (incl. coord.)</td><td className="tr mono">{fmtE(totals.subClient)}</td><td className="tr mono muted">(kost: {fmtE(totals.subFees)})</td></tr>
+          <tr className="tot"><td>Totaal excl. BTW</td><td className="tr mono">{fmtE(totals.grandClient)}</td><td className="tr mono" style={{color:'var(--teal-mint)'}}>(marge: {fmtE(totals.grandClient-totals.grandCost)})</td></tr>
+        </tbody>
+      </table>
+      <div className={`mbar ${marginStatus(totals.margin)}`}>
+        <span>Marge: {Math.round(totals.margin*100)}%</span>
+        <span style={{fontSize:12,fontWeight:400}}>Target: 25-35%</span>
       </div>
     </div>
   </>;
@@ -397,20 +559,18 @@ function BudgetTab({data:d,set}){
 
 // ── Planning Tab ──
 function PlanningTab({data:d,set}){
-  const total=Math.max(16,...d.phases.map(p=>(p.startWeek||0)+(p.durationWeeks||2)));
+  const total=Math.max(16,...d.phases.map(p=>(p.startWeek||0)+(p.durationWeeks||4)));
   const upPh=(i,k,v)=>{const p=[...d.phases];p[i]={...p[i],[k]:v};set({...d,phases:p})};
-  const weeks=Array.from({length:total},(_,i)=>i+1);
-
   return <div className="card">
     <div className="card-h">Planning (indicatief)</div>
     <div style={{overflowX:'auto'}}>
       {d.phases.map((ph,pi)=>{
         const left=((ph.startWeek||0)/total)*100;
-        const w=((ph.durationWeeks||2)/total)*100;
+        const w=((ph.durationWeeks||4)/total)*100;
         return <div key={ph.id} className="gantt-r">
-          <div className="gantt-l">{t(ph.name,d.lang)}</div>
+          <div className="gantt-l">{ph.code} - {t(ph.name,d.lang)}</div>
           <div className="gantt-t">
-            <div className="gantt-b" style={{left:`${left}%`,width:`${w}%`,background:COLORS[pi%COLORS.length]}}>{ph.durationWeeks||2}w</div>
+            <div className="gantt-b" style={{left:`${left}%`,width:`${w}%`,background:COLORS[pi%COLORS.length]}}>{ph.durationWeeks||4}w</div>
           </div>
         </div>;
       })}
@@ -421,9 +581,9 @@ function PlanningTab({data:d,set}){
         let sd='';
         if(d.project.date&&ph.startWeek>=0){const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(ph.startWeek||0)*7);sd=dt.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})}
         return <tr key={ph.id}>
-          <td>{t(ph.full,d.lang)}</td>
+          <td>{ph.code} - {t(ph.name,d.lang)}</td>
           <td><input type="number" min={0} value={ph.startWeek||0} onChange={e=>upPh(pi,'startWeek',parseInt(e.target.value)||0)}/></td>
-          <td><input type="number" min={1} value={ph.durationWeeks||2} onChange={e=>upPh(pi,'durationWeeks',parseInt(e.target.value)||1)}/></td>
+          <td><input type="number" min={1} value={ph.durationWeeks||4} onChange={e=>upPh(pi,'durationWeeks',parseInt(e.target.value)||1)}/></td>
           <td className="muted">{sd}</td>
         </tr>;
       })}</tbody>
@@ -433,10 +593,8 @@ function PlanningTab({data:d,set}){
 
 // ── Payment Tab ──
 function PaymentTab({data:d,set}){
-  const clientTotal=d.phases.reduce((s,p)=>s+(p.clientAmount||0),0);
-  const procTot=(d.procurement?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
-  const subTot=(d.subcontractors?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
-  const grand=clientTotal+(d.type==='build'?procTot+calcHandling(procTot)+subTot+subTot*(d.subcontractors?.margin||.20):0);
+  const totals=calcTotals(d);
+  const grand=totals.grandClient;
   const upMs=(i,k,v)=>{const ms=[...d.payment.milestones];ms[i]={...ms[i],[k]:v};set({...d,payment:{...d.payment,milestones:ms}})};
   const totPct=d.payment.milestones.reduce((s,m)=>s+(m.pct||0),0);
 
@@ -450,9 +608,9 @@ function PaymentTab({data:d,set}){
           <td><input type="number" value={ms.pct||''} onChange={e=>upMs(i,'pct',parseInt(e.target.value)||0)}/></td>
           <td className="mono">{fmtE(grand*(ms.pct||0)/100)}</td>
           <td><input type="date" value={ms.date||''} onChange={e=>upMs(i,'date',e.target.value)}/></td>
-          <td><button className="btn btn-sm btn-g" onClick={()=>{const ms=d.payment.milestones.filter((_,idx)=>idx!==i);set({...d,payment:{...d.payment,milestones:ms}})}}>&times;</button></td>
+          <td><button className="btn btn-sm btn-g" onClick={()=>{const mss=d.payment.milestones.filter((_,idx)=>idx!==i);set({...d,payment:{...d.payment,milestones:mss}})}}>&times;</button></td>
         </tr>)}
-        <tr className="sub"><td>Totaal</td><td className={totPct===100?'':''}style={{color:totPct===100?'var(--green)':'var(--red)',fontWeight:600}}>{totPct}%</td><td className="mono">{fmtE(grand)}</td><td></td><td></td></tr>
+        <tr className="sub"><td>Totaal</td><td style={{color:totPct===100?'var(--green)':'var(--red)',fontWeight:600}}>{totPct}%</td><td className="mono">{fmtE(grand)}</td><td></td><td></td></tr>
       </tbody>
     </table>
     <button className="btn btn-sm btn-g mt16" onClick={()=>{const ms=[...d.payment.milestones,{name:{nl:'',en:''},pct:0,date:''}];set({...d,payment:{...d.payment,milestones:ms}})}}>+ Mijlpaal</button>
@@ -460,8 +618,16 @@ function PaymentTab({data:d,set}){
     <div className="mt24"><div className="card-h">Voorwaarden</div>
       <div className="row row3">
         <div className="fg"><label>Geldigheid (dagen)</label><input type="number" value={d.conditions.validity} onChange={e=>set({...d,conditions:{...d.conditions,validity:parseInt(e.target.value)||30}})}/></div>
-        <div className="fg"><label>Betalingstermijn (dagen)</label><input type="number" value={d.conditions.paymentTerm} onChange={e=>set({...d,conditions:{...d.conditions,paymentTerm:parseInt(e.target.value)||30}})}/></div>
+        <div className="fg"><label>Betalingstermijn (dagen)</label><input type="number" value={d.conditions.paymentTerm} onChange={e=>set({...d,conditions:{...d.conditions,paymentTerm:parseInt(e.target.value)||14}})}/></div>
         <div className="fg"><label>Garantie</label><input value={t(d.conditions.warranty,d.lang)} onChange={e=>{const o=d.conditions.warranty;const n=typeof o==='string'?{nl:o,en:o}:{...o};n[d.lang]=e.target.value;set({...d,conditions:{...d.conditions,warranty:n}})}}/></div>
+      </div>
+      <div className="row mt16">
+        <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer'}}>
+          <input type="checkbox" checked={d.conditions.avNL!==false} onChange={e=>set({...d,conditions:{...d.conditions,avNL:e.target.checked}})}/> Algemene Voorwaarden TEAL bijvoegen (NL)
+        </label>
+        <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer'}}>
+          <input type="checkbox" checked={d.conditions.avEN===true} onChange={e=>set({...d,conditions:{...d.conditions,avEN:e.target.checked}})}/> General Terms & Conditions (EN)
+        </label>
       </div>
     </div>
   </div>;
@@ -471,93 +637,151 @@ function PaymentTab({data:d,set}){
 function PreviewTab({data:d}){
   const L=d.lang;
   const NL=L==='nl';
-  const clientTotal=d.phases.reduce((s,p)=>s+(p.clientAmount||0),0);
-  const procTot=(d.procurement?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
-  const subTot=(d.subcontractors?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
-  const grand=clientTotal+(d.type==='build'?procTot+calcHandling(procTot)+subTot+subTot*(d.subcontractors?.margin||.20):0);
+  const totals=calcTotals(d);
+  const grand=totals.grandClient;
+
+  const fmtDate=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
+  const fmtDateShort=ds=>{if(!ds)return'';const dt=new Date(ds);return`${dt.getDate()}.${dt.getMonth()+1}.${dt.getFullYear()}`};
+  let sec=0;
 
   return <div className="prev" id="offerte-preview">
-    {/* Header */}
-    <div style={{marginBottom:32}}>
-      <div style={{fontSize:20,fontWeight:800,letterSpacing:1,marginBottom:4}}>TEAL</div>
-      <div style={{fontSize:16,color:'#555'}}>{NL?'Offerte':'Quotation'}</div>
+    {/* Header: type + date, like Change Order */}
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:36}}>
+      <div style={{fontSize:14,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>{NL?'OFFERTE':'QUOTATION'}</div>
+      <div style={{fontSize:13}}>{fmtDateShort(d.project.date)}</div>
     </div>
 
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:32,marginBottom:32}}>
-      <div>
-        <div className="sm muted">Project</div>
-        <div style={{fontWeight:600}}>{d.project.name||'[Projectnaam]'}</div>
-        <div className="sm muted" style={{marginTop:8}}>{NL?'Nummer':'Number'}</div>
-        <div>{d.ref}</div>
-        <div className="sm muted" style={{marginTop:8}}>{NL?'Datum':'Date'}</div>
-        <div>{d.project.date?new Date(d.project.date).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):''}</div>
-        <div className="sm muted" style={{marginTop:8}}>{NL?'Geldig':'Valid'}</div>
-        <div>{d.conditions.validity} {NL?'dagen':'days'}</div>
-      </div>
-      <div>
-        <div style={{fontWeight:600}}>{d.client.name||'[Klant]'}</div>
-        <div>{d.client.contact}</div>
-        {d.client.email&&<div>{d.client.email}</div>}
-        {d.client.addr&&<div>{d.client.addr}</div>}
-        {(d.client.zip||d.client.city)&&<div>{d.client.zip} {d.client.city}</div>}
-      </div>
-    </div>
+    {/* Section 1: Project Details (table with grey labels) */}
+    <div className="sec-h">{++sec} - {NL?'Projectgegevens':'Project Details'}</div>
+    <table>
+      <tbody>
+        <tr><td className="label-cell">Project</td><td>{d.project.name||'[Projectnaam]'}</td><td className="label-cell">{NL?'Referentie':'Reference'}</td><td>{d.ref}</td></tr>
+        <tr><td className="label-cell">{NL?'Klant':'Client'}</td><td>{d.client.name||'[Klant]'}{d.client.contact?`, ${d.client.contact}`:''}</td><td className="label-cell">Versie</td><td>{d.project.version}</td></tr>
+        <tr><td className="label-cell">{NL?'Geldigheid':'Validity'}</td><td>{d.conditions.validity} {NL?'dagen na dagtekening':'days'}</td><td className="label-cell">{NL?'Betaling':'Payment'}</td><td>{d.conditions.paymentTerm} {NL?'dagen':'days'}</td></tr>
+      </tbody>
+    </table>
 
-    <h2>{NL?'Projectomschrijving':'Project Description'}</h2>
-    <p style={{whiteSpace:'pre-wrap'}}>{t(d.project.description,L)||'[Beschrijving]'}</p>
-    {t(d.project.tealRole,L)&&<><h3>{NL?'Rol van TEAL':"TEAL's Role"}</h3><p style={{whiteSpace:'pre-wrap'}}>{t(d.project.tealRole,L)}</p></>}
-    {t(d.project.exclusions,L)&&<><h3>{NL?'Niet inbegrepen':'Exclusions'}</h3><p style={{whiteSpace:'pre-wrap'}}>{t(d.project.exclusions,L)}</p></>}
+    {/* Section 2: Description */}
+    {(t(d.project.description,L)||t(d.project.tealRole,L))&&<>
+      <div className="sec-h">{++sec} - {NL?'Projectomschrijving':'Project Description'}</div>
+      {t(d.project.description,L)&&<p style={{whiteSpace:'pre-wrap',marginBottom:12}}>{t(d.project.description,L)}</p>}
+      {t(d.project.tealRole,L)&&<><h3>{NL?'Rol van TEAL':"TEAL's Role"}</h3><p style={{whiteSpace:'pre-wrap',marginBottom:12}}>{t(d.project.tealRole,L)}</p></>}
+      {t(d.project.exclusions,L)&&<><h3>{NL?'Niet inbegrepen':'Exclusions'}</h3><p style={{whiteSpace:'pre-wrap'}}>{t(d.project.exclusions,L)}</p></>}
+    </>}
 
-    <h2>{NL?'Scope en aanpak':'Scope of Work'}</h2>
+    {/* Section 3: Scope */}
+    <div className="sec-h">{++sec} - {NL?'Scope en aanpak':'Scope of Work'}</div>
     {d.phases.map(ph=>{
       const desc=t(ph.description,L);
-      return desc?<div key={ph.id} style={{marginBottom:16}}>
-        <h3>{t(ph.full,L)}</h3>
+      return desc?<div key={ph.id} style={{marginBottom:14}}>
+        <h3>{ph.code} - {t(ph.name,L)}</h3>
         <p style={{whiteSpace:'pre-wrap'}}>{desc}</p>
-        {ph.effort&&<p className="sm" style={{marginTop:4}}><strong>{NL?'Inzet':'Effort'}:</strong> {ph.effort}</p>}
+        {ph.effort&&<p style={{marginTop:4,color:'#999',fontSize:12}}><strong>{NL?'Inzet':'Effort'}:</strong> {ph.effort}</p>}
       </div>:null;
     })}
 
-    <h2>{NL?'Kosten':'Financial Summary'}</h2>
+    {/* Section 4: Investment */}
+    <div className="sec-h">{++sec} - {NL?'Investering':'Investment'}</div>
     <table>
-      <thead><tr><th>{NL?'Onderdeel':'Item'}</th><th style={{textAlign:'right'}}>{NL?'Bedrag':'Amount'}</th></tr></thead>
+      <thead><tr><th>{NL?'Fase':'Phase'}</th><th>{NL?'Omschrijving':'Description'}</th><th style={{textAlign:'right'}}>{NL?'Bedrag excl. BTW':'Amount ex. VAT (\u20AC)'}</th></tr></thead>
       <tbody>
-        {d.phases.filter(p=>p.clientAmount>0).map(p=><tr key={p.id}>
-          <td>{t(p.full,L)}</td>
-          <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(p.clientAmount)}</td>
-        </tr>)}
-        {d.type==='build'&&procTot>0&&<tr><td>{NL?'Materialen en inkoop':'Materials and procurement'}</td><td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(procTot+calcHandling(procTot))}</td></tr>}
-        {d.type==='build'&&subTot>0&&<tr><td>{NL?'Onderaanneming':'Subcontractors'}</td><td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(subTot+subTot*(d.subcontractors?.margin||.20))}</td></tr>}
-        <tr style={{fontWeight:700,borderTop:'2px solid var(--teal-dark)'}}>
-          <td>{NL?'Totaal excl. BTW':'Total (excl. VAT)'}</td>
-          <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(grand)}</td>
+        {d.phases.map((ph,pi)=>{
+          const pd=totals.phaseData[pi];
+          if(!pd||pd.total===0)return null;
+          return <tr key={ph.id}>
+            <td style={{fontWeight:600}}>{ph.code}</td>
+            <td>{t(ph.name,L)}{pd.cont>0?` (incl. ${Math.round((ph.contingency||0)*100)}% contingency)`:''}</td>
+            <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(pd.total)}</td>
+          </tr>;
+        })}
+        {totals.procClient>0&&<tr>
+          <td style={{fontWeight:600}}>B</td>
+          <td>{NL?'Materialen en inkoop':'Materials and procurement'}</td>
+          <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(totals.procClient)}</td>
+        </tr>}
+        {totals.subClient>0&&<tr>
+          <td style={{fontWeight:600}}>C</td>
+          <td>{NL?'Onderaanneming':'Subcontractors'}</td>
+          <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(totals.subClient)}</td>
+        </tr>}
+        <tr style={{fontWeight:700,background:'#f0f0ee'}}>
+          <td colSpan={2} style={{textDecoration:'underline'}}>{NL?'TOTAAL':'TOTAL'}</td>
+          <td style={{textAlign:'right',fontFamily:'monospace',textDecoration:'underline'}}>{fmtE(grand)}</td>
         </tr>
       </tbody>
     </table>
-    {d.extras?.outOfPocket?.enabled&&<p className="sm muted" style={{marginTop:8}}>{t(d.extras.outOfPocket.note,L)}</p>}
-    {d.extras?.travel?.enabled&&<p className="sm muted">{t(d.extras.travel.note,L)}: {fmtE(d.extras.travel.rate)}/km</p>}
+    <p style={{marginTop:8,fontSize:11,color:'#999',fontStyle:'italic'}}>{NL?'Prijzen exclusief BTW.':'Prices exclude VAT.'} {NL?`Reiskosten: \u20AC ${d.travel?.rateNL||0.50}/km.`:`Travel: \u20AC ${d.travel?.rateNL||0.50}/km.`}</p>
 
-    <h2>{NL?'Betalingsschema':'Payment Schedule'}</h2>
-    {d.payment.milestones.map((ms,i)=><p key={i}>- {t(ms.name,L)} ({ms.pct}%): {fmtE(grand*ms.pct/100)}</p>)}
-    <p className="sm muted" style={{marginTop:8}}>{NL?`Betalingstermijn: ${d.conditions.paymentTerm} dagen na factuurdatum.`:`Payment is due within ${d.conditions.paymentTerm} days of the invoice date.`}</p>
+    {/* Section 5: Planning */}
+    <div className="sec-h">{++sec} - {NL?'Planning':'Planning'}</div>
+    <table>
+      <thead><tr><th>{NL?'Fase':'Phase'}</th><th>{NL?'Omschrijving':'Description'}</th><th>{NL?'Duur':'Duration'}</th><th>{NL?'Indicatieve start':'Indicative start'}</th></tr></thead>
+      <tbody>
+        {d.phases.map(ph=>{
+          let sd='';
+          if(d.project.date&&ph.startWeek>=0){const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(ph.startWeek||0)*7);sd=dt.toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'short',year:'numeric'})}
+          return <tr key={ph.id}>
+            <td style={{fontWeight:600}}>{ph.code}</td>
+            <td>{t(ph.name,L)}</td>
+            <td>{ph.durationWeeks||4} {NL?'weken':'weeks'}</td>
+            <td>{sd}</td>
+          </tr>;
+        })}
+      </tbody>
+    </table>
 
-    <h2>{NL?'Voorwaarden':'Terms & Conditions'}</h2>
-    <p>- {NL?`Deze offerte is geldig tot ${d.conditions.validity} dagen na dagtekening.`:`This quotation is valid for ${d.conditions.validity} days.`}</p>
-    <p>- {NL?'De Algemene Voorwaarden van TEAL zijn van toepassing.':'The General Terms and Conditions of TEAL apply.'}</p>
-    <p>- {NL?`Garantie: ${t(d.conditions.warranty,L)}`:`Warranty: ${t(d.conditions.warranty,L)}`}</p>
-    <p>- {NL?'Prijzen exclusief BTW.':'Prices exclude VAT.'}</p>
+    {/* Section 6: Payment */}
+    <div className="sec-h">{++sec} - {NL?'Betalingsschema':'Payment Schedule'}</div>
+    <table>
+      <thead><tr><th>{NL?'Mijlpaal':'Milestone'}</th><th style={{textAlign:'right'}}>%</th><th style={{textAlign:'right'}}>{NL?'Bedrag excl. BTW':'Amount ex. VAT (\u20AC)'}</th></tr></thead>
+      <tbody>
+        {d.payment.milestones.map((ms,i)=><tr key={i}>
+          <td>{t(ms.name,L)}</td>
+          <td style={{textAlign:'right'}}>{ms.pct}%</td>
+          <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(grand*ms.pct/100)}</td>
+        </tr>)}
+        <tr style={{fontWeight:700,background:'#f0f0ee'}}>
+          <td style={{textDecoration:'underline'}}>{NL?'TOTAAL':'TOTAL'}</td>
+          <td style={{textAlign:'right'}}>{d.payment.milestones.reduce((s,m)=>s+(m.pct||0),0)}%</td>
+          <td style={{textAlign:'right',fontFamily:'monospace',textDecoration:'underline'}}>{fmtE(grand)}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style={{marginTop:8,fontSize:11,color:'#999',fontStyle:'italic'}}>{NL?`Betalingstermijn: ${d.conditions.paymentTerm} dagen na factuurdatum.`:`Payment due within ${d.conditions.paymentTerm} days of invoice date.`}</p>
 
-    <div style={{marginTop:48}}>
-      <p>{NL?'Hierbij verklaren partijen het eens te zijn met de afspraken en voorwaarden in dit document:':'By signing below, you agree to the terms outlined in this document:'}</p>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:32,marginTop:24}}>
-        <div><p style={{fontWeight:600}}>{d.client.name||'[Klant]'}</p><p style={{marginTop:16}}>Naam: __________</p><p>Datum: __________</p><p>Handtekening: __________</p></div>
+    {/* Section 7: Conditions */}
+    <div className="sec-h">{++sec} - {NL?'Voorwaarden':'Terms & Conditions'}</div>
+    <table>
+      <tbody>
+        <tr><td className="label-cell">{NL?'Geldigheid':'Validity'}</td><td>{NL?`${d.conditions.validity} dagen na dagtekening`:`${d.conditions.validity} days from date of issue`}</td></tr>
+        <tr><td className="label-cell">{NL?'Garantie':'Warranty'}</td><td>{t(d.conditions.warranty,L)}</td></tr>
+        <tr><td className="label-cell">BTW</td><td>{NL?'Alle genoemde prijzen zijn exclusief BTW':'All prices exclude VAT'}</td></tr>
+        {(d.conditions.avNL||d.conditions.avEN)&&<tr><td className="label-cell">{NL?'Algemene Voorwaarden':'General Terms'}</td><td>{NL?'De Algemene Voorwaarden van TEAL B.V. zijn van toepassing (bijgevoegd).':'The General Terms and Conditions of TEAL B.V. apply (attached).'}</td></tr>}
+      </tbody>
+    </table>
+
+    {/* Section 8: Approval */}
+    <div className="sec-h">{++sec} - {NL?'Akkoord':'Approval'}</div>
+    <p style={{marginBottom:20}}>{NL?'Ondergetekende verklaart akkoord te gaan met de voorwaarden en werkzaamheden zoals beschreven in deze offerte.':'By signing below, the client confirms this quotation and authorizes TEAL to proceed.'}</p>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:32}}>
+      <div>
+        <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:4}}>CLIENT</div>
+        <p style={{fontWeight:600}}>{d.client.name||'[Klant]'}</p>
+        <div style={{marginTop:32,borderBottom:'1px solid #999',width:'80%'}}></div>
+        <p style={{fontSize:11,color:'#999',marginTop:4}}>{NL?'Naam en handtekening':'Name and signature'}</p>
+        <div style={{marginTop:20,borderBottom:'1px solid #999',width:'50%'}}></div>
+        <p style={{fontSize:11,color:'#999',marginTop:4}}>{NL?'Datum':'Date'}</p>
+      </div>
+      <div>
+        <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:4}}>TEAL B.V.</div>
+        <p style={{fontWeight:600}}>Erik Swaagstra</p>
       </div>
     </div>
 
+    {/* Footer: logo left, page info right */}
     <div className="foot">
-      <div>{TEAL_INFO.addr}, {TEAL_INFO.zip}, {TEAL_INFO.country}</div>
-      <div>{TEAL_INFO.name} | {TEAL_INFO.email}</div>
-      <div>KvK {TEAL_INFO.kvk} | BTW {TEAL_INFO.btw}</div>
+      <Logo color="#111" h={16}/>
+      <div>{TEAL.addr}, {TEAL.zip} | {TEAL.email} | KvK {TEAL.kvk} | BTW {TEAL.btw}</div>
     </div>
   </div>;
 }
@@ -570,83 +794,109 @@ function exportPDF(d){
   let y=m;
   const NL=d.lang==='nl';
   const L=d.lang;
+  const totals=calcTotals(d);
+  const grand=totals.grandClient;
 
+  const addFooter=()=>{
+    const pc=doc.getNumberOfPages();
+    for(let i=1;i<=pc;i++){
+      doc.setPage(i);doc.setFontSize(7);doc.setTextColor(153,153,153);doc.setFont('helvetica','normal');
+      doc.text(TEAL.addr+', '+TEAL.zip,m,288);
+      doc.text(TEAL.name+' | '+TEAL.email,85,288);
+      doc.text('KvK '+TEAL.kvk+' | BTW '+TEAL.btw,145,288);
+      doc.text(`${i}/${pc}`,190,292,{align:'right'});
+    }
+  };
+  const checkPage=(need=12)=>{if(y>280-need){doc.addPage();y=m}};
   const txt=(text,sz,opts={})=>{
     doc.setFontSize(sz);doc.setFont('helvetica',opts.b?'bold':'normal');
     if(opts.c)doc.setTextColor(...opts.c);else doc.setTextColor(17,17,17);
-    if(y>272){doc.addPage();y=m;}
-    if(opts.w){const lines=doc.splitTextToSize(text,opts.w);doc.text(lines,m+(opts.x||0),y);y+=lines.length*sz*.38;}
-    else{doc.text(text,m+(opts.x||0),y);y+=sz*.42;}
+    checkPage(sz*.5);
+    if(opts.w){const lines=doc.splitTextToSize(text||'',opts.w);doc.text(lines,m+(opts.x||0),y);y+=lines.length*sz*.38;}
+    else{doc.text(text||'',m+(opts.x||0),y);y+=sz*.42;}
   };
   const line=()=>{doc.setDrawColor(212,236,230);doc.setLineWidth(.5);doc.line(m,y,190,y);y+=4;};
   const gap=(n=3)=>{y+=n};
 
-  // Title
-  doc.setFont('helvetica','bold');doc.setFontSize(20);doc.setTextColor(17,17,17);
-  doc.text('TEAL',m,y);y+=6;
-  doc.setFont('helvetica','normal');doc.setFontSize(14);doc.setTextColor(85,85,85);
-  doc.text(NL?'Offerte':'Quotation',m,y);y+=10;
-
-  // Meta left + client right
+  // Header
+  txt('TEAL',20,{b:true});y-=2;
+  doc.setFontSize(12);doc.setTextColor(85,85,85);doc.setFont('helvetica','normal');
+  doc.text(NL?'Offerte':'Quotation',m,y);y+=4;
   doc.setFontSize(9);doc.setTextColor(153,153,153);
-  doc.text('Project',m,y);doc.text(NL?'Nummer':'Number',m,y+5);doc.text(NL?'Datum':'Date',m,y+10);doc.text(NL?'Geldig':'Valid',m,y+15);
-  doc.setTextColor(17,17,17);doc.setFont('helvetica','bold');
-  doc.text(d.project.name||'[Project]',m+30,y);doc.setFont('helvetica','normal');
-  doc.text(d.ref,m+30,y+5);
-  doc.text(d.project.date?new Date(d.project.date).toLocaleDateString(NL?'nl-NL':'en-GB'):'-',m+30,y+5+5);
-  doc.text(`${d.conditions.validity} ${NL?'dagen':'days'}`,m+30,y+15);
+  doc.text(d.ref,m,y);y+=8;
 
-  // Client
+  // Meta + client
+  doc.setFontSize(9);doc.setTextColor(153,153,153);
+  doc.text('Project',m,y);doc.text(NL?'Datum':'Date',m,y+5);doc.text(NL?'Geldig':'Valid',m,y+10);
+  doc.setTextColor(17,17,17);doc.setFont('helvetica','bold');
+  doc.text(d.project.name||'[Project]',m+25,y);doc.setFont('helvetica','normal');
+  doc.text(d.project.date?new Date(d.project.date).toLocaleDateString(NL?'nl-NL':'en-GB'):'-',m+25,y+5);
+  doc.text(`${d.conditions.validity} ${NL?'dagen':'days'}`,m+25,y+10);
+
   if(d.client.name){
     doc.setFont('helvetica','bold');doc.text(d.client.name,120,y);doc.setFont('helvetica','normal');
     let cy=y+5;
     if(d.client.contact){doc.text(d.client.contact,120,cy);cy+=4;}
     if(d.client.email){doc.text(d.client.email,120,cy);cy+=4;}
     if(d.client.addr){doc.text(d.client.addr,120,cy);cy+=4;}
-    if(d.client.zip||d.client.city){doc.text(`${d.client.zip} ${d.client.city}`,120,cy);}
+    if(d.client.zip||d.client.city)doc.text(`${d.client.zip} ${d.client.city}`,120,cy);
   }
-  y+=24;line();
+  y+=18;line();
 
   // Description
-  txt(NL?'PROJECTOMSCHRIJVING':'PROJECT DESCRIPTION',10,{b:true,c:[7,20,18]});gap();
-  if(t(d.project.description,L)){txt(t(d.project.description,L),9,{w:pw});gap(4);}
+  if(t(d.project.description,L)){txt(NL?'PROJECTOMSCHRIJVING':'PROJECT DESCRIPTION',10,{b:true,c:[7,20,18]});gap();
+  txt(t(d.project.description,L),9,{w:pw});gap(4);}
   if(t(d.project.tealRole,L)){txt(NL?'Rol van TEAL':"TEAL's Role",9,{b:true});txt(t(d.project.tealRole,L),9,{w:pw});gap(4);}
+  if(t(d.project.exclusions,L)){txt(NL?'Niet inbegrepen':'Exclusions',9,{b:true});txt(t(d.project.exclusions,L),9,{w:pw});gap(4);}
   line();
 
   // Scope
   txt(NL?'SCOPE EN AANPAK':'SCOPE OF WORK',10,{b:true,c:[7,20,18]});gap();
   d.phases.forEach(ph=>{
     const desc=t(ph.description,L);
-    if(desc){txt(t(ph.full,L),9,{b:true});txt(desc,9,{w:pw});if(ph.effort)txt(`${NL?'Inzet':'Effort'}: ${ph.effort}`,8,{c:[153,153,153]});gap(3);}
+    if(desc){checkPage(20);txt(`${ph.code} - ${t(ph.name,L)}`,9,{b:true});txt(desc,9,{w:pw});if(ph.effort)txt(`${NL?'Inzet':'Effort'}: ${ph.effort}`,8,{c:[153,153,153]});gap(3);}
   });
   line();
 
-  // Costs
-  txt(NL?'KOSTEN':'FINANCIAL SUMMARY',10,{b:true,c:[7,20,18]});gap(4);
-  const clientTotal=d.phases.reduce((s,p)=>s+(p.clientAmount||0),0);
-  const procTot=(d.procurement?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
-  const subTot=(d.subcontractors?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
-  const grand=clientTotal+(d.type==='build'?procTot+calcHandling(procTot)+subTot+subTot*.20:0);
-
-  d.phases.filter(p=>p.clientAmount>0).forEach(p=>{
-    if(y>270){doc.addPage();y=m;}
+  // Investment table
+  txt(NL?'INVESTERING':'INVESTMENT',10,{b:true,c:[7,20,18]});gap(4);
+  d.phases.forEach((ph,pi)=>{
+    const pd=totals.phaseData[pi];
+    if(!pd||pd.total===0)return;
+    checkPage();
     doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(17,17,17);
-    doc.text(t(p.full,L),m,y);doc.text(fmtE(p.clientAmount),190,y,{align:'right'});y+=5;
+    doc.text(`${ph.code} - ${t(ph.name,L)}`,m,y);
+    doc.text(fmtE(pd.total),190,y,{align:'right'});y+=5;
   });
+  if(totals.procClient>0){checkPage();doc.setFontSize(9);doc.text(NL?'Materialen en inkoop':'Materials and procurement',m,y);doc.text(fmtE(totals.procClient),190,y,{align:'right'});y+=5;}
+  if(totals.subClient>0){checkPage();doc.text(NL?'Onderaanneming':'Subcontractors',m,y);doc.text(fmtE(totals.subClient),190,y,{align:'right'});y+=5;}
   gap(2);
   doc.setLineWidth(.3);doc.setDrawColor(17,17,17);doc.line(m,y,190,y);y+=4;
   doc.setFont('helvetica','bold');doc.setFontSize(10);
-  doc.text(NL?'Totaal excl. BTW':'Total (excl. VAT)',m,y);doc.text(fmtE(grand),190,y,{align:'right'});y+=8;
+  doc.text(NL?'Totaal excl. BTW':'Total (excl. VAT)',m,y);doc.text(fmtE(grand),190,y,{align:'right'});y+=6;
+  doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(153,153,153);
+  doc.text(`${NL?'Reiskosten':'Travel'}: \u20AC ${d.travel?.rateNL||0.50}/km`,m,y);y+=6;
+  doc.setTextColor(17,17,17);line();
 
-  if(d.extras?.outOfPocket?.enabled){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(153,153,153);doc.text(t(d.extras.outOfPocket.note,L),m,y);y+=4;}
-  if(d.extras?.travel?.enabled){doc.text(`${t(d.extras.travel.note,L)}: ${fmtE(d.extras.travel.rate)}/km`,m,y);y+=4;}
-  y+=2;doc.setTextColor(17,17,17);line();
+  // Planning
+  txt(NL?'PLANNING':'PLANNING',10,{b:true,c:[7,20,18]});gap(4);
+  d.phases.forEach(ph=>{
+    checkPage();
+    let sd='';
+    if(d.project.date&&ph.startWeek>=0){const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(ph.startWeek||0)*7);sd=dt.toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'short',year:'numeric'})}
+    doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(17,17,17);
+    doc.text(`${ph.code} - ${t(ph.name,L)}`,m,y);
+    doc.text(`${ph.durationWeeks||4} ${NL?'weken':'weeks'}`,120,y);
+    doc.text(sd,155,y);
+    y+=5;
+  });
+  gap(2);line();
 
   // Payment
   txt(NL?'BETALINGSSCHEMA':'PAYMENT SCHEDULE',10,{b:true,c:[7,20,18]});gap();
-  d.payment.milestones.forEach(ms=>{
+  d.payment.milestones.forEach(ms=>{checkPage();
     doc.setFontSize(9);doc.setFont('helvetica','normal');
-    doc.text(`- ${t(ms.name,L)} (${ms.pct}%)`,m,y);doc.text(fmtE(grand*ms.pct/100),190,y,{align:'right'});y+=5;
+    doc.text(`${t(ms.name,L)} (${ms.pct}%)`,m,y);doc.text(fmtE(grand*ms.pct/100),190,y,{align:'right'});y+=5;
   });
   gap(2);doc.setFontSize(8);doc.setTextColor(153,153,153);
   doc.text(NL?`Betalingstermijn: ${d.conditions.paymentTerm} dagen na factuurdatum.`:`Payment due within ${d.conditions.paymentTerm} days.`,m,y);y+=6;
@@ -655,20 +905,15 @@ function exportPDF(d){
   // Conditions
   txt(NL?'VOORWAARDEN':'TERMS & CONDITIONS',10,{b:true,c:[7,20,18]});gap();
   doc.setFontSize(9);doc.setFont('helvetica','normal');
-  [NL?`- Deze offerte is geldig tot ${d.conditions.validity} dagen na dagtekening.`:`- Valid for ${d.conditions.validity} days.`,
-   NL?'- De Algemene Voorwaarden van TEAL B.V. zijn van toepassing.':'- TEAL General Terms and Conditions apply.',
-   NL?`- Garantie: ${t(d.conditions.warranty,L)}`:`- Warranty: ${t(d.conditions.warranty,L)}`,
-   NL?'- Prijzen exclusief BTW.':'- Prices exclude VAT.'].forEach(l=>{doc.text(l,m,y);y+=5;});
+  const conds=[
+    NL?`- Deze offerte is geldig tot ${d.conditions.validity} dagen na dagtekening.`:`- Valid for ${d.conditions.validity} days.`,
+    NL?'- Prijzen exclusief BTW.':'- Prices exclude VAT.',
+    NL?`- Garantie: ${t(d.conditions.warranty,L)}.`:`- Warranty: ${t(d.conditions.warranty,L)}.`,
+  ];
+  if(d.conditions.avNL)conds.push(NL?'- Op deze offerte zijn de Algemene Voorwaarden van TEAL B.V. van toepassing (bijgevoegd).':'- The General Terms and Conditions of TEAL B.V. apply (attached).');
+  conds.forEach(l=>{checkPage();doc.text(l,m,y);y+=5;});
 
-  // Footer on all pages
-  const pc=doc.getNumberOfPages();
-  for(let i=1;i<=pc;i++){
-    doc.setPage(i);doc.setFontSize(7);doc.setTextColor(153,153,153);
-    doc.text(`${TEAL_INFO.addr}`,m,288);doc.text(TEAL_INFO.name,90,288);doc.text(`KvK ${TEAL_INFO.kvk}`,150,288);
-    doc.text(`${TEAL_INFO.email}`,m,292);doc.text(`BTW ${TEAL_INFO.btw}`,150,292);
-    doc.text(`${i}/${pc}`,190,288,{align:'right'});
-  }
-
+  addFooter();
   doc.save(`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}_v${d.project.version}.pdf`);
 }
 
@@ -685,25 +930,23 @@ function App(){
     else{setD(createProject(type));setTab('project');}
   };
 
-  const toggleLang=nd=>{setD(nd)};
-
   const tabs=[
     {id:'project',label:'Project'},{id:'scope',label:'Scope'},
-    {id:'budget',label:'Budget (intern)'},{id:'planning',label:'Planning'},
-    {id:'payment',label:'Betaling'},{id:'preview',label:'Offerte preview'},
+    {id:'budget',label:'Budget'},{id:'planning',label:'Planning'},
+    {id:'payment',label:'Betaling'},{id:'preview',label:'Preview'},
   ];
 
   return <div className="app">
-    <Header data={d} onPdf={()=>exportPDF(d)} onShare={toggleLang}/>
+    <Header data={d} onPdf={()=>exportPDF(d)} setData={setD}/>
     {d&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
     <div className="main">
       {!d?<Start onSelect={sel}/>:<>
         <div className="between mb16">
-          <div><span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'var(--dark-grey)'}}>{d.type} offerte</span>
-            {d.project.name&&<span style={{marginLeft:8,color:'var(--mid-grey)'}}>{d.project.name}</span>}
-            <span style={{marginLeft:8,fontSize:11,color:'var(--mid-grey)'}}>{d.ref}</span>
+          <div><span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#555'}}>{d.type} offerte</span>
+            {d.project.name&&<span style={{marginLeft:8,color:'#999'}}>{d.project.name}</span>}
+            <span style={{marginLeft:8,fontSize:11,color:'#999'}}>{d.ref}</span>
           </div>
-          <button className="btn btn-sm btn-g" onClick={()=>{if(confirm('Nieuwe offerte?'))setD(null)}}>Nieuw</button>
+          <button className="btn btn-sm btn-g" onClick={()=>{if(confirm('Nieuwe offerte starten? Huidige data blijft in localStorage.'))setD(null)}}>Nieuw</button>
         </div>
         {tab==='project'&&<ProjectTab data={d} set={setD}/>}
         {tab==='scope'&&<ScopeTab data={d} set={setD}/>}
