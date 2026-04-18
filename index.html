@@ -240,7 +240,7 @@ const I={
     exclusionsVw:'Exclusies',
     geldigheidVw:'Geldigheid',garantieLabel:'Garantie',
     btwTekst:'Alle genoemde prijzen zijn exclusief BTW.',
-    avTekst:'Op deze offerte zijn de Algemene Voorwaarden van TEAL B.V. van toepassing (separaat bijgevoegd).',
+    avTekst:'Op deze offerte zijn de Algemene Voorwaarden van TEAL van toepassing (separaat bijgevoegd).',
     meerwerkTekst:'Meerwerk of vertraging die niet aan TEAL te wijten is, wordt apart in rekening gebracht.',
     akkoord:'Akkoord',akkoordTekst:'Ondergetekende verklaart akkoord te gaan met de informatie in dit document en de bijgevoegde Algemene Voorwaarden.',
     acceptedBy:'AKKOORD DOOR',
@@ -301,7 +301,7 @@ const I={
     exclusionsVw:'Exclusions',
     geldigheidVw:'Validity',garantieLabel:'Warranty',
     btwTekst:'All prices exclude VAT.',
-    avTekst:'The General Terms and Conditions of TEAL B.V. apply (provided separately).',
+    avTekst:'The General Terms and Conditions of TEAL apply (provided separately).',
     meerwerkTekst:'Additional work or delays not attributable to TEAL will be charged separately.',
     akkoord:'Approval',akkoordTekst:'By signing below, you agree to the information outlined in this document and the General Terms and Conditions (attached to this document).',
     acceptedBy:'ACCEPTED BY',
@@ -857,7 +857,8 @@ function PreviewTab({data:d}){
   // Helper: compute phase start date
   const phaseDate=(ph)=>{if(!d.project.date||ph.startWeek==null)return'';const dt=new Date(d.project.date);dt.setDate(dt.getDate()+ph.startWeek*7);return fmtDateLong(dt.toISOString().slice(0,10))};
   // Helper: compute milestone richtdatum (stagger evenly across total duration)
-  const milestoneDates=()=>{
+  const fmtMonth=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{month:'long',year:'numeric'}):'';
+  const milestoneDateISOs=()=>{
     if(!d.project.date)return d.payment.milestones.map(()=>'');
     const totalWeeks=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0);
     let cumPct=0;
@@ -865,16 +866,16 @@ function PreviewTab({data:d}){
       cumPct+=ms.pct;
       const weekOffset=Math.round(totalWeeks*cumPct/100);
       const dt=new Date(d.project.date);dt.setDate(dt.getDate()+weekOffset*7);
-      return ms.date?fmtDateLong(ms.date):fmtDateLong(dt.toISOString().slice(0,10));
+      return ms.date||dt.toISOString().slice(0,10);
     });
   };
-  const msDates=milestoneDates();
+  const msISOs=milestoneDateISOs();
 
   return <div className="prev" id="offerte-preview">
     {/* Header */}
     <div style={{marginBottom:36}}>
-      <div style={{fontSize:24,fontWeight:800,letterSpacing:2}}>TEAL</div>
-      <div style={{fontSize:16,fontWeight:400,color:'#555',marginTop:2}}>{ll.offerte}</div>
+      <Logo color="#111" h={28}/>
+      <div style={{fontSize:16,fontWeight:400,color:'#555',marginTop:6}}>{ll.offerte}</div>
     </div>
 
     {/* CLIENT block */}
@@ -893,7 +894,7 @@ function PreviewTab({data:d}){
         {d.project.location&&<tr><td className="label-cell">{ll.locatie}</td><td>{d.project.location}</td></tr>}
         <tr><td className="label-cell">{ll.referentieLabel}</td><td>{d.ref}</td></tr>
         <tr><td className="label-cell">{ll.datumPrev}</td><td>{fmtDateLong(d.project.date)}</td></tr>
-        <tr><td className="label-cell">{ll.geldigTot}</td><td>{validUntil()}</td></tr>
+        <tr><td className="label-cell">{ll.geldigTot}</td><td>{d.conditions.validity||30} {NL?'dagen':'days'}</td></tr>
       </tbody>
     </table>
 
@@ -915,18 +916,29 @@ function PreviewTab({data:d}){
       </div>:null;
     })}
 
-    {/* Indicative timeline with dates */}
+    {/* Gantt chart (balkenplanning) */}
     <h3 style={{marginTop:24}}>{ll.indicatieveTimeline}</h3>
-    <table>
-      <thead><tr><th>{NL?'Fase':'Phase'}</th><th>{ll.duur}</th><th>{ll.startdatum}</th></tr></thead>
-      <tbody>
-        {activePhases.map(ph=><tr key={ph.id}>
-          <td style={{fontWeight:500}}>{phaseName(ph)}</td>
-          <td>{ph.durationWeeks||4} {ll.weken}</td>
-          <td>{phaseDate(ph)}</td>
-        </tr>)}
-      </tbody>
-    </table>
+    {(()=>{
+      const totalWeeksGantt=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
+      const colors=['#D4ECE6','#B8DDD4','#9DCEC2','#82BFB0','#67B09E'];
+      return <div style={{marginTop:12}}>
+        {activePhases.map((ph,i)=>{
+          const sw=ph.startWeek||0;const dw=ph.durationWeeks||4;
+          const leftPct=(sw/totalWeeksGantt*100).toFixed(1);
+          const widthPct=(dw/totalWeeksGantt*100).toFixed(1);
+          const startDt=phaseDate(ph);
+          return <div key={ph.id} className="gantt-r">
+            <div className="gantt-l">{phaseName(ph)}</div>
+            <div className="gantt-t">
+              <div className="gantt-b" style={{left:leftPct+'%',width:widthPct+'%',background:colors[i%colors.length]}}>
+                {dw}{NL?'w':'w'}
+              </div>
+            </div>
+            <div style={{width:120,flexShrink:0,fontSize:11,color:'#999',paddingLeft:8}}>{startDt}</div>
+          </div>;
+        })}
+      </div>;
+    })()}
 
     {/* COSTS + PAYMENT (combined) */}
     <div className="sec-h">{ll.kostenLabel}</div>
@@ -946,7 +958,7 @@ function PreviewTab({data:d}){
 
     <h3 style={{marginTop:16}}>{ll.betalingVw}:</h3>
     <div style={{marginBottom:12}}>
-      {d.payment.milestones.map((ms,i)=><p key={i} style={{marginBottom:2}}>- {t(ms.name,L)}: {ms.pct}% ({fmtE(grand*ms.pct/100)}){msDates[i]?` — ${msDates[i]}`:''}</p>)}
+      {d.payment.milestones.map((ms,i)=><p key={i} style={{marginBottom:2}}>- {t(ms.name,L)}: {ms.pct}% ({fmtE(grand*ms.pct/100)}){msISOs[i]?`, ${fmtMonth(msISOs[i])}`:''}</p>)}
       <p style={{marginTop:4,color:'#555',fontSize:12}}>- {ll.betalingstermijnTekst.replace('{n}',d.conditions.paymentTerm)}</p>
     </div>
 
@@ -973,10 +985,27 @@ function PreviewTab({data:d}){
 
     {/* Footer */}
     <div className="foot">
-      <div>TEAL</div>
+      <div><Logo color="#999" h={14}/></div>
       <div>{TEAL.addr} | {TEAL.zip}, Den Haag | KvK {TEAL.kvk} | BTW {TEAL.btw}</div>
     </div>
   </div>;
+}
+
+// ── Logo as Base64 PNG (generated once) ──
+let _logoBase64=null;
+function getLogoBase64(){
+  if(_logoBase64)return _logoBase64;
+  const canvas=document.createElement('canvas');
+  const w=400,h=190;canvas.width=w;canvas.height=h;
+  const ctx=canvas.getContext('2d');
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 1815 864"><g transform="matrix(1,0,0,1,0,-1399.19)"><g transform="matrix(1,0,0,1,-274.091,1240.3)"><clipPath id="lc"><rect x="274.091" y="158.9" width="1814.02" height="863.303"/></clipPath><g clip-path="url(#lc)"><g transform="matrix(2.77287,0,0,2.77287,-1956.66,-1047.42)"><g transform="matrix(0.622415,0,0,0.622415,665.764,213.102)"><path d="M523.118,506.267L523.118,556.267L473.118,556.267L473.118,706.267L423.118,706.267L423.118,556.267L373.118,556.267L373.118,506.267L523.118,506.267Z" fill="#111"/></g><g transform="matrix(0.622415,0,0,0.622415,665.881,213.102)"><path d="M723.118,506.267L723.118,556.267L673.118,556.267L673.118,606.267L623.118,606.267L623.118,656.267L723.118,656.267L723.118,706.267L573.118,706.267L573.118,506.267L723.118,506.267Z" fill="#111"/></g><g transform="matrix(0.622415,0,0,0.622415,665.881,213.102)"><path d="M923.118,506.267L923.118,706.267L873.118,706.267L873.118,656.267L823.118,656.267L823.118,706.267L773.118,706.267L773.118,506.267L923.118,506.267ZM823.118,556.267L823.118,606.267L873.118,606.267L873.118,556.267L823.118,556.267Z" fill="#111"/></g><g transform="matrix(0.622415,0,0,0.622415,665.881,213.102)"><path d="M1023.12,506.267L1023.12,656.267L1123.12,656.267L1123.12,706.267L973.118,706.267L973.118,506.267L1023.12,506.267Z" fill="#111"/></g><g transform="matrix(0.656049,0,0,0.52407,71.8753,252.375)"><path d="M2113.9,942.639L1116.71,942.639L1116.71,348.559L2113.9,348.559L2113.9,942.639ZM2066.26,408.188L1164.34,408.188L1164.34,883.009L2066.26,883.009L2066.26,408.188Z" fill="#111"/></g></g></g></g></g></svg>`;
+  const img=new Image();
+  const blob=new Blob([svg],{type:'image/svg+xml'});
+  const url=URL.createObjectURL(blob);
+  // Sync render via offscreen technique
+  img.src=url;
+  // Use a tiny canvas trick: draw inline
+  try{const svgEl=new DOMParser().parseFromString(svg,'image/svg+xml').documentElement;const s=new XMLSerializer().serializeToString(svgEl);const b64='data:image/svg+xml;base64,'+btoa(s);_logoBase64=b64;return b64;}catch(e){return null;}
 }
 
 // ── PDF ──
@@ -1019,8 +1048,10 @@ function exportPDF(d,setData){
   const validUntil=()=>{if(!d.project.date)return'';const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(d.conditions.validity||30));return fmtDateLong(dt.toISOString().slice(0,10))};
   const finLines=buildFinancialLines(d,totals,L);
 
-  // ── Header ──
-  txt('TEAL',20,{b:true});y-=2;
+  // ── Header with logo ──
+  const logoB64=getLogoBase64();
+  if(logoB64){try{doc.addImage(logoB64,'SVG',m,y,35,17);y+=20;}catch(e){txt('TEAL',20,{b:true});}}
+  else{txt('TEAL',20,{b:true});}
   doc.setFontSize(12);doc.setTextColor(85,85,85);doc.setFont('helvetica','normal');
   doc.text(ll.offerte,m,y);y+=8;
 
@@ -1039,7 +1070,7 @@ function exportPDF(d,setData){
   if(d.project.location)detailRows.push([ll.locatie,d.project.location]);
   detailRows.push([ll.referentieLabel,d.ref]);
   detailRows.push([ll.datumPrev,fmtDateLong(d.project.date)]);
-  detailRows.push([ll.geldigTot,validUntil()]);
+  detailRows.push([ll.geldigTot,`${d.conditions.validity||30} ${NL?'dagen':'days'}`]);
   doc.setFontSize(9);
   detailRows.forEach(([lbl,val])=>{
     doc.setFont('helvetica','normal');doc.setTextColor(153,153,153);doc.text(lbl,m,y);
@@ -1062,16 +1093,30 @@ function exportPDF(d,setData){
     if(desc){checkPage(20);txt(pn(ph),9,{b:true});txt(desc,9,{w:pw});if(ph.effort)txt(`${ll.inzet}: ${ph.effort}`,8,{c:[153,153,153]});gap(3);}
   });
 
-  // Indicative timeline table with dates
+  // Gantt chart (balkenplanning) in PDF
   const phaseDate=(ph)=>{if(!d.project.date||ph.startWeek==null)return'';const dt=new Date(d.project.date);dt.setDate(dt.getDate()+ph.startWeek*7);return fmtDateLong(dt.toISOString().slice(0,10))};
-  gap(4);txt(ll.indicatieveTimeline,9,{b:true});gap(2);
-  doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(85,85,85);
-  doc.text(NL?'Fase':'Phase',m,y);doc.text(ll.duur,m+80,y);doc.text(ll.startdatum,m+110,y);y+=4;
-  doc.setDrawColor(200,200,200);doc.setLineWidth(.3);doc.line(m,y,190,y);y+=3;
-  doc.setFont('helvetica','normal');doc.setTextColor(17,17,17);doc.setFontSize(9);
-  activePhases.forEach(ph=>{
-    checkPage();
-    doc.text(pn(ph),m,y);doc.text(`${ph.durationWeeks||4} ${ll.weken}`,m+80,y);doc.text(phaseDate(ph),m+110,y);y+=5;
+  gap(4);txt(ll.indicatieveTimeline,9,{b:true});gap(4);
+  const ganttLeft=m+45,ganttRight=190,ganttW=ganttRight-ganttLeft;
+  const totalWeeksGantt=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
+  const barH=6,barGap=2;
+  const ganttColors=[[212,236,230],[184,221,212],[157,206,194],[130,191,176],[103,176,158]];
+  activePhases.forEach((ph,i)=>{
+    checkPage(barH+barGap+4);
+    const sw=ph.startWeek||0;const dw=ph.durationWeeks||4;
+    const barX=ganttLeft+(sw/totalWeeksGantt)*ganttW;
+    const barW=Math.max((dw/totalWeeksGantt)*ganttW,8);
+    // Phase label
+    doc.setFontSize(8);doc.setFont('helvetica','normal');doc.setTextColor(17,17,17);
+    doc.text(pn(ph),m,y+barH-1.5);
+    // Bar background track
+    doc.setDrawColor(230,230,230);doc.setFillColor(245,245,243);doc.rect(ganttLeft,y,ganttW,barH,'F');
+    // Bar
+    const clr=ganttColors[i%ganttColors.length];
+    doc.setFillColor(...clr);doc.rect(barX,y,barW,barH,'F');
+    // Duration text inside bar
+    doc.setFontSize(7);doc.setFont('helvetica','bold');doc.setTextColor(7,20,18);
+    doc.text(`${dw}w`,barX+2,y+barH-1.5);
+    y+=barH+barGap;
   });
   gap(2);line();
 
@@ -1100,16 +1145,17 @@ function exportPDF(d,setData){
   doc.setTextColor(17,17,17);
   txt(ll.betalingVw+':',9,{b:true});gap(1);
   doc.setFontSize(9);doc.setFont('helvetica','normal');
-  // Compute milestone richtdatums
+  // Compute milestone richtdatums (indicative month only)
+  const fmtMonth=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{month:'long',year:'numeric'}):'';
   const totalWeeks=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0);
   let cumPct=0;
   d.payment.milestones.forEach(ms=>{checkPage();
     cumPct+=ms.pct;
-    let datePart='';
-    if(ms.date){datePart=fmtDateLong(ms.date);}
-    else if(d.project.date){const weekOff=Math.round(totalWeeks*cumPct/100);const dt=new Date(d.project.date);dt.setDate(dt.getDate()+weekOff*7);datePart=fmtDateLong(dt.toISOString().slice(0,10));}
+    let monthPart='';
+    if(ms.date){monthPart=fmtMonth(ms.date);}
+    else if(d.project.date){const weekOff=Math.round(totalWeeks*cumPct/100);const dt=new Date(d.project.date);dt.setDate(dt.getDate()+weekOff*7);monthPart=fmtMonth(dt.toISOString().slice(0,10));}
     const amt=fmtE(grand*ms.pct/100);
-    doc.text(`- ${t(ms.name,L)}: ${ms.pct}% (${amt})${datePart?' \u2014 '+datePart:''}`,m,y);y+=5;
+    doc.text(`- ${t(ms.name,L)}: ${ms.pct}% (${amt})${monthPart?', '+monthPart:''}`,m,y);y+=5;
   });
   doc.setFontSize(8);doc.setTextColor(100,100,100);
   doc.text('- '+ll.betalingstermijnTekst.replace('{n}',d.conditions.paymentTerm),m,y);y+=6;
@@ -1146,6 +1192,50 @@ function exportPDF(d,setData){
   doc.text(NL?'Handtekening':'Signature',m,y);
   doc.text('____________________________',m+80,y-4);
   doc.text(NL?'Datum':'Date',m+80,y);
+
+  // ── AV PAGES (General Terms & Conditions) ──
+  if(d.conditions.avNL||d.conditions.avEN){
+    doc.addPage();y=m;
+    const avTitle=NL?'Algemene Voorwaarden':'General Terms & Conditions';
+    txt(avTitle,14,{b:true,c:[7,20,18]});gap(4);
+    doc.setFontSize(8);doc.setFont('helvetica','normal');doc.setTextColor(100,100,100);
+    doc.text(NL?'TEAL, gevestigd te Den Haag':'TEAL, established in The Hague',m,y);y+=6;
+
+    const avSections=NL?[
+      {h:'1. Toepasselijkheid',t:'Deze algemene voorwaarden zijn van toepassing op alle aanbiedingen, offertes en overeenkomsten van TEAL. Afwijkingen zijn alleen geldig indien schriftelijk overeengekomen.'},
+      {h:'2. Offertes en aanbiedingen',t:'Alle offertes zijn vrijblijvend en geldig gedurende 30 dagen na dagtekening, tenzij anders vermeld. Prijzen zijn exclusief BTW tenzij anders aangegeven.'},
+      {h:'3. Uitvoering van de overeenkomst',t:'TEAL voert de overeenkomst naar beste inzicht en vermogen uit. Opgegeven termijnen zijn indicatief en gelden niet als fatale termijnen. TEAL heeft het recht werkzaamheden door derden te laten uitvoeren.'},
+      {h:'4. Wijzigingen en meerwerk',t:'Wijzigingen in de opdracht na aanvang van de werkzaamheden worden via een schriftelijke change order overeengekomen. Meerwerk wordt op basis van nacalculatie in rekening gebracht tegen de in de offerte gehanteerde tarieven.'},
+      {h:'5. Betaling',t:'Betaling dient te geschieden binnen 14 dagen na factuurdatum, tenzij anders overeengekomen. Bij niet-tijdige betaling is de opdrachtgever van rechtswege in verzuim en is wettelijke handelsrente verschuldigd.'},
+      {h:'6. Intellectueel eigendom',t:'Artistieke concepten en ontwerpen van de opdrachtgever/kunstenaar blijven eigendom van de opdrachtgever. Technische methodologieën, constructieprincipes en productiemethoden ontwikkeld door TEAL blijven eigendom van TEAL.'},
+      {h:'7. Aansprakelijkheid',t:'De aansprakelijkheid van TEAL is beperkt tot het bedrag dat door de aansprakelijkheidsverzekering wordt uitgekeerd, dan wel tot maximaal het factuurbedrag van de betreffende opdracht. TEAL is nimmer aansprakelijk voor indirecte of gevolgschade.'},
+      {h:'8. Overmacht',t:'In geval van overmacht is TEAL gerechtigd de uitvoering op te schorten. Indien de overmachtssituatie langer dan 60 dagen voortduurt, hebben beide partijen het recht de overeenkomst te ontbinden.'},
+      {h:'9. Opzegging',t:'Bij voortijdige beëindiging door de opdrachtgever geldt een opzegtermijn van 14 dagen. Alle reeds uitgevoerde werkzaamheden en gemaakte kosten zijn volledig verschuldigd.'},
+      {h:'10. Geheimhouding',t:'Beide partijen zijn verplicht tot geheimhouding van alle vertrouwelijke informatie gedurende de overeenkomst en tot 3 jaar na beëindiging daarvan.'},
+      {h:'11. Toepasselijk recht en geschillen',t:'Op alle overeenkomsten is Nederlands recht van toepassing. Geschillen worden voorgelegd aan de bevoegde rechter te Den Haag.'}
+    ]:[
+      {h:'1. Applicability',t:'These general terms and conditions apply to all offers, quotations, and agreements by TEAL. Deviations are only valid if agreed in writing.'},
+      {h:'2. Quotations and offers',t:'All quotations are non-binding and valid for 30 days from the date of issue, unless otherwise stated. Prices are exclusive of VAT unless otherwise indicated.'},
+      {h:'3. Execution of the agreement',t:'TEAL shall execute the agreement to the best of its knowledge and ability. Stated deadlines are indicative and do not constitute firm deadlines. TEAL has the right to engage third parties.'},
+      {h:'4. Changes and additional work',t:'Changes to the assignment after commencement of work shall be agreed through a written change order. Additional work shall be charged on a time-and-materials basis at the rates stated in the quotation.'},
+      {h:'5. Payment',t:'Payment is due within 14 days of the invoice date, unless otherwise agreed. In case of late payment, the client is in default by operation of law and statutory commercial interest is due.'},
+      {h:'6. Intellectual property',t:'Artistic concepts and designs of the client/artist remain the property of the client. Technical methodologies, construction principles, and production methods developed by TEAL remain the property of TEAL.'},
+      {h:'7. Liability',t:'The liability of TEAL is limited to the amount paid out by the liability insurance, or up to the invoice amount of the relevant assignment. TEAL is never liable for indirect or consequential damages.'},
+      {h:'8. Force majeure',t:'In case of force majeure, TEAL is entitled to suspend execution. If the force majeure situation continues for more than 60 days, either party may terminate the agreement.'},
+      {h:'9. Termination',t:'In case of early termination by the client, a notice period of 14 days applies. All work performed and costs incurred are fully due.'},
+      {h:'10. Confidentiality',t:'Both parties are obliged to maintain confidentiality of all confidential information during the agreement and for 3 years after termination.'},
+      {h:'11. Applicable law and disputes',t:'All agreements are governed by Dutch law. Disputes shall be submitted to the competent court in The Hague.'}
+    ];
+
+    avSections.forEach(s=>{
+      checkPage(18);
+      doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(17,17,17);
+      doc.text(s.h,m,y);y+=5;
+      doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(60,60,60);
+      const lines=doc.splitTextToSize(s.t,pw);
+      doc.text(lines,m,y);y+=lines.length*3.5+4;
+    });
+  }
 
   addFooter();
   doc.save(`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}_v${versionFromRef}.pdf`);
