@@ -616,6 +616,7 @@ async function exportBudgetToSheets(d){
     }
   });
   const ssId=resp.result.spreadsheetId;
+  const sid=resp.result.sheets[0].properties.sheetId;
   const sheetName=NL?'Kostenoverzicht':'Cost Overview';
 
   // Write data
@@ -627,18 +628,18 @@ async function exportBudgetToSheets(d){
   // Format: bold headers, currency format, column widths
   const requests=[
     // Title row bold
-    {repeatCell:{range:{sheetId:0,startRowIndex:0,endRowIndex:1,startColumnIndex:0,endColumnIndex:5},
+    {repeatCell:{range:{sheetId:sid,startRowIndex:0,endRowIndex:1,startColumnIndex:0,endColumnIndex:5},
       cell:{userEnteredFormat:{textFormat:{bold:true,fontSize:14}}},fields:'userEnteredFormat.textFormat'}},
     // Section headers bold
     ...rows.reduce((acc,row,i)=>{
       const first=typeof row[0]==='string'?row[0]:'';
       if(first.startsWith('BLOK')||first.startsWith('BLOCK')||first==='BETAALSCHEMA'||first==='PAYMENT SCHEDULE'||first==='INTERNE MARGE'||first==='INTERNAL MARGIN'){
-        acc.push({repeatCell:{range:{sheetId:0,startRowIndex:i,endRowIndex:i+1,startColumnIndex:0,endColumnIndex:5},
+        acc.push({repeatCell:{range:{sheetId:sid,startRowIndex:i,endRowIndex:i+1,startColumnIndex:0,endColumnIndex:5},
           cell:{userEnteredFormat:{textFormat:{bold:true},backgroundColor:{red:.83,green:.93,blue:.9}}},fields:'userEnteredFormat(textFormat,backgroundColor)'}});
       }
       // Column header rows
       if((typeof row[1]==='string')&&(row[1]==='Rol'||row[1]==='Role'||row[1]==='Milestone'||row[1]==='Mijlpaal')){
-        acc.push({repeatCell:{range:{sheetId:0,startRowIndex:i,endRowIndex:i+1,startColumnIndex:0,endColumnIndex:5},
+        acc.push({repeatCell:{range:{sheetId:sid,startRowIndex:i,endRowIndex:i+1,startColumnIndex:0,endColumnIndex:5},
           cell:{userEnteredFormat:{textFormat:{bold:true},backgroundColor:{red:.94,green:.94,blue:.93}}},fields:'userEnteredFormat(textFormat,backgroundColor)'}});
       }
       return acc;
@@ -647,19 +648,19 @@ async function exportBudgetToSheets(d){
     ...rows.reduce((acc,row,i)=>{
       const fourth=typeof row[3]==='string'?row[3]:'';
       if(fourth.startsWith('TOTAAL')||fourth.startsWith('TOTAL')){
-        acc.push({repeatCell:{range:{sheetId:0,startRowIndex:i,endRowIndex:i+1,startColumnIndex:0,endColumnIndex:5},
+        acc.push({repeatCell:{range:{sheetId:sid,startRowIndex:i,endRowIndex:i+1,startColumnIndex:0,endColumnIndex:5},
           cell:{userEnteredFormat:{textFormat:{bold:true,fontSize:12,foregroundColor:{red:1,green:1,blue:1}},backgroundColor:{red:.03,green:.08,blue:.07}}},fields:'userEnteredFormat(textFormat,backgroundColor)'}});
       }
       return acc;
     },[]),
     // Column widths
-    {updateDimensionProperties:{range:{sheetId:0,dimension:'COLUMNS',startIndex:0,endIndex:1},properties:{pixelSize:220},fields:'pixelSize'}},
-    {updateDimensionProperties:{range:{sheetId:0,dimension:'COLUMNS',startIndex:1,endIndex:2},properties:{pixelSize:280},fields:'pixelSize'}},
-    {updateDimensionProperties:{range:{sheetId:0,dimension:'COLUMNS',startIndex:2,endIndex:3},properties:{pixelSize:80},fields:'pixelSize'}},
-    {updateDimensionProperties:{range:{sheetId:0,dimension:'COLUMNS',startIndex:3,endIndex:4},properties:{pixelSize:160},fields:'pixelSize'}},
-    {updateDimensionProperties:{range:{sheetId:0,dimension:'COLUMNS',startIndex:4,endIndex:5},properties:{pixelSize:160},fields:'pixelSize'}},
+    {updateDimensionProperties:{range:{sheetId:sid,dimension:'COLUMNS',startIndex:0,endIndex:1},properties:{pixelSize:220},fields:'pixelSize'}},
+    {updateDimensionProperties:{range:{sheetId:sid,dimension:'COLUMNS',startIndex:1,endIndex:2},properties:{pixelSize:280},fields:'pixelSize'}},
+    {updateDimensionProperties:{range:{sheetId:sid,dimension:'COLUMNS',startIndex:2,endIndex:3},properties:{pixelSize:80},fields:'pixelSize'}},
+    {updateDimensionProperties:{range:{sheetId:sid,dimension:'COLUMNS',startIndex:3,endIndex:4},properties:{pixelSize:160},fields:'pixelSize'}},
+    {updateDimensionProperties:{range:{sheetId:sid,dimension:'COLUMNS',startIndex:4,endIndex:5},properties:{pixelSize:160},fields:'pixelSize'}},
     // Number format for amount columns
-    {repeatCell:{range:{sheetId:0,startRowIndex:0,endRowIndex:values.length,startColumnIndex:3,endColumnIndex:5},
+    {repeatCell:{range:{sheetId:sid,startRowIndex:0,endRowIndex:values.length,startColumnIndex:3,endColumnIndex:5},
       cell:{userEnteredFormat:{numberFormat:{type:'CURRENCY',pattern:'\u20AC #,##0.00'}}},fields:'userEnteredFormat.numberFormat'}},
   ];
 
@@ -678,6 +679,9 @@ async function exportOfferteToDoc(d){
   const finLines=buildFinancialLines(d,totals,L);
   const activePhases=(d.phases||[]).filter(p=>p.enabled!==false);
   const fmtMonth=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{month:'long',year:'numeric'}):'';
+
+  const cl=d.client||{};
+  const proj=d.project||{};const cond=d.conditions||{};
 
   // Create doc
   const title=`TEAL_${NL?'Offerte':'Quotation'}_${(proj.name||'Draft').replace(/\s+/g,'_')}`;
@@ -711,7 +715,6 @@ async function exportOfferteToDoc(d){
 
   // Client + details
   ins(ll.klantLabel,true,12,'HEADING_2');nl();
-  const cl=d.client||{};
   if(cl.name){ins(cl.name);nl();}
   if(cl.contact){ins(cl.contact);nl();}
   if(cl.email){ins(cl.email);nl();}
@@ -719,7 +722,6 @@ async function exportOfferteToDoc(d){
   nl();
 
   ins(ll.detailsLabel,true,12,'HEADING_2');nl();
-  const proj=d.project||{};const cond=d.conditions||{};
   ins(`${ll.referentieLabel}: ${d.ref||''}`);nl();
   ins(`${ll.datumPrev}: ${fmtDateLong(proj.date)}`);nl();
   ins(`${ll.geldigTot}: ${cond.validity||30} ${NL?'dagen':'days'}`);nl();
@@ -926,7 +928,7 @@ function ExportDropdown({data:d,onGoogleExport}){
         onMouseOver={e=>e.currentTarget.style.background='var(--warm-grey)'}
         onMouseOut={e=>e.currentTarget.style.background='none'}
         onClick={()=>{setOpen(false);onGoogleExport('settings');}}
-      >\u2699 Google API instellingen</button>
+      >⚙ Google API instellingen</button>
     </div>}
   </div>;
 }
