@@ -44,7 +44,7 @@
   .bt{width:100%;border-collapse:collapse;font-size:13px}
   .bt th{text-align:left;padding:8px 12px;background:var(--warm-grey);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dark-grey);border-bottom:2px solid #d0d0ce}
   .bt td{padding:6px 12px;border-bottom:1px solid #eee;vertical-align:middle}
-  .bt tr:hover{background:var(--mint-light)}
+  .bt tbody tr:not(.ph):not(.sub):not(.tot):hover{background:var(--mint-light)}
   .bt .ph{background:var(--teal-dark);color:var(--teal-mint);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
   .bt .ph td{padding:10px 12px;border:0}
   .bt .sub{background:var(--warm-grey);font-weight:600}
@@ -177,6 +177,128 @@ const ASSEMBLE_PHASES=[
 
 const COLORS=['#D4ECE6','#B8D8CE','#9CCAB6','#80BC9E','#64AE86','#48A06E'];
 
+// ── i18n labels ──
+const I={
+  nl:{
+    offertetool:'Offerte Tool',deelLink:'Deel link',linkKopie:'Link gekopieerd',
+    nieuw:'Nieuw',nieuweOfferte:'Nieuwe offerte',hervat:'Hervat',naamloos:'Naamloos',
+    kiesType:'Kies het type project. De tool laadt de juiste fases, tarieven en betalingsschema.',
+    buildDesc:'Eenmalig technisch project (B0-B4)',assembleDesc:'Serieproductie (A0-A3)',
+    nieuweOfferteBtn:'Nieuwe offerte starten? Huidige data blijft in localStorage.',
+    // Tabs
+    tabProject:'Project',tabScope:'Scope',tabBudget:'Budget',tabPlanning:'Planning',tabPayment:'Betaling',tabPreview:'Preview',
+    // Project tab
+    projectGegevens:'Projectgegevens',projectnaam:'Projectnaam',referentie:'Referentienummer',datum:'Datum',
+    batchgrootte:'Batchgrootte (stuks)',klantGegevens:'Klantgegevens',bedrijfsnaam:'Bedrijfsnaam',
+    contactpersoon:'Contactpersoon',email:'E-mail',adres:'Adres',postcode:'Postcode',plaats:'Plaats',
+    omschrijving:'Omschrijving',projectOmschrijving:'Projectomschrijving',rolVanTeal:'Rol van TEAL',
+    nietInbegrepen:'Niet inbegrepen / Exclusions',beschrijvingPlaceholder:'Beschrijving van het project',
+    technischeScope:'Technische scope',
+    // Scope tab
+    scopePerFase:'Scope per fase',scopeHelp:'Beschrijf per fase de activiteiten. Dit verschijnt in de offerte.',
+    inzet:'Inzet',inzetPlaceholder:'bijv. 2 weken fulltime',activiteiten:'Activiteiten / beschrijving',
+    // Budget tab
+    blockATitle:'Block A: TEAL Fees (uren x tarief)',
+    blockAHelp:'Klantprijs = uren x extern tarief. Kostprijs = uren x intern tarief. Marge = verschil.',
+    omschrijvingCol:'Omschrijving',rol:'Rol',aantal:'Aantal',eenheid:'Eenh.',extTarief:'Ext. tarief',
+    klantprijs:'Klantprijs',intTarief:'Int. tarief',kostprijs:'Kostprijs',marge:'Marge',
+    subtotaal:'Subtotaal',contingency:'contingency',
+    totaalBlockA:'Totaal Block A',
+    blockB1Title:'Block B1: Inkoop (off-the-shelf)',blockB1Help:'Standaard catalogusartikelen. Handling fee automatisch op basis van inkoopwaarde.',
+    item:'Item',leverancier:'Leverancier',inkoopwaarde:'Inkoopwaarde',handlingPct:'Hand. %',handlingFee:'Handling fee',
+    subtotaalB1:'Subtotaal B1',inkooppost:'+ Inkooppost',
+    blockB2Title:'Block B2: Inkoop (maatwerk)',blockB2Help:'TEAL schrijft de spec, TEAL draagt het risico. Handling fee + risk buffer per regel.',
+    riskPct:'Risk %',riskBuffer:'Risk buffer',subtotaalB2:'Subtotaal B2',maatwerk:'+ Maatwerk inkooppost',
+    blockCTitle:'Block C: Onderaannemers (12% coordinatiemarge)',
+    onderaannemer:'Onderaannemer',bedrag:'Bedrag',coordPct:'Coord. %',coordFee:'Coord. fee',
+    subtotaalC:'Subtotaal C',plusOnderaannemer:'+ Onderaannemer',
+    totaalOverzicht:'Totaaloverzicht',
+    tealFees:'Block A: TEAL Fees',inkoopTotal:'Block B: Inkoop (incl. handling + risk)',
+    subTotal:'Block C: Onderaannemers (incl. coord.)',totaalExcl:'Totaal excl. BTW',
+    kost:'kost',margeLabel:'Marge',target:'Target: 25-35%',
+    // Planning tab
+    planningTitle:'Planning (indicatief)',fase:'Fase',startWeek:'Start (week)',duurWeken:'Duur (weken)',
+    startdatum:'Startdatum',weken:'weken',
+    // Payment tab
+    betalingsschema:'Betalingsschema',mijlpaal:'Mijlpaal',bedragExcl:'Bedrag excl. BTW',
+    richtdatum:'Richtdatum',totaal:'Totaal',plusMijlpaal:'+ Mijlpaal',
+    voorwaarden:'Voorwaarden',geldigheid:'Geldigheid (dagen)',betalingstermijn:'Betalingstermijn (dagen)',
+    garantie:'Garantie',garantieIncl:'Garantie opnemen',
+    avNL:'Algemene Voorwaarden TEAL bijvoegen (NL)',avEN:'General Terms & Conditions (EN)',
+    // Preview
+    offerte:'OFFERTE',projectDetails:'Projectgegevens',referentieLabel:'Referentie',
+    klant:'Klant',versieLabel:'Versie',geldigheidLabel:'Geldigheid',dagenNaDagtekening:'dagen na dagtekening',
+    betalingLabel:'Betaling',dagen:'dagen',
+    projectBeschrijving:'Projectomschrijving',rolTeal:'Rol van TEAL',exclusions:'Niet inbegrepen',
+    scopeAanpak:'Scope en aanpak',investering:'Investering',faseCol:'Fase',omschrijvingPrev:'Omschrijving',
+    bedragExclBTW:'Bedrag excl. BTW',materialenInkoop:'Materialen en inkoop',onderaanneming:'Onderaanneming',
+    totaalLabel:'TOTAAL',prijzenExclBTW:'Prijzen exclusief BTW.',reiskosten:'Reiskosten',
+    planningLabel:'Planning',duur:'Duur',indicatieveStart:'Indicatieve start',
+    betalingsschemaLabel:'Betalingsschema',betalingstermijnTekst:'Betalingstermijn: {n} dagen na factuurdatum.',
+    voorwaardenLabel:'Voorwaarden',geldigheidTekst:'{n} dagen na dagtekening',
+    garantieLabel:'Garantie',btwTekst:'Alle genoemde prijzen zijn exclusief BTW',
+    avTekst:'De Algemene Voorwaarden van TEAL B.V. zijn van toepassing (bijgevoegd).',
+    akkoord:'Akkoord',akkoordTekst:'Ondergetekende verklaart akkoord te gaan met de voorwaarden en werkzaamheden zoals beschreven in deze offerte.',
+    naamHandtekening:'Naam en handtekening',datumLabel:'Datum',
+  },
+  en:{
+    offertetool:'Quote Tool',deelLink:'Share link',linkKopie:'Link copied',
+    nieuw:'New',nieuweOfferte:'New quotation',hervat:'Resume',naamloos:'Unnamed',
+    kiesType:'Choose the project type. The tool loads the right phases, rates and payment schedule.',
+    buildDesc:'One-off technical project (B0-B4)',assembleDesc:'Serial production (A0-A3)',
+    nieuweOfferteBtn:'Start a new quotation? Current data remains in localStorage.',
+    tabProject:'Project',tabScope:'Scope',tabBudget:'Budget',tabPlanning:'Planning',tabPayment:'Payment',tabPreview:'Preview',
+    projectGegevens:'Project Details',projectnaam:'Project name',referentie:'Reference number',datum:'Date',
+    batchgrootte:'Batch size (units)',klantGegevens:'Client Details',bedrijfsnaam:'Company name',
+    contactpersoon:'Contact person',email:'E-mail',adres:'Address',postcode:'Postal code',plaats:'City',
+    omschrijving:'Description',projectOmschrijving:'Project description',rolVanTeal:"TEAL's Role",
+    nietInbegrepen:'Exclusions',beschrijvingPlaceholder:'Describe the project',
+    technischeScope:'Technical scope',
+    scopePerFase:'Scope per phase',scopeHelp:'Describe activities per phase. This appears in the quotation.',
+    inzet:'Effort',inzetPlaceholder:'e.g. 2 weeks full-time',activiteiten:'Activities / description',
+    blockATitle:'Block A: TEAL Fees (hours x rate)',
+    blockAHelp:'Client price = hours x external rate. Cost = hours x internal rate. Margin = difference.',
+    omschrijvingCol:'Description',rol:'Role',aantal:'Quantity',eenheid:'Unit',extTarief:'Ext. rate',
+    klantprijs:'Client price',intTarief:'Int. rate',kostprijs:'Cost price',marge:'Margin',
+    subtotaal:'Subtotal',contingency:'contingency',
+    totaalBlockA:'Total Block A',
+    blockB1Title:'Block B1: Procurement (off-the-shelf)',blockB1Help:'Standard catalogue items. Handling fee automatic based on purchase value.',
+    item:'Item',leverancier:'Supplier',inkoopwaarde:'Purchase value',handlingPct:'Hand. %',handlingFee:'Handling fee',
+    subtotaalB1:'Subtotal B1',inkooppost:'+ Procurement item',
+    blockB2Title:'Block B2: Procurement (custom)',blockB2Help:'TEAL writes the spec, TEAL carries the risk. Handling fee + risk buffer per line.',
+    riskPct:'Risk %',riskBuffer:'Risk buffer',subtotaalB2:'Subtotal B2',maatwerk:'+ Custom procurement item',
+    blockCTitle:'Block C: Subcontractors (12% coordination margin)',
+    onderaannemer:'Subcontractor',bedrag:'Amount',coordPct:'Coord. %',coordFee:'Coord. fee',
+    subtotaalC:'Subtotal C',plusOnderaannemer:'+ Subcontractor',
+    totaalOverzicht:'Summary',
+    tealFees:'Block A: TEAL Fees',inkoopTotal:'Block B: Procurement (incl. handling + risk)',
+    subTotal:'Block C: Subcontractors (incl. coord.)',totaalExcl:'Total excl. VAT',
+    kost:'cost',margeLabel:'Margin',target:'Target: 25-35%',
+    planningTitle:'Planning (indicative)',fase:'Phase',startWeek:'Start (week)',duurWeken:'Duration (weeks)',
+    startdatum:'Start date',weken:'weeks',
+    betalingsschema:'Payment Schedule',mijlpaal:'Milestone',bedragExcl:'Amount ex. VAT',
+    richtdatum:'Target date',totaal:'Total',plusMijlpaal:'+ Milestone',
+    voorwaarden:'Terms & Conditions',geldigheid:'Validity (days)',betalingstermijn:'Payment term (days)',
+    garantie:'Warranty',garantieIncl:'Include warranty',
+    avNL:'Algemene Voorwaarden TEAL bijvoegen (NL)',avEN:'General Terms & Conditions (EN)',
+    offerte:'QUOTATION',projectDetails:'Project Details',referentieLabel:'Reference',
+    klant:'Client',versieLabel:'Version',geldigheidLabel:'Validity',dagenNaDagtekening:'days from date of issue',
+    betalingLabel:'Payment',dagen:'days',
+    projectBeschrijving:'Project Description',rolTeal:"TEAL's Role",exclusions:'Exclusions',
+    scopeAanpak:'Scope of Work',investering:'Investment',faseCol:'Phase',omschrijvingPrev:'Description',
+    bedragExclBTW:'Amount ex. VAT (\u20AC)',materialenInkoop:'Materials and procurement',onderaanneming:'Subcontractors',
+    totaalLabel:'TOTAL',prijzenExclBTW:'Prices exclude VAT.',reiskosten:'Travel',
+    planningLabel:'Planning',duur:'Duration',indicatieveStart:'Indicative start',
+    betalingsschemaLabel:'Payment Schedule',betalingstermijnTekst:'Payment due within {n} days of invoice date.',
+    voorwaardenLabel:'Terms & Conditions',geldigheidTekst:'{n} days from date of issue',
+    garantieLabel:'Warranty',btwTekst:'All prices exclude VAT',
+    avTekst:'The General Terms and Conditions of TEAL B.V. apply (attached).',
+    akkoord:'Approval',akkoordTekst:'By signing below, the client confirms this quotation and authorizes TEAL to proceed.',
+    naamHandtekening:'Name and signature',datumLabel:'Date',
+  },
+};
+const L_=lang=>I[lang]||I.nl;
+
 // ── Utils ──
 const fmt=n=>new Intl.NumberFormat('nl-NL',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n||0);
 const fmtE=n=>`\u20AC ${fmt(n)}`;
@@ -195,26 +317,32 @@ function marginStatus(p){return p>=.20?'ok':p>=.10?'warn':'bad'}
 
 function createProject(type){
   const tpl=type==='build'?BUILD_PHASES:ASSEMBLE_PHASES;
-  const phases=tpl.map(p=>({
-    ...p,startWeek:0,durationWeeks:4,
-    description:{...p.desc},
-    effort:'',
-    contingency:.10,
-    items:p.items.map(it=>{
-      const r=roleMap[it.role];
-      return{id:uid(),role:it.role,desc:{...it.desc},qty:it.qty||0,extRate:r?.ext||0,intRate:r?.int||0,unit:r?.unit||'uur'};
-    }),
-  }));
+  let cumulWeek=0;
+  const phases=tpl.map(p=>{
+    const dur=4;
+    const sw=cumulWeek;
+    cumulWeek+=dur;
+    return{
+      ...p,enabled:true,customName:null,startWeek:sw,durationWeeks:dur,
+      description:{...p.desc},
+      effort:'',
+      contingency:.10,
+      items:p.items.map(it=>{
+        const r=roleMap[it.role];
+        return{id:uid(),role:it.role,desc:{...it.desc},qty:it.qty||0,extRate:r?.ext||0,intRate:r?.int||0,unit:r?.unit||'uur'};
+      }),
+    };
+  });
   return{
     v:3,type,lang:'nl',
     ref:genRef(type),
-    project:{name:'',date:new Date().toISOString().slice(0,10),version:'1.0',
+    project:{name:'',date:new Date().toISOString().slice(0,10),
       description:{nl:'',en:''},tealRole:{nl:'',en:''},exclusions:{nl:'',en:''}},
     client:{name:'',contact:'',email:'',addr:'',zip:'',city:''},
     phases,
-    procOTS:[],   // off-the-shelf procurement
-    procCustom:[], // custom/maatwerk procurement
-    subs:[],       // subcontractors
+    procOTS:[],
+    procCustom:[],
+    subs:[],
     travel:{rateNL:.50,note:{nl:'Reiskosten: \u20AC 0,50/km',en:'Travel: \u20AC 0.50/km'}},
     payment:{milestones:type==='build'
       ?[{name:{nl:'Opdrachtverstrekking',en:'Project start'},pct:30,date:''},{name:{nl:'Gereedmelding productie',en:'Production complete'},pct:40,date:''},{name:{nl:'Oplevering',en:'Delivery'},pct:30,date:''}]
@@ -222,6 +350,7 @@ function createProject(type){
     },
     conditions:{validity:30,paymentTerm:14,
       warranty:{nl:'2 jaar na oplevering',en:'2 years after delivery'},
+      warrantyEnabled:false,
       avNL:true,avEN:false,
     },
     batchSize:type==='assemble'?100:0,
@@ -230,8 +359,9 @@ function createProject(type){
 
 // ── Totals helper ──
 function calcTotals(d){
-  // Block A: TEAL fees
+  // Block A: TEAL fees (skip disabled phases)
   const phaseData=d.phases.map(p=>{
+    if(p.enabled===false)return{client:0,cost:0,cont:0,total:0};
     const client=p.items.reduce((s,it)=>s+(it.qty||0)*(it.extRate||0),0);
     const cost=p.items.reduce((s,it)=>s+(it.qty||0)*(it.intRate||0),0);
     const cont=client*(p.contingency||0);
@@ -286,14 +416,18 @@ const shareUrl=d=>{const c=LZString.compressToEncodedURIComponent(JSON.stringify
 
 // ── Components ──
 function Header({data:d,onPdf,setData}){
+  const ll=d?L_(d.lang):I.nl;
   return <div className="hdr">
     <div className="hdr-left">
       <Logo color="#D4ECE6" h={28}/>
-      <span className="sub">Offerte Tool</span>
+      <span className="sub">{ll.offertetool}</span>
     </div>
     <div className="flex g8">
-      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>setData({...d,lang:d.lang==='nl'?'en':'nl'})}>{d.lang==='nl'?'EN':'NL'}</button>}
-      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>{navigator.clipboard.writeText(shareUrl(d));alert('Link gekopieerd')}}>Deel link</button>}
+      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>{
+        const newLang=d.lang==='nl'?'en':'nl';
+        setData({...d,lang:newLang,conditions:{...d.conditions,avNL:newLang==='nl',avEN:newLang==='en'}});
+      }}>{d.lang==='nl'?'EN':'NL'}</button>}
+      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>{navigator.clipboard.writeText(shareUrl(d));alert(ll.linkKopie)}}>{ll.deelLink}</button>}
       {d&&<button className="btn btn-s" onClick={onPdf}>PDF</button>}
     </div>
   </div>;
@@ -303,63 +437,63 @@ function TabNav({tabs,active,onChange}){
   return <div className="tabs">{tabs.map(tb=><button key={tb.id} className={`tab ${active===tb.id?'on':''}`} onClick={()=>onChange(tb.id)}>{tb.label}</button>)}</div>;
 }
 
-function Start({onSelect}){
+function Start({onSelect,lang}){
   const recent=load();
+  const ll=L_(lang||'nl');
   return <div className="start">
     <Logo color="#071412" h={48}/>
-    <h2 style={{marginTop:16}}>Nieuwe offerte</h2>
-    <p>Kies het type project. De tool laadt de juiste fases, tarieven en betalingsschema.</p>
+    <h2 style={{marginTop:16}}>{ll.nieuweOfferte}</h2>
+    <p>{ll.kiesType}</p>
     <div className="tsel">
-      <div className="tc" onClick={()=>onSelect('build')}><h3>Build</h3><p>Eenmalig technisch project (B0-B4)</p></div>
-      <div className="tc" onClick={()=>onSelect('assemble')}><h3>Assemble</h3><p>Serieproductie (A0-A3)</p></div>
+      <div className="tc" onClick={()=>onSelect('build')}><h3>Build</h3><p>{ll.buildDesc}</p></div>
+      <div className="tc" onClick={()=>onSelect('assemble')}><h3>Assemble</h3><p>{ll.assembleDesc}</p></div>
     </div>
-    {recent&&<div className="mt24"><button className="btn btn-g" onClick={()=>onSelect('load')}>Hervat: {recent.project?.name||'Naamloos'} ({recent.type})</button></div>}
+    {recent&&<div className="mt24"><button className="btn btn-g" onClick={()=>onSelect('load')}>{ll.hervat}: {recent.project?.name||ll.naamloos} ({recent.type})</button></div>}
   </div>;
 }
 
 // ── Project Tab ──
 function ProjectTab({data:d,set}){
-  const L=d.lang;
+  const L=d.lang;const ll=L_(L);
   const up=(k,v)=>set({...d,project:{...d.project,[k]:v}});
   const upC=(k,v)=>set({...d,client:{...d.client,[k]:v}});
   const upLang=(k,v)=>{const o=d.project[k];const n=typeof o==='string'?{nl:o,en:o}:{...o};n[L]=v;up(k,n)};
   return <>
     <div className="card">
-      <div className="card-h">Projectgegevens</div>
+      <div className="card-h">{ll.projectGegevens}</div>
       <div className="row">
-        <div className="fg"><label>Projectnaam</label><input value={d.project.name} onChange={e=>up('name',e.target.value)} placeholder="Naam project"/></div>
-        <div className="fg"><label>Referentienummer</label><input value={d.ref} onChange={e=>set({...d,ref:e.target.value})}/></div>
+        <div className="fg"><label>{ll.projectnaam}</label><input value={d.project.name} onChange={e=>up('name',e.target.value)} placeholder={ll.projectnaam}/></div>
+        <div className="fg"><label>{ll.referentie}</label><input value={d.ref} onChange={e=>set({...d,ref:e.target.value})}/></div>
       </div>
       <div className="row">
-        <div className="fg"><label>Datum</label><input type="date" value={d.project.date} onChange={e=>up('date',e.target.value)}/></div>
-        <div className="fg"><label>Versie</label><input value={d.project.version} onChange={e=>up('version',e.target.value)}/></div>
+        <div className="fg"><label>{ll.datum}</label><input type="date" value={d.project.date} onChange={e=>up('date',e.target.value)}/></div>
       </div>
       {d.type==='assemble'&&<div className="row">
-        <div className="fg"><label>Batchgrootte (stuks)</label><input type="number" value={d.batchSize||''} onChange={e=>set({...d,batchSize:parseInt(e.target.value)||0})}/></div>
+        <div className="fg"><label>{ll.batchgrootte}</label><input type="number" value={d.batchSize||''} onChange={e=>set({...d,batchSize:parseInt(e.target.value)||0})}/></div>
       </div>}
     </div>
     <div className="card">
-      <div className="card-h">Klantgegevens</div>
+      <div className="card-h">{ll.klantGegevens}</div>
       <div className="row">
-        <div className="fg"><label>Bedrijfsnaam</label><input value={d.client.name} onChange={e=>upC('name',e.target.value)}/></div>
-        <div className="fg"><label>Contactpersoon</label><input value={d.client.contact} onChange={e=>upC('contact',e.target.value)}/></div>
+        <div className="fg"><label>{ll.bedrijfsnaam}</label><input value={d.client.name} onChange={e=>upC('name',e.target.value)}/></div>
+        <div className="fg"><label>{ll.contactpersoon}</label><input value={d.client.contact} onChange={e=>upC('contact',e.target.value)}/></div>
       </div>
       <div className="row">
-        <div className="fg"><label>E-mail</label><input value={d.client.email} onChange={e=>upC('email',e.target.value)}/></div>
-        <div className="fg"><label>Adres</label><input value={d.client.addr} onChange={e=>upC('addr',e.target.value)}/></div>
+        <div className="fg"><label>{ll.email}</label><input value={d.client.email} onChange={e=>upC('email',e.target.value)}/></div>
+        <div className="fg"><label>{ll.adres}</label><input value={d.client.addr} onChange={e=>upC('addr',e.target.value)}/></div>
       </div>
       <div className="row">
-        <div className="fg"><label>Postcode</label><input value={d.client.zip} onChange={e=>upC('zip',e.target.value)}/></div>
-        <div className="fg"><label>Plaats</label><input value={d.client.city} onChange={e=>upC('city',e.target.value)}/></div>
+        <div className="fg"><label>{ll.postcode}</label><input value={d.client.zip} onChange={e=>upC('zip',e.target.value)}/></div>
+        <div className="fg"><label>{ll.plaats}</label><input value={d.client.city} onChange={e=>upC('city',e.target.value)}/></div>
       </div>
     </div>
     <div className="card">
-      <div className="card-h">Omschrijving ({L.toUpperCase()})</div>
-      <div className="row full"><div className="fg"><label>Projectomschrijving</label>
-        <textarea value={t(d.project.description,L)} onChange={e=>upLang('description',e.target.value)} placeholder="Beschrijving van het project"/></div></div>
-      <div className="row full"><div className="fg"><label>Rol van TEAL</label>
-        <textarea value={t(d.project.tealRole,L)} onChange={e=>upLang('tealRole',e.target.value)} placeholder="Technische scope"/></div></div>
-      <div className="row full"><div className="fg"><label>Niet inbegrepen / Exclusions</label>
+      <div className="card-h">{ll.omschrijving} ({L.toUpperCase()})</div>
+      <div className="row full"><div className="fg"><label>{ll.projectOmschrijving}</label>
+        <textarea value={t(d.project.description,L)} onChange={e=>upLang('description',e.target.value)} placeholder={ll.beschrijvingPlaceholder}/></div></div>
+      <div className="row full"><div className="fg"><label>{ll.rolVanTeal}</label>
+        <textarea value={t(d.project.tealRole,L)} onChange={e=>upLang('tealRole',e.target.value)} placeholder={ll.technischeScope}/></div></div>
+      <div className="row full"><div className="fg"><label>{ll.nietInbegrepen}</label>
         <textarea value={t(d.project.exclusions,L)} onChange={e=>upLang('exclusions',e.target.value)} rows={3}/></div></div>
     </div>
   </>;
@@ -367,22 +501,27 @@ function ProjectTab({data:d,set}){
 
 // ── Scope Tab ──
 function ScopeTab({data:d,set}){
-  const L=d.lang;
+  const L=d.lang;const ll=L_(L);
   const upPhase=(i,k,v)=>{const p=[...d.phases];p[i]={...p[i],[k]:v};set({...d,phases:p})};
   const upDesc=(i,v)=>{const p=[...d.phases];const o=p[i].description||{nl:'',en:''};const n=typeof o==='string'?{nl:o,en:o}:{...o};n[L]=v;p[i]={...p[i],description:n};set({...d,phases:p})};
+  const phaseName=(ph)=>ph.customName||t(ph.name,L);
   return <div className="card">
-    <div className="card-h">Scope per fase ({L.toUpperCase()})</div>
-    <p className="sm muted mb16">Beschrijf per fase de activiteiten. Dit verschijnt in de offerte.</p>
-    {d.phases.map((ph,i)=><div key={ph.id} style={{marginBottom:24,paddingBottom:16,borderBottom:'1px solid #eee'}}>
+    <div className="card-h">{ll.scopePerFase} ({L.toUpperCase()})</div>
+    <p className="sm muted mb16">{ll.scopeHelp}</p>
+    {d.phases.map((ph,i)=><div key={ph.id} style={{marginBottom:24,paddingBottom:16,borderBottom:'1px solid #eee',opacity:ph.enabled===false?.45:1}}>
       <div className="between mb16">
-        <strong>{ph.code} - {t(ph.name,L)}</strong>
+        <div className="flex g8" style={{alignItems:'center'}}>
+          <input type="checkbox" checked={ph.enabled!==false} onChange={e=>upPhase(i,'enabled',e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/>
+          <span style={{fontWeight:600,color:'var(--dark-grey)',fontSize:12}}>{ph.code}</span>
+          <input value={phaseName(ph)} onChange={e=>upPhase(i,'customName',e.target.value)} style={{border:'1px solid transparent',borderRadius:3,padding:'4px 8px',fontWeight:600,fontSize:14,background:'transparent',width:300}} onFocus={e=>{e.target.style.borderColor='#d0d0ce';e.target.style.background='#fff'}} onBlur={e=>{e.target.style.borderColor='transparent';e.target.style.background='transparent'}}/>
+        </div>
         <div className="fg" style={{width:200}}>
-          <label>Inzet</label>
-          <input value={ph.effort||''} onChange={e=>upPhase(i,'effort',e.target.value)} placeholder="bijv. 2 weken fulltime"/>
+          <label>{ll.inzet}</label>
+          <input value={ph.effort||''} onChange={e=>upPhase(i,'effort',e.target.value)} placeholder={ll.inzetPlaceholder}/>
         </div>
       </div>
       <div className="fg">
-        <label>Activiteiten / beschrijving</label>
+        <label>{ll.activiteiten}</label>
         <textarea value={t(ph.description,L)} onChange={e=>upDesc(i,e.target.value)} rows={3}/>
       </div>
     </div>)}
@@ -421,19 +560,26 @@ function BudgetTab({data:d,set}){
   const addSub=()=>set({...d,subs:[...(d.subs||[]),{id:uid(),desc:'',company:'',amount:0,coordPct:COORD_MARGIN}]});
   const rmSub=i=>set({...d,subs:(d.subs||[]).filter((_,idx)=>idx!==i)});
 
+  const ll=L_(L);
+  const phaseName=(ph)=>ph.customName||t(ph.name,L);
+
   return <>
     {/* Block A */}
     <div className="card">
-      <div className="card-h">Block A: TEAL Fees (uren x tarief)</div>
-      <p className="sm muted mb16">Klantprijs = uren x extern tarief. Kostprijs = uren x intern tarief. Marge = verschil.</p>
+      <div className="card-h">{ll.blockATitle}</div>
+      <p className="sm muted mb16">{ll.blockAHelp}</p>
       <table className="bt">
-        <thead><tr><th style={{width:'20%'}}>Omschrijving</th><th style={{width:'12%'}}>Rol</th><th style={{width:'7%'}}>Aantal</th><th style={{width:'7%'}}>Eenh.</th><th style={{width:'9%'}}>Ext. tarief</th><th style={{width:'10%'}}>Klantprijs</th><th style={{width:'9%'}}>Int. tarief</th><th style={{width:'10%'}}>Kostprijs</th><th style={{width:'10%'}}>Marge</th><th style={{width:'4%'}}></th></tr></thead>
+        <thead><tr><th style={{width:'20%'}}>{ll.omschrijvingCol}</th><th style={{width:'12%'}}>{ll.rol}</th><th style={{width:'7%'}}>{ll.aantal}</th><th style={{width:'7%'}}>{ll.eenheid}</th><th style={{width:'9%'}}>{ll.extTarief}</th><th style={{width:'10%'}}>{ll.klantprijs}</th><th style={{width:'9%'}}>{ll.intTarief}</th><th style={{width:'10%'}}>{ll.kostprijs}</th><th style={{width:'10%'}}>{ll.marge}</th><th style={{width:'4%'}}></th></tr></thead>
         <tbody>
           {d.phases.map((ph,pi)=><React.Fragment key={ph.id}>
-            <tr className="ph"><td colSpan={9}>{ph.code} - {t(ph.name,L)}
-              <span style={{opacity:.6,marginLeft:12,fontSize:11}}>contingency: <input type="number" value={Math.round((ph.contingency||0)*100)} onChange={e=>upCont(pi,(parseInt(e.target.value)||0)/100)} style={{width:40,textAlign:'center',background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.2)',borderRadius:3,color:'var(--teal-mint)',fontSize:11,padding:'2px 4px'}}/>%</span>
+            <tr className="ph" style={{opacity:ph.enabled===false?.5:1}}><td colSpan={9}>
+              <span className="flex g8" style={{alignItems:'center'}}>
+                <input type="checkbox" checked={ph.enabled!==false} onChange={e=>{const p=[...d.phases];p[pi]={...p[pi],enabled:e.target.checked};set({...d,phases:p})}} style={{width:14,height:14,cursor:'pointer'}}/>
+                {ph.code} - {phaseName(ph)}
+              </span>
+              <span style={{opacity:.6,marginLeft:12,fontSize:11}}>{ll.contingency}: <input type="number" value={Math.round((ph.contingency||0)*100)} onChange={e=>upCont(pi,(parseInt(e.target.value)||0)/100)} style={{width:40,textAlign:'center',background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.2)',borderRadius:3,color:'var(--teal-mint)',fontSize:11,padding:'2px 4px'}}/>%</span>
             </td><td style={{textAlign:'right'}}><button className="btn btn-sm" style={{background:'rgba(212,236,230,.15)',color:'var(--teal-mint)',border:0}} onClick={()=>addItem(pi)}>+</button></td></tr>
-            {ph.items.map((it,ii)=>{
+            {ph.enabled!==false&&ph.items.map((it,ii)=>{
               const cp=(it.qty||0)*(it.extRate||0);
               const ip=(it.qty||0)*(it.intRate||0);
               return <tr key={it.id}>
@@ -449,14 +595,14 @@ function BudgetTab({data:d,set}){
                 <td className="tr mono" style={{color:cp-ip>=0?'var(--green)':'var(--red)'}}>{fmt(cp-ip)}</td>
                 <td className="tr"><button className="btn btn-sm btn-g" onClick={()=>rmItem(pi,ii)}>&times;</button></td>
               </tr>})}
-            <tr className="sub"><td colSpan={5}>Subtotaal {ph.code}</td>
+            {ph.enabled!==false&&<tr className="sub"><td colSpan={5}>{ll.subtotaal} {ph.code}</td>
               <td className="tr mono">{fmt(totals.phaseData[pi]?.client||0)}</td><td></td>
               <td className="tr mono">{fmt(totals.phaseData[pi]?.cost||0)}</td>
-              <td className="tr mono">{fmt((totals.phaseData[pi]?.client||0)-(totals.phaseData[pi]?.cost||0))}</td><td></td></tr>
-            {(ph.contingency||0)>0&&<tr className="sub"><td colSpan={5} className="sm">Contingency {Math.round((ph.contingency||0)*100)}%</td>
+              <td className="tr mono">{fmt((totals.phaseData[pi]?.client||0)-(totals.phaseData[pi]?.cost||0))}</td><td></td></tr>}
+            {ph.enabled!==false&&(ph.contingency||0)>0&&<tr className="sub"><td colSpan={5} className="sm">{ll.contingency} {Math.round((ph.contingency||0)*100)}%</td>
               <td className="tr mono sm">{fmt(totals.phaseData[pi]?.cont||0)}</td><td colSpan={4}></td></tr>}
           </React.Fragment>)}
-          <tr className="tot"><td colSpan={5}>Totaal Block A</td>
+          <tr className="tot"><td colSpan={5}>{ll.totaalBlockA}</td>
             <td className="tr mono">{fmtE(totals.blockAClient)}</td><td></td>
             <td className="tr mono">{fmtE(totals.blockACost)}</td>
             <td className="tr mono">{fmtE(totals.blockAClient-totals.blockACost)}</td><td></td></tr>
@@ -466,10 +612,10 @@ function BudgetTab({data:d,set}){
 
     {/* Block B1: Off-the-shelf */}
     <div className="card">
-      <div className="card-h">Block B1: Inkoop (off-the-shelf)</div>
-      <p className="sm muted mb16">Standaard catalogusartikelen. Handling fee automatisch op basis van inkoopwaarde.</p>
+      <div className="card-h">{ll.blockB1Title}</div>
+      <p className="sm muted mb16">{ll.blockB1Help}</p>
       <table className="bt">
-        <thead><tr><th>Item</th><th style={{width:'14%'}}>Leverancier</th><th style={{width:'12%'}}>Inkoopwaarde</th><th style={{width:'8%'}}>Hand. %</th><th style={{width:'12%'}}>Handling fee</th><th style={{width:'12%'}}>Klantprijs</th><th style={{width:'4%'}}></th></tr></thead>
+        <thead><tr><th>{ll.item}</th><th style={{width:'14%'}}>{ll.leverancier}</th><th style={{width:'12%'}}>{ll.inkoopwaarde}</th><th style={{width:'8%'}}>{ll.handlingPct}</th><th style={{width:'12%'}}>{ll.handlingFee}</th><th style={{width:'12%'}}>{ll.klantprijs}</th><th style={{width:'4%'}}></th></tr></thead>
         <tbody>
           {(d.procOTS||[]).map((it,i)=>{
             const h=(it.amount||0)*(it.handlingPct||0);
@@ -482,18 +628,18 @@ function BudgetTab({data:d,set}){
               <td className="tr mono">{fmt((it.amount||0)+h)}</td>
               <td><button className="btn btn-sm btn-g" onClick={()=>rmOTS(i)}>&times;</button></td>
             </tr>})}
-          <tr className="sub"><td colSpan={2}>Subtotaal B1</td><td className="tr mono">{fmt(totals.b1Purchase)}</td><td></td><td className="tr mono">{fmt(totals.b1Handling)}</td><td className="tr mono">{fmt(totals.b1Purchase+totals.b1Handling)}</td><td></td></tr>
+          <tr className="sub"><td colSpan={2}>{ll.subtotaalB1}</td><td className="tr mono">{fmt(totals.b1Purchase)}</td><td></td><td className="tr mono">{fmt(totals.b1Handling)}</td><td className="tr mono">{fmt(totals.b1Purchase+totals.b1Handling)}</td><td></td></tr>
         </tbody>
       </table>
-      <button className="btn btn-sm btn-g mt16" onClick={addOTS}>+ Inkooppost</button>
+      <button className="btn btn-sm btn-g mt16" onClick={addOTS}>{ll.inkooppost}</button>
     </div>
 
     {/* Block B2: Custom */}
     <div className="card">
-      <div className="card-h">Block B2: Inkoop (maatwerk)</div>
-      <p className="sm muted mb16">TEAL schrijft de spec, TEAL draagt het risico. Handling fee + risk buffer per regel.</p>
+      <div className="card-h">{ll.blockB2Title}</div>
+      <p className="sm muted mb16">{ll.blockB2Help}</p>
       <table className="bt">
-        <thead><tr><th>Item</th><th style={{width:'12%'}}>Leverancier</th><th style={{width:'10%'}}>Inkoopwaarde</th><th style={{width:'7%'}}>Hand. %</th><th style={{width:'9%'}}>Hand. fee</th><th style={{width:'7%'}}>Risk %</th><th style={{width:'9%'}}>Risk buffer</th><th style={{width:'10%'}}>Klantprijs</th><th style={{width:'4%'}}></th></tr></thead>
+        <thead><tr><th>{ll.item}</th><th style={{width:'12%'}}>{ll.leverancier}</th><th style={{width:'10%'}}>{ll.inkoopwaarde}</th><th style={{width:'7%'}}>{ll.handlingPct}</th><th style={{width:'9%'}}>{ll.handlingFee}</th><th style={{width:'7%'}}>{ll.riskPct}</th><th style={{width:'9%'}}>{ll.riskBuffer}</th><th style={{width:'10%'}}>{ll.klantprijs}</th><th style={{width:'4%'}}></th></tr></thead>
         <tbody>
           {(d.procCustom||[]).map((it,i)=>{
             const h=(it.amount||0)*(it.handlingPct||0);
@@ -509,17 +655,17 @@ function BudgetTab({data:d,set}){
               <td className="tr mono">{fmt((it.amount||0)+h+r)}</td>
               <td><button className="btn btn-sm btn-g" onClick={()=>rmCust(i)}>&times;</button></td>
             </tr>})}
-          <tr className="sub"><td colSpan={2}>Subtotaal B2</td><td className="tr mono">{fmt(totals.b2Purchase)}</td><td></td><td className="tr mono">{fmt(totals.b2Handling)}</td><td></td><td className="tr mono">{fmt(totals.b2Risk)}</td><td className="tr mono">{fmt(totals.b2Purchase+totals.b2Handling+totals.b2Risk)}</td><td></td></tr>
+          <tr className="sub"><td colSpan={2}>{ll.subtotaalB2}</td><td className="tr mono">{fmt(totals.b2Purchase)}</td><td></td><td className="tr mono">{fmt(totals.b2Handling)}</td><td></td><td className="tr mono">{fmt(totals.b2Risk)}</td><td className="tr mono">{fmt(totals.b2Purchase+totals.b2Handling+totals.b2Risk)}</td><td></td></tr>
         </tbody>
       </table>
-      <button className="btn btn-sm btn-g mt16" onClick={addCust}>+ Maatwerk inkooppost</button>
+      <button className="btn btn-sm btn-g mt16" onClick={addCust}>{ll.maatwerk}</button>
     </div>
 
     {/* Block C: Subcontractors */}
     <div className="card">
-      <div className="card-h">Block C: Onderaannemers (12% coordinatiemarge)</div>
+      <div className="card-h">{ll.blockCTitle}</div>
       <table className="bt">
-        <thead><tr><th>Omschrijving</th><th style={{width:'14%'}}>Onderaannemer</th><th style={{width:'12%'}}>Bedrag</th><th style={{width:'8%'}}>Coord. %</th><th style={{width:'12%'}}>Coord. fee</th><th style={{width:'12%'}}>Klantprijs</th><th style={{width:'4%'}}></th></tr></thead>
+        <thead><tr><th>{ll.omschrijvingCol}</th><th style={{width:'14%'}}>{ll.onderaannemer}</th><th style={{width:'12%'}}>{ll.bedrag}</th><th style={{width:'8%'}}>{ll.coordPct}</th><th style={{width:'12%'}}>{ll.coordFee}</th><th style={{width:'12%'}}>{ll.klantprijs}</th><th style={{width:'4%'}}></th></tr></thead>
         <tbody>
           {(d.subs||[]).map((it,i)=>{
             const c=(it.amount||0)*(it.coordPct||COORD_MARGIN);
@@ -532,26 +678,26 @@ function BudgetTab({data:d,set}){
               <td className="tr mono">{fmt((it.amount||0)+c)}</td>
               <td><button className="btn btn-sm btn-g" onClick={()=>rmSub(i)}>&times;</button></td>
             </tr>})}
-          <tr className="sub"><td colSpan={2}>Subtotaal C</td><td className="tr mono">{fmt(totals.subFees)}</td><td></td><td className="tr mono">{fmt(totals.subCoord)}</td><td className="tr mono">{fmt(totals.subClient)}</td><td></td></tr>
+          <tr className="sub"><td colSpan={2}>{ll.subtotaalC}</td><td className="tr mono">{fmt(totals.subFees)}</td><td></td><td className="tr mono">{fmt(totals.subCoord)}</td><td className="tr mono">{fmt(totals.subClient)}</td><td></td></tr>
         </tbody>
       </table>
-      <button className="btn btn-sm btn-g mt16" onClick={addSub}>+ Onderaannemer</button>
+      <button className="btn btn-sm btn-g mt16" onClick={addSub}>{ll.plusOnderaannemer}</button>
     </div>
 
     {/* Totals + Margin */}
     <div className="card">
-      <div className="card-h">Totaaloverzicht</div>
+      <div className="card-h">{ll.totaalOverzicht}</div>
       <table className="bt">
         <tbody>
-          <tr><td>Block A: TEAL Fees</td><td className="tr mono">{fmtE(totals.blockAClient)}</td><td className="tr mono muted">(kost: {fmtE(totals.blockACost)})</td></tr>
-          <tr><td>Block B: Inkoop (incl. handling + risk)</td><td className="tr mono">{fmtE(totals.procClient)}</td><td className="tr mono muted">(kost: {fmtE(totals.procCost)})</td></tr>
-          <tr><td>Block C: Onderaannemers (incl. coord.)</td><td className="tr mono">{fmtE(totals.subClient)}</td><td className="tr mono muted">(kost: {fmtE(totals.subFees)})</td></tr>
-          <tr className="tot"><td>Totaal excl. BTW</td><td className="tr mono">{fmtE(totals.grandClient)}</td><td className="tr mono" style={{color:'var(--teal-mint)'}}>(marge: {fmtE(totals.grandClient-totals.grandCost)})</td></tr>
+          <tr><td>{ll.tealFees}</td><td className="tr mono">{fmtE(totals.blockAClient)}</td><td className="tr mono muted">({ll.kost}: {fmtE(totals.blockACost)})</td></tr>
+          <tr><td>{ll.inkoopTotal}</td><td className="tr mono">{fmtE(totals.procClient)}</td><td className="tr mono muted">({ll.kost}: {fmtE(totals.procCost)})</td></tr>
+          <tr><td>{ll.subTotal}</td><td className="tr mono">{fmtE(totals.subClient)}</td><td className="tr mono muted">({ll.kost}: {fmtE(totals.subFees)})</td></tr>
+          <tr className="tot"><td>{ll.totaalExcl}</td><td className="tr mono">{fmtE(totals.grandClient)}</td><td className="tr mono" style={{color:'var(--teal-mint)'}}>({ll.margeLabel}: {fmtE(totals.grandClient-totals.grandCost)})</td></tr>
         </tbody>
       </table>
       <div className={`mbar ${marginStatus(totals.margin)}`}>
-        <span>Marge: {Math.round(totals.margin*100)}%</span>
-        <span style={{fontSize:12,fontWeight:400}}>Target: 25-35%</span>
+        <span>{ll.margeLabel}: {Math.round(totals.margin*100)}%</span>
+        <span style={{fontSize:12,fontWeight:400}}>{ll.target}</span>
       </div>
     </div>
   </>;
@@ -559,16 +705,20 @@ function BudgetTab({data:d,set}){
 
 // ── Planning Tab ──
 function PlanningTab({data:d,set}){
-  const total=Math.max(16,...d.phases.map(p=>(p.startWeek||0)+(p.durationWeeks||4)));
+  const L=d.lang;const ll=L_(L);
+  const active=d.phases.filter(p=>p.enabled!==false);
+  const total=Math.max(16,...active.map(p=>(p.startWeek||0)+(p.durationWeeks||4)));
   const upPh=(i,k,v)=>{const p=[...d.phases];p[i]={...p[i],[k]:v};set({...d,phases:p})};
+  const phaseName=(ph)=>ph.customName||t(ph.name,L);
   return <div className="card">
-    <div className="card-h">Planning (indicatief)</div>
+    <div className="card-h">{ll.planningTitle}</div>
     <div style={{overflowX:'auto'}}>
       {d.phases.map((ph,pi)=>{
+        if(ph.enabled===false)return null;
         const left=((ph.startWeek||0)/total)*100;
         const w=((ph.durationWeeks||4)/total)*100;
         return <div key={ph.id} className="gantt-r">
-          <div className="gantt-l">{ph.code} - {t(ph.name,d.lang)}</div>
+          <div className="gantt-l">{ph.code} - {phaseName(ph)}</div>
           <div className="gantt-t">
             <div className="gantt-b" style={{left:`${left}%`,width:`${w}%`,background:COLORS[pi%COLORS.length]}}>{ph.durationWeeks||4}w</div>
           </div>
@@ -576,12 +726,13 @@ function PlanningTab({data:d,set}){
       })}
     </div>
     <table className="bt mt24">
-      <thead><tr><th>Fase</th><th style={{width:'12%'}}>Start (week)</th><th style={{width:'12%'}}>Duur (weken)</th><th style={{width:'20%'}}>Startdatum</th></tr></thead>
+      <thead><tr><th>{ll.fase}</th><th style={{width:'12%'}}>{ll.startWeek}</th><th style={{width:'12%'}}>{ll.duurWeken}</th><th style={{width:'20%'}}>{ll.startdatum}</th></tr></thead>
       <tbody>{d.phases.map((ph,pi)=>{
+        if(ph.enabled===false)return null;
         let sd='';
-        if(d.project.date&&ph.startWeek>=0){const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(ph.startWeek||0)*7);sd=dt.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})}
+        if(d.project.date&&ph.startWeek>=0){const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(ph.startWeek||0)*7);sd=dt.toLocaleDateString(L==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'short',year:'numeric'})}
         return <tr key={ph.id}>
-          <td>{ph.code} - {t(ph.name,d.lang)}</td>
+          <td>{ph.code} - {phaseName(ph)}</td>
           <td><input type="number" min={0} value={ph.startWeek||0} onChange={e=>upPh(pi,'startWeek',parseInt(e.target.value)||0)}/></td>
           <td><input type="number" min={1} value={ph.durationWeeks||4} onChange={e=>upPh(pi,'durationWeeks',parseInt(e.target.value)||1)}/></td>
           <td className="muted">{sd}</td>
@@ -593,40 +744,47 @@ function PlanningTab({data:d,set}){
 
 // ── Payment Tab ──
 function PaymentTab({data:d,set}){
+  const L=d.lang;const ll=L_(L);
   const totals=calcTotals(d);
   const grand=totals.grandClient;
   const upMs=(i,k,v)=>{const ms=[...d.payment.milestones];ms[i]={...ms[i],[k]:v};set({...d,payment:{...d.payment,milestones:ms}})};
   const totPct=d.payment.milestones.reduce((s,m)=>s+(m.pct||0),0);
 
   return <div className="card">
-    <div className="card-h">Betalingsschema</div>
+    <div className="card-h">{ll.betalingsschema}</div>
     <table className="bt">
-      <thead><tr><th>Mijlpaal</th><th style={{width:'10%'}}>%</th><th style={{width:'18%'}}>Bedrag</th><th style={{width:'18%'}}>Datum</th><th style={{width:'6%'}}></th></tr></thead>
+      <thead><tr><th>{ll.mijlpaal}</th><th style={{width:'10%'}}>%</th><th style={{width:'18%'}}>{ll.bedragExcl}</th><th style={{width:'18%'}}>{ll.richtdatum}</th><th style={{width:'6%'}}></th></tr></thead>
       <tbody>
         {d.payment.milestones.map((ms,i)=><tr key={i}>
-          <td><input value={t(ms.name,d.lang)} onChange={e=>{const o=ms.name;const n=typeof o==='string'?{nl:o,en:o}:{...o};n[d.lang]=e.target.value;upMs(i,'name',n)}}/></td>
+          <td><input value={t(ms.name,L)} onChange={e=>{const o=ms.name;const n=typeof o==='string'?{nl:o,en:o}:{...o};n[L]=e.target.value;upMs(i,'name',n)}}/></td>
           <td><input type="number" value={ms.pct||''} onChange={e=>upMs(i,'pct',parseInt(e.target.value)||0)}/></td>
           <td className="mono">{fmtE(grand*(ms.pct||0)/100)}</td>
           <td><input type="date" value={ms.date||''} onChange={e=>upMs(i,'date',e.target.value)}/></td>
           <td><button className="btn btn-sm btn-g" onClick={()=>{const mss=d.payment.milestones.filter((_,idx)=>idx!==i);set({...d,payment:{...d.payment,milestones:mss}})}}>&times;</button></td>
         </tr>)}
-        <tr className="sub"><td>Totaal</td><td style={{color:totPct===100?'var(--green)':'var(--red)',fontWeight:600}}>{totPct}%</td><td className="mono">{fmtE(grand)}</td><td></td><td></td></tr>
+        <tr className="sub"><td>{ll.totaal}</td><td style={{color:totPct===100?'var(--green)':'var(--red)',fontWeight:600}}>{totPct}%</td><td className="mono">{fmtE(grand)}</td><td></td><td></td></tr>
       </tbody>
     </table>
-    <button className="btn btn-sm btn-g mt16" onClick={()=>{const ms=[...d.payment.milestones,{name:{nl:'',en:''},pct:0,date:''}];set({...d,payment:{...d.payment,milestones:ms}})}}>+ Mijlpaal</button>
+    <button className="btn btn-sm btn-g mt16" onClick={()=>{const ms=[...d.payment.milestones,{name:{nl:'',en:''},pct:0,date:''}];set({...d,payment:{...d.payment,milestones:ms}})}}>{ll.plusMijlpaal}</button>
 
-    <div className="mt24"><div className="card-h">Voorwaarden</div>
+    <div className="mt24"><div className="card-h">{ll.voorwaarden}</div>
       <div className="row row3">
-        <div className="fg"><label>Geldigheid (dagen)</label><input type="number" value={d.conditions.validity} onChange={e=>set({...d,conditions:{...d.conditions,validity:parseInt(e.target.value)||30}})}/></div>
-        <div className="fg"><label>Betalingstermijn (dagen)</label><input type="number" value={d.conditions.paymentTerm} onChange={e=>set({...d,conditions:{...d.conditions,paymentTerm:parseInt(e.target.value)||14}})}/></div>
-        <div className="fg"><label>Garantie</label><input value={t(d.conditions.warranty,d.lang)} onChange={e=>{const o=d.conditions.warranty;const n=typeof o==='string'?{nl:o,en:o}:{...o};n[d.lang]=e.target.value;set({...d,conditions:{...d.conditions,warranty:n}})}}/></div>
+        <div className="fg"><label>{ll.geldigheid}</label><input type="number" value={d.conditions.validity} onChange={e=>set({...d,conditions:{...d.conditions,validity:parseInt(e.target.value)||30}})}/></div>
+        <div className="fg"><label>{ll.betalingstermijn}</label><input type="number" value={d.conditions.paymentTerm} onChange={e=>set({...d,conditions:{...d.conditions,paymentTerm:parseInt(e.target.value)||14}})}/></div>
+        <div className="fg">
+          <label style={{display:'flex',alignItems:'center',gap:6}}>
+            <input type="checkbox" checked={d.conditions.warrantyEnabled!==false} onChange={e=>set({...d,conditions:{...d.conditions,warrantyEnabled:e.target.checked}})} style={{width:14,height:14}}/>
+            {ll.garantie}
+          </label>
+          {d.conditions.warrantyEnabled!==false&&<input value={t(d.conditions.warranty,L)} onChange={e=>{const o=d.conditions.warranty;const n=typeof o==='string'?{nl:o,en:o}:{...o};n[L]=e.target.value;set({...d,conditions:{...d.conditions,warranty:n}})}}/>}
+        </div>
       </div>
       <div className="row mt16">
         <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer'}}>
-          <input type="checkbox" checked={d.conditions.avNL!==false} onChange={e=>set({...d,conditions:{...d.conditions,avNL:e.target.checked}})}/> Algemene Voorwaarden TEAL bijvoegen (NL)
+          <input type="checkbox" checked={d.conditions.avNL!==false} onChange={e=>set({...d,conditions:{...d.conditions,avNL:e.target.checked}})}/> {ll.avNL}
         </label>
         <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer'}}>
-          <input type="checkbox" checked={d.conditions.avEN===true} onChange={e=>set({...d,conditions:{...d.conditions,avEN:e.target.checked}})}/> General Terms & Conditions (EN)
+          <input type="checkbox" checked={d.conditions.avEN===true} onChange={e=>set({...d,conditions:{...d.conditions,avEN:e.target.checked}})}/> {ll.avEN}
         </label>
       </div>
     </div>
@@ -635,105 +793,101 @@ function PaymentTab({data:d,set}){
 
 // ── Preview ──
 function PreviewTab({data:d}){
-  const L=d.lang;
+  const L=d.lang;const ll=L_(L);
   const NL=L==='nl';
   const totals=calcTotals(d);
   const grand=totals.grandClient;
+  const phaseName=(ph)=>ph.customName||t(ph.name,L);
+  const activePhases=d.phases.filter(p=>p.enabled!==false);
+  const versionFromRef=(d.ref||'').split('-').pop()||'1';
 
-  const fmtDate=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
   const fmtDateShort=ds=>{if(!ds)return'';const dt=new Date(ds);return`${dt.getDate()}.${dt.getMonth()+1}.${dt.getFullYear()}`};
   let sec=0;
 
   return <div className="prev" id="offerte-preview">
-    {/* Header: type + date, like Change Order */}
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:36}}>
-      <div style={{fontSize:14,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>{NL?'OFFERTE':'QUOTATION'}</div>
+      <div style={{fontSize:14,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>{ll.offerte}</div>
       <div style={{fontSize:13}}>{fmtDateShort(d.project.date)}</div>
     </div>
 
-    {/* Section 1: Project Details (table with grey labels) */}
-    <div className="sec-h">{++sec} - {NL?'Projectgegevens':'Project Details'}</div>
+    <div className="sec-h">{++sec} - {ll.projectDetails}</div>
     <table>
       <tbody>
-        <tr><td className="label-cell">Project</td><td>{d.project.name||'[Projectnaam]'}</td><td className="label-cell">{NL?'Referentie':'Reference'}</td><td>{d.ref}</td></tr>
-        <tr><td className="label-cell">{NL?'Klant':'Client'}</td><td>{d.client.name||'[Klant]'}{d.client.contact?`, ${d.client.contact}`:''}</td><td className="label-cell">Versie</td><td>{d.project.version}</td></tr>
-        <tr><td className="label-cell">{NL?'Geldigheid':'Validity'}</td><td>{d.conditions.validity} {NL?'dagen na dagtekening':'days'}</td><td className="label-cell">{NL?'Betaling':'Payment'}</td><td>{d.conditions.paymentTerm} {NL?'dagen':'days'}</td></tr>
+        <tr><td className="label-cell">Project</td><td>{d.project.name||'[Projectnaam]'}</td><td className="label-cell">{ll.referentieLabel}</td><td>{d.ref}</td></tr>
+        <tr><td className="label-cell">{ll.klant}</td><td>{d.client.name||'[Klant]'}{d.client.contact?`, ${d.client.contact}`:''}</td><td className="label-cell">{ll.versieLabel}</td><td>{versionFromRef}</td></tr>
+        <tr><td className="label-cell">{ll.geldigheidLabel}</td><td>{d.conditions.validity} {ll.dagenNaDagtekening}</td><td className="label-cell">{ll.betalingLabel}</td><td>{d.conditions.paymentTerm} {ll.dagen}</td></tr>
       </tbody>
     </table>
 
-    {/* Section 2: Description */}
     {(t(d.project.description,L)||t(d.project.tealRole,L))&&<>
-      <div className="sec-h">{++sec} - {NL?'Projectomschrijving':'Project Description'}</div>
+      <div className="sec-h">{++sec} - {ll.projectBeschrijving}</div>
       {t(d.project.description,L)&&<p style={{whiteSpace:'pre-wrap',marginBottom:12}}>{t(d.project.description,L)}</p>}
-      {t(d.project.tealRole,L)&&<><h3>{NL?'Rol van TEAL':"TEAL's Role"}</h3><p style={{whiteSpace:'pre-wrap',marginBottom:12}}>{t(d.project.tealRole,L)}</p></>}
-      {t(d.project.exclusions,L)&&<><h3>{NL?'Niet inbegrepen':'Exclusions'}</h3><p style={{whiteSpace:'pre-wrap'}}>{t(d.project.exclusions,L)}</p></>}
+      {t(d.project.tealRole,L)&&<><h3>{ll.rolTeal}</h3><p style={{whiteSpace:'pre-wrap',marginBottom:12}}>{t(d.project.tealRole,L)}</p></>}
+      {t(d.project.exclusions,L)&&<><h3>{ll.exclusions}</h3><p style={{whiteSpace:'pre-wrap'}}>{t(d.project.exclusions,L)}</p></>}
     </>}
 
-    {/* Section 3: Scope */}
-    <div className="sec-h">{++sec} - {NL?'Scope en aanpak':'Scope of Work'}</div>
-    {d.phases.map(ph=>{
+    <div className="sec-h">{++sec} - {ll.scopeAanpak}</div>
+    {activePhases.map(ph=>{
       const desc=t(ph.description,L);
       return desc?<div key={ph.id} style={{marginBottom:14}}>
-        <h3>{ph.code} - {t(ph.name,L)}</h3>
+        <h3>{ph.code} - {phaseName(ph)}</h3>
         <p style={{whiteSpace:'pre-wrap'}}>{desc}</p>
-        {ph.effort&&<p style={{marginTop:4,color:'#999',fontSize:12}}><strong>{NL?'Inzet':'Effort'}:</strong> {ph.effort}</p>}
+        {ph.effort&&<p style={{marginTop:4,color:'#999',fontSize:12}}><strong>{ll.inzet}:</strong> {ph.effort}</p>}
       </div>:null;
     })}
 
-    {/* Section 4: Investment */}
-    <div className="sec-h">{++sec} - {NL?'Investering':'Investment'}</div>
+    <div className="sec-h">{++sec} - {ll.investering}</div>
     <table>
-      <thead><tr><th>{NL?'Fase':'Phase'}</th><th>{NL?'Omschrijving':'Description'}</th><th style={{textAlign:'right'}}>{NL?'Bedrag excl. BTW':'Amount ex. VAT (\u20AC)'}</th></tr></thead>
+      <thead><tr><th>{ll.faseCol}</th><th>{ll.omschrijvingPrev}</th><th style={{textAlign:'right'}}>{ll.bedragExclBTW}</th></tr></thead>
       <tbody>
         {d.phases.map((ph,pi)=>{
+          if(ph.enabled===false)return null;
           const pd=totals.phaseData[pi];
           if(!pd||pd.total===0)return null;
           return <tr key={ph.id}>
             <td style={{fontWeight:600}}>{ph.code}</td>
-            <td>{t(ph.name,L)}{pd.cont>0?` (incl. ${Math.round((ph.contingency||0)*100)}% contingency)`:''}</td>
+            <td>{phaseName(ph)}{pd.cont>0?` (incl. ${Math.round((ph.contingency||0)*100)}% contingency)`:''}</td>
             <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(pd.total)}</td>
           </tr>;
         })}
         {totals.procClient>0&&<tr>
           <td style={{fontWeight:600}}>B</td>
-          <td>{NL?'Materialen en inkoop':'Materials and procurement'}</td>
+          <td>{ll.materialenInkoop}</td>
           <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(totals.procClient)}</td>
         </tr>}
         {totals.subClient>0&&<tr>
           <td style={{fontWeight:600}}>C</td>
-          <td>{NL?'Onderaanneming':'Subcontractors'}</td>
+          <td>{ll.onderaanneming}</td>
           <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(totals.subClient)}</td>
         </tr>}
         <tr style={{fontWeight:700,background:'#f0f0ee'}}>
-          <td colSpan={2} style={{textDecoration:'underline'}}>{NL?'TOTAAL':'TOTAL'}</td>
+          <td colSpan={2} style={{textDecoration:'underline'}}>{ll.totaalLabel}</td>
           <td style={{textAlign:'right',fontFamily:'monospace',textDecoration:'underline'}}>{fmtE(grand)}</td>
         </tr>
       </tbody>
     </table>
-    <p style={{marginTop:8,fontSize:11,color:'#999',fontStyle:'italic'}}>{NL?'Prijzen exclusief BTW.':'Prices exclude VAT.'} {NL?`Reiskosten: \u20AC ${d.travel?.rateNL||0.50}/km.`:`Travel: \u20AC ${d.travel?.rateNL||0.50}/km.`}</p>
+    <p style={{marginTop:8,fontSize:11,color:'#999',fontStyle:'italic'}}>{ll.prijzenExclBTW} {ll.reiskosten}: &euro; {d.travel?.rateNL||0.50}/km.</p>
 
-    {/* Section 5: Planning */}
-    <div className="sec-h">{++sec} - {NL?'Planning':'Planning'}</div>
+    <div className="sec-h">{++sec} - {ll.planningLabel}</div>
     <table>
-      <thead><tr><th>{NL?'Fase':'Phase'}</th><th>{NL?'Omschrijving':'Description'}</th><th>{NL?'Duur':'Duration'}</th><th>{NL?'Indicatieve start':'Indicative start'}</th></tr></thead>
+      <thead><tr><th>{ll.faseCol}</th><th>{ll.omschrijvingPrev}</th><th>{ll.duur}</th><th>{ll.indicatieveStart}</th></tr></thead>
       <tbody>
-        {d.phases.map(ph=>{
+        {activePhases.map(ph=>{
           let sd='';
           if(d.project.date&&ph.startWeek>=0){const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(ph.startWeek||0)*7);sd=dt.toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'short',year:'numeric'})}
           return <tr key={ph.id}>
             <td style={{fontWeight:600}}>{ph.code}</td>
-            <td>{t(ph.name,L)}</td>
-            <td>{ph.durationWeeks||4} {NL?'weken':'weeks'}</td>
+            <td>{phaseName(ph)}</td>
+            <td>{ph.durationWeeks||4} {ll.weken}</td>
             <td>{sd}</td>
           </tr>;
         })}
       </tbody>
     </table>
 
-    {/* Section 6: Payment */}
-    <div className="sec-h">{++sec} - {NL?'Betalingsschema':'Payment Schedule'}</div>
+    <div className="sec-h">{++sec} - {ll.betalingsschemaLabel}</div>
     <table>
-      <thead><tr><th>{NL?'Mijlpaal':'Milestone'}</th><th style={{textAlign:'right'}}>%</th><th style={{textAlign:'right'}}>{NL?'Bedrag excl. BTW':'Amount ex. VAT (\u20AC)'}</th></tr></thead>
+      <thead><tr><th>{ll.mijlpaal}</th><th style={{textAlign:'right'}}>%</th><th style={{textAlign:'right'}}>{ll.bedragExclBTW}</th></tr></thead>
       <tbody>
         {d.payment.milestones.map((ms,i)=><tr key={i}>
           <td>{t(ms.name,L)}</td>
@@ -741,36 +895,34 @@ function PreviewTab({data:d}){
           <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(grand*ms.pct/100)}</td>
         </tr>)}
         <tr style={{fontWeight:700,background:'#f0f0ee'}}>
-          <td style={{textDecoration:'underline'}}>{NL?'TOTAAL':'TOTAL'}</td>
+          <td style={{textDecoration:'underline'}}>{ll.totaalLabel}</td>
           <td style={{textAlign:'right'}}>{d.payment.milestones.reduce((s,m)=>s+(m.pct||0),0)}%</td>
           <td style={{textAlign:'right',fontFamily:'monospace',textDecoration:'underline'}}>{fmtE(grand)}</td>
         </tr>
       </tbody>
     </table>
-    <p style={{marginTop:8,fontSize:11,color:'#999',fontStyle:'italic'}}>{NL?`Betalingstermijn: ${d.conditions.paymentTerm} dagen na factuurdatum.`:`Payment due within ${d.conditions.paymentTerm} days of invoice date.`}</p>
+    <p style={{marginTop:8,fontSize:11,color:'#999',fontStyle:'italic'}}>{ll.betalingstermijnTekst.replace('{n}',d.conditions.paymentTerm)}</p>
 
-    {/* Section 7: Conditions */}
-    <div className="sec-h">{++sec} - {NL?'Voorwaarden':'Terms & Conditions'}</div>
+    <div className="sec-h">{++sec} - {ll.voorwaardenLabel}</div>
     <table>
       <tbody>
-        <tr><td className="label-cell">{NL?'Geldigheid':'Validity'}</td><td>{NL?`${d.conditions.validity} dagen na dagtekening`:`${d.conditions.validity} days from date of issue`}</td></tr>
-        <tr><td className="label-cell">{NL?'Garantie':'Warranty'}</td><td>{t(d.conditions.warranty,L)}</td></tr>
-        <tr><td className="label-cell">BTW</td><td>{NL?'Alle genoemde prijzen zijn exclusief BTW':'All prices exclude VAT'}</td></tr>
-        {(d.conditions.avNL||d.conditions.avEN)&&<tr><td className="label-cell">{NL?'Algemene Voorwaarden':'General Terms'}</td><td>{NL?'De Algemene Voorwaarden van TEAL B.V. zijn van toepassing (bijgevoegd).':'The General Terms and Conditions of TEAL B.V. apply (attached).'}</td></tr>}
+        <tr><td className="label-cell">{ll.geldigheidLabel}</td><td>{ll.geldigheidTekst.replace('{n}',d.conditions.validity)}</td></tr>
+        {d.conditions.warrantyEnabled!==false&&<tr><td className="label-cell">{ll.garantieLabel}</td><td>{t(d.conditions.warranty,L)}</td></tr>}
+        <tr><td className="label-cell">BTW</td><td>{ll.btwTekst}</td></tr>
+        {(d.conditions.avNL||d.conditions.avEN)&&<tr><td className="label-cell">{NL?'Algemene Voorwaarden':'General Terms'}</td><td>{ll.avTekst}</td></tr>}
       </tbody>
     </table>
 
-    {/* Section 8: Approval */}
-    <div className="sec-h">{++sec} - {NL?'Akkoord':'Approval'}</div>
-    <p style={{marginBottom:20}}>{NL?'Ondergetekende verklaart akkoord te gaan met de voorwaarden en werkzaamheden zoals beschreven in deze offerte.':'By signing below, the client confirms this quotation and authorizes TEAL to proceed.'}</p>
+    <div className="sec-h">{++sec} - {ll.akkoord}</div>
+    <p style={{marginBottom:20}}>{ll.akkoordTekst}</p>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:32}}>
       <div>
         <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:4}}>CLIENT</div>
         <p style={{fontWeight:600}}>{d.client.name||'[Klant]'}</p>
         <div style={{marginTop:32,borderBottom:'1px solid #999',width:'80%'}}></div>
-        <p style={{fontSize:11,color:'#999',marginTop:4}}>{NL?'Naam en handtekening':'Name and signature'}</p>
+        <p style={{fontSize:11,color:'#999',marginTop:4}}>{ll.naamHandtekening}</p>
         <div style={{marginTop:20,borderBottom:'1px solid #999',width:'50%'}}></div>
-        <p style={{fontSize:11,color:'#999',marginTop:4}}>{NL?'Datum':'Date'}</p>
+        <p style={{fontSize:11,color:'#999',marginTop:4}}>{ll.datumLabel}</p>
       </div>
       <div>
         <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:4}}>TEAL B.V.</div>
@@ -778,7 +930,6 @@ function PreviewTab({data:d}){
       </div>
     </div>
 
-    {/* Footer: logo left, page info right */}
     <div className="foot">
       <Logo color="#111" h={16}/>
       <div>{TEAL.addr}, {TEAL.zip} | {TEAL.email} | KvK {TEAL.kvk} | BTW {TEAL.btw}</div>
@@ -787,15 +938,19 @@ function PreviewTab({data:d}){
 }
 
 // ── PDF ──
-function exportPDF(d){
+function exportPDF(d,setData){
   const{jsPDF}=window.jspdf;
   const doc=new jsPDF({unit:'mm',format:'a4'});
   const m=20,pw=170;
   let y=m;
   const NL=d.lang==='nl';
   const L=d.lang;
+  const ll=L_(L);
   const totals=calcTotals(d);
   const grand=totals.grandClient;
+  const pn=(ph)=>ph.customName||t(ph.name,L);
+  const activePhases=d.phases.filter(p=>p.enabled!==false);
+  const versionFromRef=(d.ref||'').split('-').pop()||'1';
 
   const addFooter=()=>{
     const pc=doc.getNumberOfPages();
@@ -850,22 +1005,23 @@ function exportPDF(d){
   if(t(d.project.exclusions,L)){txt(NL?'Niet inbegrepen':'Exclusions',9,{b:true});txt(t(d.project.exclusions,L),9,{w:pw});gap(4);}
   line();
 
-  // Scope
+  // Scope (only active phases)
   txt(NL?'SCOPE EN AANPAK':'SCOPE OF WORK',10,{b:true,c:[7,20,18]});gap();
-  d.phases.forEach(ph=>{
+  activePhases.forEach(ph=>{
     const desc=t(ph.description,L);
-    if(desc){checkPage(20);txt(`${ph.code} - ${t(ph.name,L)}`,9,{b:true});txt(desc,9,{w:pw});if(ph.effort)txt(`${NL?'Inzet':'Effort'}: ${ph.effort}`,8,{c:[153,153,153]});gap(3);}
+    if(desc){checkPage(20);txt(`${ph.code} - ${pn(ph)}`,9,{b:true});txt(desc,9,{w:pw});if(ph.effort)txt(`${NL?'Inzet':'Effort'}: ${ph.effort}`,8,{c:[153,153,153]});gap(3);}
   });
   line();
 
-  // Investment table
+  // Investment table (only active phases)
   txt(NL?'INVESTERING':'INVESTMENT',10,{b:true,c:[7,20,18]});gap(4);
   d.phases.forEach((ph,pi)=>{
+    if(ph.enabled===false)return;
     const pd=totals.phaseData[pi];
     if(!pd||pd.total===0)return;
     checkPage();
     doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(17,17,17);
-    doc.text(`${ph.code} - ${t(ph.name,L)}`,m,y);
+    doc.text(`${ph.code} - ${pn(ph)}`,m,y);
     doc.text(fmtE(pd.total),190,y,{align:'right'});y+=5;
   });
   if(totals.procClient>0){checkPage();doc.setFontSize(9);doc.text(NL?'Materialen en inkoop':'Materials and procurement',m,y);doc.text(fmtE(totals.procClient),190,y,{align:'right'});y+=5;}
@@ -878,14 +1034,14 @@ function exportPDF(d){
   doc.text(`${NL?'Reiskosten':'Travel'}: \u20AC ${d.travel?.rateNL||0.50}/km`,m,y);y+=6;
   doc.setTextColor(17,17,17);line();
 
-  // Planning
+  // Planning (only active phases)
   txt(NL?'PLANNING':'PLANNING',10,{b:true,c:[7,20,18]});gap(4);
-  d.phases.forEach(ph=>{
+  activePhases.forEach(ph=>{
     checkPage();
     let sd='';
     if(d.project.date&&ph.startWeek>=0){const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(ph.startWeek||0)*7);sd=dt.toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'short',year:'numeric'})}
     doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(17,17,17);
-    doc.text(`${ph.code} - ${t(ph.name,L)}`,m,y);
+    doc.text(`${ph.code} - ${pn(ph)}`,m,y);
     doc.text(`${ph.durationWeeks||4} ${NL?'weken':'weeks'}`,120,y);
     doc.text(sd,155,y);
     y+=5;
@@ -908,13 +1064,21 @@ function exportPDF(d){
   const conds=[
     NL?`- Deze offerte is geldig tot ${d.conditions.validity} dagen na dagtekening.`:`- Valid for ${d.conditions.validity} days.`,
     NL?'- Prijzen exclusief BTW.':'- Prices exclude VAT.',
-    NL?`- Garantie: ${t(d.conditions.warranty,L)}.`:`- Warranty: ${t(d.conditions.warranty,L)}.`,
   ];
-  if(d.conditions.avNL)conds.push(NL?'- Op deze offerte zijn de Algemene Voorwaarden van TEAL B.V. van toepassing (bijgevoegd).':'- The General Terms and Conditions of TEAL B.V. apply (attached).');
+  if(d.conditions.warrantyEnabled!==false)conds.push(NL?`- Garantie: ${t(d.conditions.warranty,L)}.`:`- Warranty: ${t(d.conditions.warranty,L)}.`);
+  if(d.conditions.avNL||d.conditions.avEN)conds.push(NL?'- Op deze offerte zijn de Algemene Voorwaarden van TEAL B.V. van toepassing (bijgevoegd).':'- The General Terms and Conditions of TEAL B.V. apply (attached).');
   conds.forEach(l=>{checkPage();doc.text(l,m,y);y+=5;});
 
   addFooter();
-  doc.save(`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}_v${d.project.version}.pdf`);
+  doc.save(`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}_v${versionFromRef}.pdf`);
+
+  // Auto-increment version in ref for next export
+  if(setData){
+    const parts=d.ref.split('-');
+    const curV=parseInt(parts[parts.length-1])||1;
+    parts[parts.length-1]=String(curV+1);
+    setData({...d,ref:parts.join('-')});
+  }
 }
 
 // ── App ──
@@ -930,23 +1094,24 @@ function App(){
     else{setD(createProject(type));setTab('project');}
   };
 
+  const ll=d?L_(d.lang):I.nl;
   const tabs=[
-    {id:'project',label:'Project'},{id:'scope',label:'Scope'},
-    {id:'budget',label:'Budget'},{id:'planning',label:'Planning'},
-    {id:'payment',label:'Betaling'},{id:'preview',label:'Preview'},
+    {id:'project',label:ll.tabProject},{id:'scope',label:ll.tabScope},
+    {id:'budget',label:ll.tabBudget},{id:'planning',label:ll.tabPlanning},
+    {id:'payment',label:ll.tabPayment},{id:'preview',label:ll.tabPreview},
   ];
 
   return <div className="app">
-    <Header data={d} onPdf={()=>exportPDF(d)} setData={setD}/>
+    <Header data={d} onPdf={()=>exportPDF(d,setD)} setData={setD}/>
     {d&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
     <div className="main">
       {!d?<Start onSelect={sel}/>:<>
         <div className="between mb16">
-          <div><span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#555'}}>{d.type} offerte</span>
+          <div><span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#555'}}>{d.type} {d.lang==='nl'?'offerte':'quotation'}</span>
             {d.project.name&&<span style={{marginLeft:8,color:'#999'}}>{d.project.name}</span>}
             <span style={{marginLeft:8,fontSize:11,color:'#999'}}>{d.ref}</span>
           </div>
-          <button className="btn btn-sm btn-g" onClick={()=>{if(confirm('Nieuwe offerte starten? Huidige data blijft in localStorage.'))setD(null)}}>Nieuw</button>
+          <button className="btn btn-sm btn-g" onClick={()=>{if(confirm(ll.nieuweOfferteBtn))setD(null)}}>{ll.nieuw}</button>
         </div>
         {tab==='project'&&<ProjectTab data={d} set={setD}/>}
         {tab==='scope'&&<ScopeTab data={d} set={setD}/>}
