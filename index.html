@@ -10,6 +10,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://apis.google.com/js/api.js" async defer></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   :root {
@@ -77,6 +79,7 @@
   .flex{display:flex}.between{display:flex;justify-content:space-between;align-items:center}
   .g8{gap:8px}.g16{gap:16px}.mt16{margin-top:16px}.mt24{margin-top:24px}.mb16{margin-bottom:16px}
   .tr{text-align:right}.mono{font-size:12px}.sm{font-size:12px}.muted{color:var(--mid-grey)}
+  @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   @media(max-width:768px){.row,.row3,.row4{grid-template-columns:1fr}.tsel{flex-direction:column}.main{padding:16px}.hdr{padding:12px 16px}.tabs{padding:0 16px}.prev{padding:24px}}
 </style>
 </head>
@@ -460,8 +463,443 @@ function archiveLogExport(d){
   if(idx>=0){all[idx].changelog.push({action:'pdf_exported',date:new Date().toISOString()});all[idx].updatedAt=new Date().toISOString();saveArchive(all);}
 }
 
+// ── Google API Integration ──
+const GOOGLE_CID_KEY='teal.google.clientId';
+const GOOGLE_SCOPES='https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file';
+
+const googleState={token:null,gapiReady:false,gisReady:false};
+
+function getGoogleClientId(){return localStorage.getItem(GOOGLE_CID_KEY)||'';}
+function setGoogleClientId(id){localStorage.setItem(GOOGLE_CID_KEY,id);}
+
+function initGapi(){
+  return new Promise((resolve,reject)=>{
+    if(googleState.gapiReady){resolve();return;}
+    if(!window.gapi){reject(new Error('Google API niet geladen. Herlaad de pagina.'));return;}
+    gapi.load('client',async()=>{
+      await gapi.client.init({});
+      await gapi.client.load('sheets','v4');
+      await gapi.client.load('docs','v1');
+      await gapi.client.load('drive','v3');
+      googleState.gapiReady=true;
+      resolve();
+    });
+  });
+}
+
+function googleAuth(){
+  return new Promise((resolve,reject)=>{
+    const cid=getGoogleClientId();
+    if(!cid){reject(new Error('NO_CLIENT_ID'));return;}
+    if(googleState.token){
+      gapi.client.setToken(googleState.token);
+      resolve(googleState.token);return;
+    }
+    if(!window.google?.accounts?.oauth2){reject(new Error('Google Identity Services niet geladen.'));return;}
+    const client=google.accounts.oauth2.initTokenClient({
+      client_id:cid,scope:GOOGLE_SCOPES,
+      callback:(resp)=>{
+        if(resp.error){reject(new Error(resp.error));return;}
+        googleState.token=resp;
+        gapi.client.setToken(resp);
+        resolve(resp);
+      },
+      error_callback:(err)=>reject(new Error(err.message||'Auth mislukt')),
+    });
+    client.requestAccessToken();
+  });
+}
+
+async function ensureGoogleAuth(){
+  await initGapi();
+  await googleAuth();
+}
+
+// ── Export to Google Sheets (Budget) ──
+async function exportBudgetToSheets(d){
+  await ensureGoogleAuth();
+  const L=d.lang;const NL=L==='nl';const ll=L_(L);
+  const totals=calcTotals(d);
+  const pn=(ph)=>ph.customName||t(ph.name,L);
+
+  // Build rows for the spreadsheet
+  const rows=[];
+  rows.push([NL?'TEAL Offerte - Kostenoverzicht':'TEAL Quotation - Cost Overview','','','','']);
+  rows.push([NL?'Project':'Project',d.project.name||'Draft','','','']);
+  rows.push([NL?'Referentie':'Reference',d.ref,'','','']);
+  rows.push([NL?'Klant':'Client',d.client.name||'','','','']);
+  rows.push([NL?'Datum':'Date',d.project.date||'','','','']);
+  rows.push(['','','','','']);
+
+  // Block A: TEAL fees
+  rows.push([NL?'BLOK A: TEAL KOSTEN':'BLOCK A: TEAL FEES','','','','']);
+  rows.push([NL?'Fase':'Phase',NL?'Rol':'Role',NL?'Aantal':'Qty',NL?'Tarief':'Rate',NL?'Subtotaal':'Subtotal']);
+  d.phases.forEach((ph,pi)=>{
+    if(ph.enabled===false)return;
+    const pd=totals.phaseData[pi];if(!pd)return;
+    rows.push([pn(ph),'','','',{v:pd.total,f:fmtE(pd.total)}]);
+    ph.items.forEach(it=>{
+      const r=roleMap[it.role];
+      const sub=it.qty*(it.extRate||0);
+      rows.push(['',t(r?.name,L)||it.role,it.qty,{v:it.extRate,f:fmtE(it.extRate)},{v:sub,f:fmtE(sub)}]);
+    });
+    if(ph.contingency>0){
+      const cAmt=pd.total-ph.items.reduce((s,it)=>s+it.qty*(it.extRate||0),0);
+      rows.push(['',(NL?'Contingency ':'Contingency ')+(ph.contingency*100).toFixed(0)+'%','','',{v:cAmt,f:fmtE(cAmt)}]);
+    }
+  });
+  rows.push(['','',' ',NL?'Subtotaal A':'Subtotal A',{v:totals.blockAClient,f:fmtE(totals.blockAClient)}]);
+  rows.push(['','','','','']);
+
+  // Block B: Procurement
+  rows.push([NL?'BLOK B: INKOOP':'BLOCK B: PROCUREMENT','','','','']);
+  if(d.procOTS?.length){
+    rows.push([NL?'B1: Standaard materialen':'B1: Off-the-shelf','','','','']);
+    d.procOTS.forEach(it=>{
+      if(!it.amount)return;
+      const h=(it.amount||0)*(it.handlingPct||0);
+      rows.push(['',it.desc||'Materials',1,{v:it.amount,f:fmtE(it.amount)},{v:it.amount+h,f:fmtE(it.amount+h)}]);
+    });
+  }
+  if(d.procCustom?.length){
+    rows.push([NL?'B2: Maatwerk materialen':'B2: Custom materials','','','','']);
+    d.procCustom.forEach(it=>{
+      if(!it.amount)return;
+      const h=(it.amount||0)*(it.handlingPct||0);
+      const r=(it.amount||0)*(it.riskPct||0);
+      rows.push(['',it.desc||'Custom',1,{v:it.amount,f:fmtE(it.amount)},{v:it.amount+h+r,f:fmtE(it.amount+h+r)}]);
+    });
+  }
+  rows.push(['','','',NL?'Subtotaal B':'Subtotal B',{v:totals.procClient,f:fmtE(totals.procClient)}]);
+  rows.push(['','','','','']);
+
+  // Block C: Subcontractors
+  if(d.subs?.length){
+    rows.push([NL?'BLOK C: ONDERAANNEMERS':'BLOCK C: SUBCONTRACTORS','','','','']);
+    d.subs.forEach(it=>{
+      if(!it.amount)return;
+      const c=(it.amount||0)*(it.coordPct||COORD_MARGIN);
+      rows.push(['',it.desc||'Sub',1,{v:it.amount,f:fmtE(it.amount)},{v:it.amount+c,f:fmtE(it.amount+c)}]);
+    });
+    rows.push(['','','',NL?'Subtotaal C':'Subtotal C',{v:totals.subClient,f:fmtE(totals.subClient)}]);
+    rows.push(['','','','','']);
+  }
+
+  // Grand total
+  rows.push(['','','',NL?'TOTAAL (excl. BTW)':'TOTAL (excl. VAT)',{v:totals.grandClient,f:fmtE(totals.grandClient)}]);
+
+  // Payment schedule
+  rows.push(['','','','','']);
+  rows.push([NL?'BETAALSCHEMA':'PAYMENT SCHEDULE','','','','']);
+  rows.push([NL?'Mijlpaal':'Milestone','%',NL?'Bedrag':'Amount','','']);
+  (d.payment.milestones||[]).forEach(ms=>{
+    const amt=totals.grandClient*(ms.pct||0)/100;
+    rows.push([t(ms.name,L),ms.pct+'%',{v:amt,f:fmtE(amt)},'','']);
+  });
+
+  // Margin row (internal only)
+  rows.push(['','','','','']);
+  rows.push([NL?'INTERNE MARGE':'INTERNAL MARGIN','','',(totals.margin*100).toFixed(1)+'%',{v:totals.grandClient-totals.grandCost,f:fmtE(totals.grandClient-totals.grandCost)}]);
+
+  // Convert to raw values for API
+  const values=rows.map(row=>row.map(cell=>typeof cell==='object'?cell.v:cell));
+
+  // Create spreadsheet
+  const title=`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}_Budget`;
+  const resp=await gapi.client.sheets.spreadsheets.create({
+    resource:{
+      properties:{title},
+      sheets:[{
+        properties:{title:NL?'Kostenoverzicht':'Cost Overview',gridProperties:{rowCount:values.length+5,columnCount:5}},
+      }]
+    }
+  });
+  const ssId=resp.result.spreadsheetId;
+  const sheetName=NL?'Kostenoverzicht':'Cost Overview';
+
+  // Write data
+  await gapi.client.sheets.spreadsheets.values.update({
+    spreadsheetId:ssId,range:`'${sheetName}'!A1`,
+    valueInputOption:'RAW',resource:{values}
+  });
+
+  // Format: bold headers, currency format, column widths
+  const requests=[
+    // Title row bold
+    {repeatCell:{range:{sheetId:0,startRowIndex:0,endRowIndex:1,startColumnIndex:0,endColumnIndex:5},
+      cell:{userEnteredFormat:{textFormat:{bold:true,fontSize:14}}},fields:'userEnteredFormat.textFormat'}},
+    // Section headers bold
+    ...rows.reduce((acc,row,i)=>{
+      const first=typeof row[0]==='string'?row[0]:'';
+      if(first.startsWith('BLOK')||first.startsWith('BLOCK')||first==='BETAALSCHEMA'||first==='PAYMENT SCHEDULE'||first==='INTERNE MARGE'||first==='INTERNAL MARGIN'){
+        acc.push({repeatCell:{range:{sheetId:0,startRowIndex:i,endRowIndex:i+1,startColumnIndex:0,endColumnIndex:5},
+          cell:{userEnteredFormat:{textFormat:{bold:true},backgroundColor:{red:.83,green:.93,blue:.9}}},fields:'userEnteredFormat(textFormat,backgroundColor)'}});
+      }
+      // Column header rows
+      if((typeof row[1]==='string')&&(row[1]==='Rol'||row[1]==='Role'||row[1]==='Milestone'||row[1]==='Mijlpaal')){
+        acc.push({repeatCell:{range:{sheetId:0,startRowIndex:i,endRowIndex:i+1,startColumnIndex:0,endColumnIndex:5},
+          cell:{userEnteredFormat:{textFormat:{bold:true},backgroundColor:{red:.94,green:.94,blue:.93}}},fields:'userEnteredFormat(textFormat,backgroundColor)'}});
+      }
+      return acc;
+    },[]),
+    // Total row
+    ...rows.reduce((acc,row,i)=>{
+      const fourth=typeof row[3]==='string'?row[3]:'';
+      if(fourth.startsWith('TOTAAL')||fourth.startsWith('TOTAL')){
+        acc.push({repeatCell:{range:{sheetId:0,startRowIndex:i,endRowIndex:i+1,startColumnIndex:0,endColumnIndex:5},
+          cell:{userEnteredFormat:{textFormat:{bold:true,fontSize:12},backgroundColor:{red:.03,green:.08,blue:.07},foregroundColorStyle:{rgbColor:{red:1,green:1,blue:1}}}},fields:'userEnteredFormat(textFormat,backgroundColor,foregroundColorStyle)'}});
+      }
+      return acc;
+    },[]),
+    // Column widths
+    {updateDimensionProperties:{range:{sheetId:0,dimension:'COLUMNS',startIndex:0,endIndex:1},properties:{pixelSize:220},fields:'pixelSize'}},
+    {updateDimensionProperties:{range:{sheetId:0,dimension:'COLUMNS',startIndex:1,endIndex:2},properties:{pixelSize:280},fields:'pixelSize'}},
+    {updateDimensionProperties:{range:{sheetId:0,dimension:'COLUMNS',startIndex:2,endIndex:3},properties:{pixelSize:80},fields:'pixelSize'}},
+    {updateDimensionProperties:{range:{sheetId:0,dimension:'COLUMNS',startIndex:3,endIndex:4},properties:{pixelSize:160},fields:'pixelSize'}},
+    {updateDimensionProperties:{range:{sheetId:0,dimension:'COLUMNS',startIndex:4,endIndex:5},properties:{pixelSize:160},fields:'pixelSize'}},
+    // Number format for amount columns
+    {repeatCell:{range:{sheetId:0,startRowIndex:0,endRowIndex:values.length,startColumnIndex:3,endColumnIndex:5},
+      cell:{userEnteredFormat:{numberFormat:{type:'CURRENCY',pattern:'\u20AC #,##0.00'}}},fields:'userEnteredFormat.numberFormat'}},
+  ];
+
+  await gapi.client.sheets.spreadsheets.batchUpdate({spreadsheetId:ssId,resource:{requests}});
+
+  return `https://docs.google.com/spreadsheets/d/${ssId}`;
+}
+
+// ── Export to Google Docs (Offerte) ──
+async function exportOfferteToDoc(d){
+  await ensureGoogleAuth();
+  const L=d.lang;const NL=L==='nl';const ll=L_(L);
+  const totals=calcTotals(d);
+  const pn=(ph)=>ph.customName||t(ph.name,L);
+  const fmtDateLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
+  const finLines=buildFinancialLines(d,totals,L);
+  const activePhases=d.phases.filter(p=>p.enabled!==false);
+  const fmtMonth=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{month:'long',year:'numeric'}):'';
+
+  // Create doc
+  const title=`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}`;
+  const createResp=await gapi.client.docs.documents.create({resource:{title}});
+  const docId=createResp.result.documentId;
+
+  // Build requests to populate the doc
+  const reqs=[];
+  let idx=1; // cursor position
+  const ins=(text,bold=false,fontSize=11,heading=null)=>{
+    reqs.push({insertText:{location:{index:idx},text}});
+    const fields=[];const style={};
+    if(bold){style.bold=true;fields.push('bold');}
+    if(fontSize!==11){style.fontSize={magnitude:fontSize,unit:'PT'};fields.push('fontSize');}
+    if(fields.length){
+      reqs.push({updateTextStyle:{range:{startIndex:idx,endIndex:idx+text.length},textStyle:style,fields:fields.join(',')}});
+    }
+    if(heading){
+      reqs.push({updateParagraphStyle:{range:{startIndex:idx,endIndex:idx+text.length},paragraphStyle:{namedStyleType:heading},fields:'namedStyleType'}});
+    }
+    idx+=text.length;
+  };
+  const nl=()=>{reqs.push({insertText:{location:{index:idx},text:'\n'}});idx+=1;};
+
+  // Header
+  ins('TEAL',true,20);nl();
+  ins(NL?'OFFERTE':'QUOTATION',true,16,'HEADING_1');nl();
+  nl();
+
+  // Client + details
+  ins(ll.klantLabel,true,12,'HEADING_2');nl();
+  if(d.client.name){ins(d.client.name);nl();}
+  if(d.client.contact){ins(d.client.contact);nl();}
+  if(d.client.email){ins(d.client.email);nl();}
+  if(d.client.addr){ins(`${d.client.addr}, ${d.client.zip} ${d.client.city}`);nl();}
+  nl();
+
+  ins(ll.detailsLabel,true,12,'HEADING_2');nl();
+  ins(`${ll.referentieLabel}: ${d.ref}`);nl();
+  ins(`${ll.datumPrev}: ${fmtDateLong(d.project.date)}`);nl();
+  ins(`${ll.geldigTot}: ${d.conditions.validity||30} ${NL?'dagen':'days'}`);nl();
+  if(d.project.location){ins(`${ll.locatie}: ${d.project.location}`);nl();}
+  nl();
+
+  // Project description
+  if(t(d.project.description,L)){
+    ins(ll.projectBeschrijving,true,12,'HEADING_2');nl();
+    ins(t(d.project.description,L));nl();nl();
+  }
+  if(t(d.project.tealRole,L)){
+    ins(ll.rolTeal,true,11);nl();
+    ins(t(d.project.tealRole,L));nl();nl();
+  }
+
+  // Scope & phases
+  ins(ll.scopeTimeline,true,12,'HEADING_2');nl();
+  activePhases.forEach(ph=>{
+    const desc=t(ph.description,L);
+    ins(`${pn(ph)}`,true);nl();
+    if(desc){ins(desc);nl();}
+    nl();
+  });
+
+  // Financial overview
+  ins(ll.kostenLabel,true,12,'HEADING_2');nl();
+  finLines.forEach(fl=>{
+    ins(`${fl.desc}: ${fmtE(fl.total)}`);nl();
+  });
+  nl();
+  ins(`${NL?'Totaal (excl. BTW)':'Total (excl. VAT)'}: ${fmtE(totals.grandClient)}`,true,13);nl();
+  nl();
+
+  // Payment
+  ins(ll.betaling,true,12,'HEADING_2');nl();
+  const milestoneDateISOs=()=>{
+    if(!d.project.date)return d.payment.milestones.map(()=>'');
+    const totalW=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
+    const n=d.payment.milestones.length;
+    return d.payment.milestones.map((_,i)=>{
+      const wk=Math.round((i/(n-1||1))*totalW);
+      const dt=new Date(d.project.date);dt.setDate(dt.getDate()+wk*7);
+      return dt.toISOString().slice(0,10);
+    });
+  };
+  const mDates=milestoneDateISOs();
+  d.payment.milestones.forEach((ms,i)=>{
+    const amt=totals.grandClient*(ms.pct||0)/100;
+    const dateStr=mDates[i]?', '+fmtMonth(mDates[i]):'';
+    ins(`${t(ms.name,L)}: ${ms.pct}% (${fmtE(amt)}${dateStr})`);nl();
+  });
+  nl();
+
+  // Terms
+  ins(ll.voorwaardenLabel,true,12,'HEADING_2');nl();
+  ins(`${ll.geldigheidVw}: ${d.conditions.validity||30} ${NL?'dagen':'days'}`);nl();
+  ins(`${ll.betalingstermijn}: ${d.conditions.paymentTerm||14} ${NL?'dagen':'days'}`);nl();
+  if(t(d.conditions.warranty,L)){ins(`${ll.garantieLabel}: ${t(d.conditions.warranty,L)}`);nl();}
+  if(t(d.project.exclusions,L)){ins(`${ll.exclusionsVw}: ${t(d.project.exclusions,L)}`);nl();}
+  ins(ll.avTekst);nl();
+  ins(ll.meerwerkTekst);nl();
+  nl();
+
+  // Signature
+  ins(ll.akkoord,true,12,'HEADING_2');nl();
+  ins(ll.akkoordTekst);nl();
+  nl();
+  ins('____________________________          ____________________________');nl();
+  ins(`${NL?'Handtekening':'Signature'}                                        ${NL?'Datum':'Date'}`);nl();
+
+  // Execute all requests
+  await gapi.client.docs.documents.batchUpdate({documentId:docId,resource:{requests:reqs}});
+
+  return `https://docs.google.com/document/d/${docId}`;
+}
+
+// ── Export Planning to TEAL Planner ──
+const PLANNER_URL='https://teamteal-planner.vercel.app/';
+const GROUP_PALETTE=['#D4ECE6','#B8D8CE','#9CCAB6','#80BC9E','#64AE86','#48A06E','#6BB5A0','#4A9E84','#2D8659','#1A6B44'];
+
+function exportToPlanner(d){
+  const L=d.lang;const pn=(ph)=>ph.customName||t(ph.name,L);
+  const activePhases=d.phases.filter(p=>p.enabled!==false);
+  const projectStart=d.project.date||new Date().toISOString().slice(0,10);
+
+  // Calculate project end from phases
+  const totalWeeks=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
+  const endDt=new Date(projectStart);endDt.setDate(endDt.getDate()+totalWeeks*7+14); // 2 week buffer
+
+  // Build a single group for all phases
+  const groupId='g_offerte';
+
+  // Build tasks from phases
+  const tasks=activePhases.map((ph,i)=>{
+    const sw=ph.startWeek||0;const dw=ph.durationWeeks||4;
+    const start=new Date(projectStart);start.setDate(start.getDate()+sw*7);
+    const end=new Date(projectStart);end.setDate(end.getDate()+(sw+dw)*7);
+    return{
+      id:'t_'+ph.id,
+      name:pn(ph),
+      groupId,
+      categoryId:null,
+      start:start.toISOString().slice(0,10),
+      end:end.toISOString().slice(0,10),
+      assignee:'',
+      personId:null,
+      people:1,
+      note:t(ph.description,L)||'',
+      milestone:false,
+    };
+  });
+
+  // Build planner state (v4 schema)
+  const state={
+    version:4,
+    title:d.project.name||(d.lang==='nl'?'Offerte planning':'Quotation planning'),
+    start:projectStart,
+    end:endDt.toISOString().slice(0,10),
+    categories:[],
+    people:[],
+    groups:[{id:groupId,name:d.project.name||'Project',color:COLORS[0],expanded:true}],
+    tasks,
+    deps:[],
+    holidays:[],
+    holidayExclusions:[],
+  };
+
+  // Compress and build URL (view-only)
+  const packed=LZString.compressToEncodedURIComponent(JSON.stringify(state));
+  return PLANNER_URL+'#s='+packed;
+}
+
 // ── Components ──
-function Header({data:d,onPdf,setData}){
+function GoogleSettingsModal({open,onClose}){
+  const[cid,setCid]=useState(getGoogleClientId());
+  if(!open)return null;
+  return <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={onClose}>
+    <div className="card" style={{maxWidth:520,width:'90%',margin:0}} onClick={e=>e.stopPropagation()}>
+      <div className="card-h">Google API Instellingen</div>
+      <p style={{fontSize:13,color:'#555',marginBottom:16}}>
+        Voer je Google Cloud OAuth Client ID in om direct naar Google Drive te exporteren.
+        Maak een OAuth 2.0 Client ID aan in de <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" style={{color:'var(--green)'}}>Google Cloud Console</a> met
+        als type "Web application" en voeg <strong>{location.origin}</strong> toe als authorized JavaScript origin.
+        Zet ook de Sheets, Docs en Drive API aan.
+      </p>
+      <div className="fg" style={{marginBottom:16}}>
+        <label>OAuth Client ID</label>
+        <input value={cid} onChange={e=>setCid(e.target.value)} placeholder="123456789.apps.googleusercontent.com" style={{fontFamily:'monospace',fontSize:12}}/>
+      </div>
+      <div className="flex g8">
+        <button className="btn btn-p" onClick={()=>{setGoogleClientId(cid);onClose();}}>Opslaan</button>
+        <button className="btn btn-g" onClick={onClose}>Annuleren</button>
+      </div>
+    </div>
+  </div>;
+}
+
+function ExportDropdown({data:d,onGoogleExport}){
+  const[open,setOpen]=useState(false);
+  const NL=d?.lang==='nl';
+  const items=[
+    {key:'sheets',label:NL?'Budget naar Sheets':'Budget to Sheets',icon:'\uD83D\uDCCA'},
+    {key:'docs',label:NL?'Offerte naar Docs':'Quotation to Docs',icon:'\uD83D\uDCC4'},
+    {key:'planning',label:NL?'Open in Planner':'Open in Planner',icon:'\uD83D\uDCC5'},
+  ];
+  return <div style={{position:'relative'}}>
+    <button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}}
+      onClick={()=>setOpen(!open)}>Google Export \u25BE</button>
+    {open&&<div style={{position:'absolute',right:0,top:'100%',marginTop:4,background:'#fff',border:'1px solid #d0d0ce',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:200,minWidth:220,overflow:'hidden'}}>
+      {items.map(it=><button key={it.key} style={{display:'block',width:'100%',padding:'10px 16px',border:0,background:'none',textAlign:'left',fontSize:13,fontFamily:'inherit',cursor:'pointer',borderBottom:'1px solid #eee'}}
+        onMouseOver={e=>e.currentTarget.style.background='var(--mint-light)'}
+        onMouseOut={e=>e.currentTarget.style.background='none'}
+        onClick={()=>{setOpen(false);onGoogleExport(it.key);}}
+      >{it.icon} {it.label}</button>)}
+      <button style={{display:'block',width:'100%',padding:'10px 16px',border:0,background:'none',textAlign:'left',fontSize:12,fontFamily:'inherit',cursor:'pointer',color:'#999'}}
+        onMouseOver={e=>e.currentTarget.style.background='var(--warm-grey)'}
+        onMouseOut={e=>e.currentTarget.style.background='none'}
+        onClick={()=>{setOpen(false);onGoogleExport('settings');}}
+      >\u2699 Google API instellingen</button>
+    </div>}
+  </div>;
+}
+
+function Header({data:d,onPdf,onGoogleExport,setData}){
   const ll=d?L_(d.lang):I.nl;
   return <div className="hdr">
     <div className="hdr-left">
@@ -474,6 +912,7 @@ function Header({data:d,onPdf,setData}){
         setData({...d,lang:newLang,conditions:{...d.conditions,avNL:newLang==='nl',avEN:newLang==='en'}});
       }}>{d.lang==='nl'?'EN':'NL'}</button>}
       {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>{navigator.clipboard.writeText(shareUrl(d));alert(ll.linkKopie)}}>{ll.deelLink}</button>}
+      {d&&<ExportDropdown data={d} onGoogleExport={onGoogleExport}/>}
       {d&&<button className="btn btn-s" onClick={onPdf}>PDF</button>}
     </div>
   </div>;
@@ -1374,6 +1813,26 @@ function App(){
 
   const handlePdf=()=>{exportPDF(d,setDWithArchive);archiveLogExport(d);};
 
+  const[gSettings,setGSettings]=useState(false);
+  const[gExporting,setGExporting]=useState(null);
+
+  const handleGoogleExport=async(type)=>{
+    if(type==='settings'){setGSettings(true);return;}
+    if(!d){return;}
+    if(type==='planning'){window.open(exportToPlanner(d),'_blank');return;}
+    if(!getGoogleClientId()){setGSettings(true);return;}
+    setGExporting(type);
+    try{
+      let url;
+      if(type==='sheets')url=await exportBudgetToSheets(d);
+      else if(type==='docs')url=await exportOfferteToDoc(d);
+      if(url)window.open(url,'_blank');
+    }catch(e){
+      if(e.message==='NO_CLIENT_ID'){setGSettings(true);}
+      else{alert('Google export mislukt: '+e.message);console.error(e);}
+    }finally{setGExporting(null);}
+  };
+
   const ll=d?L_(d.lang):I.nl;
   const tabs=[
     {id:'project',label:ll.tabProject},{id:'scope',label:ll.tabScope},
@@ -1382,7 +1841,14 @@ function App(){
   ];
 
   return <div className="app">
-    <Header data={showDash?null:d} onPdf={handlePdf} setData={setDWithArchive}/>
+    <GoogleSettingsModal open={gSettings} onClose={()=>setGSettings(false)}/>
+    {gExporting&&<div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,.4)',zIndex:900,display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div className="card" style={{margin:0,textAlign:'center',padding:32}}>
+        <div style={{fontSize:24,marginBottom:12,animation:'spin 1s linear infinite'}}>&#8635;</div>
+        <p style={{fontWeight:600}}>{gExporting==='sheets'?'Budget exporteren naar Google Sheets...':'Offerte exporteren naar Google Docs...'}</p>
+      </div>
+    </div>}
+    <Header data={showDash?null:d} onPdf={handlePdf} onGoogleExport={handleGoogleExport} setData={setDWithArchive}/>
     {!showDash&&d&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
     <div className="main">
       {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onDuplicate={duplicateQuote} onDelete={deleteQuote}/>:
