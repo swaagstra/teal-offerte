@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEAL Offerte Tool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  :root {
+    --teal-black:#111;--teal-mint:#D4ECE6;--teal-dark:#071412;--teal-white:#FFF;
+    --warm-grey:#F2F2F0;--mid-grey:#999;--dark-grey:#555;--mint-light:#EDF7F4;
+    --red:#E54D42;--green:#2D8659;--yellow:#D4A017;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter','Helvetica Neue',Arial,sans-serif;background:var(--warm-grey);color:var(--teal-black);line-height:1.5;font-size:14px}
+  .app{min-height:100vh;display:flex;flex-direction:column}
+  .hdr{background:var(--teal-dark);color:var(--teal-mint);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+  .hdr h1{font-size:18px;font-weight:700;letter-spacing:2px}
+  .hdr .sub{color:var(--mid-grey);font-size:13px;font-weight:400;margin-left:8px}
+  .tabs{display:flex;gap:2px;background:var(--teal-dark);padding:0 28px;overflow-x:auto}
+  .tab{padding:10px 18px;background:0;color:var(--mid-grey);border:0;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:.15s}
+  .tab:hover{color:var(--teal-mint)}.tab.on{color:var(--teal-mint);border-bottom-color:var(--teal-mint)}
+  .main{max-width:1200px;margin:0 auto;padding:24px;width:100%;flex:1}
+  .card{background:var(--teal-white);border-radius:8px;padding:24px;margin-bottom:16px;border:1px solid #e0e0de}
+  .card-h{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--dark-grey);margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid #e0e0de}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px}
+  .row3{grid-template-columns:1fr 1fr 1fr}.row4{grid-template-columns:1fr 1fr 1fr 1fr}.full{grid-template-columns:1fr}
+  .fg{display:flex;flex-direction:column;gap:4px}
+  .fg label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--dark-grey)}
+  .fg input,.fg select,.fg textarea{padding:8px 12px;border:1px solid #d0d0ce;border-radius:4px;font-size:14px;font-family:inherit;background:var(--teal-white);transition:.15s}
+  .fg input:focus,.fg select:focus,.fg textarea:focus{outline:0;border-color:var(--teal-dark)}
+  .fg textarea{resize:vertical;min-height:80px}
+  .btn{padding:8px 16px;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;border:0;transition:.15s;display:inline-flex;align-items:center;gap:6px}
+  .btn-p{background:var(--teal-dark);color:var(--teal-mint)}.btn-p:hover{background:#0a1f1b}
+  .btn-s{background:var(--teal-mint);color:var(--teal-dark)}.btn-s:hover{background:#c2e3da}
+  .btn-g{background:0;color:var(--dark-grey);border:1px solid #d0d0ce}.btn-g:hover{background:var(--warm-grey)}
+  .btn-sm{padding:4px 10px;font-size:12px}
+  /* Budget table */
+  .bt{width:100%;border-collapse:collapse;font-size:13px}
+  .bt th{text-align:left;padding:8px 12px;background:var(--warm-grey);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dark-grey);border-bottom:2px solid #d0d0ce}
+  .bt td{padding:6px 12px;border-bottom:1px solid #eee;vertical-align:middle}
+  .bt tr:hover{background:var(--mint-light)}
+  .bt .ph{background:var(--teal-dark);color:var(--teal-mint);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  .bt .ph td{padding:10px 12px;border:0}
+  .bt .sub{background:var(--warm-grey);font-weight:600}
+  .bt .tot{background:var(--teal-dark);color:var(--teal-white);font-weight:700;font-size:14px}
+  .bt .tot td{padding:12px;border:0}
+  .bt input{width:100%;padding:4px 8px;border:1px solid #d0d0ce;border-radius:3px;font-size:13px;font-family:inherit;background:0}
+  .bt input:focus{outline:0;border-color:var(--teal-dark);background:#fff}
+  .bt input[type=number]{text-align:right}
+  .mbar{display:flex;align-items:center;gap:12px;padding:14px;border-radius:6px;font-weight:600;margin-top:16px}
+  .mbar.ok{background:#e8f5e9;color:var(--green)}.mbar.warn{background:#fff8e1;color:var(--yellow)}.mbar.bad{background:#fce4ec;color:var(--red)}
+  /* Gantt */
+  .gantt-r{display:flex;align-items:center;margin-bottom:4px}
+  .gantt-l{width:180px;flex-shrink:0;font-size:13px;font-weight:500;padding:8px 0}
+  .gantt-t{flex:1;height:32px;position:relative;background:var(--warm-grey);border-radius:4px}
+  .gantt-b{position:absolute;height:100%;border-radius:4px;display:flex;align-items:center;padding:0 8px;font-size:11px;font-weight:600;color:var(--teal-dark);min-width:40px}
+  /* Start */
+  .start{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center}
+  .start h2{font-size:28px;margin-bottom:8px;color:var(--teal-dark)}
+  .start p{color:var(--dark-grey);margin-bottom:32px;max-width:500px}
+  .tsel{display:flex;gap:12px;width:100%;max-width:600px}
+  .tc{flex:1;padding:20px;border:2px solid #d0d0ce;border-radius:8px;cursor:pointer;transition:.15s;text-align:center}
+  .tc:hover{border-color:var(--teal-dark)}.tc.on{border-color:var(--teal-dark);background:var(--mint-light)}
+  .tc h3{font-size:16px;margin-bottom:4px}.tc p{font-size:12px;color:var(--dark-grey)}
+  /* Preview */
+  .prev{background:#fff;padding:48px;max-width:800px;margin:0 auto;border:1px solid #d0d0ce;box-shadow:0 2px 8px rgba(0,0,0,.06);font-size:13px;line-height:1.6}
+  .prev h1{font-size:22px;margin-bottom:4px}
+  .prev h2{font-size:14px;text-transform:uppercase;letter-spacing:1px;color:var(--teal-dark);margin:28px 0 8px;padding-bottom:4px;border-bottom:2px solid var(--teal-mint)}
+  .prev h3{font-size:13px;margin:16px 0 4px;font-weight:600}
+  .prev table{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px}
+  .prev table th{background:var(--warm-grey);padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #d0d0ce}
+  .prev table td{padding:6px 10px;border-bottom:1px solid #eee}
+  .prev .meta{color:var(--mid-grey);font-size:12px;margin-bottom:16px}
+  .prev .foot{margin-top:40px;padding-top:16px;border-top:1px solid #d0d0ce;font-size:10px;color:var(--mid-grey);display:flex;justify-content:space-between}
+  /* Utility */
+  .flex{display:flex}.between{display:flex;justify-content:space-between;align-items:center}
+  .g8{gap:8px}.g16{gap:16px}.mt16{margin-top:16px}.mt24{margin-top:24px}.mb16{margin-bottom:16px}
+  .tr{text-align:right}.mono{font-family:'SF Mono',Consolas,monospace}.sm{font-size:12px}.muted{color:var(--mid-grey)}
+  @media(max-width:768px){.row,.row3,.row4{grid-template-columns:1fr}.tsel{flex-direction:column}.main{padding:16px}.hdr{padding:12px 16px}.tabs{padding:0 16px}.prev{padding:24px}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useEffect,useCallback,useMemo}=React;
+
+// ── Constants ──
+const TEAL_INFO={
+  name:'TEAL B.V.',addr:'Binckhorstlaan 151a',zip:'2516 BA Den Haag',country:'The Netherlands',
+  kvk:'75630931',btw:'NL860345774B01',iban:'NL87 KNAB 0259 4940 97',
+  email:'info@teal.productions',web:'teamteal.nl',
+  addrOld:'Vinkensteynstraat 136',zipOld:'2562 TV, Den Haag'
+};
+
+const BUILD_PHASES=[
+  {id:'b0',name:{nl:'Fase 0',en:'Phase 0'},full:{nl:'Fase 0 - Scoping',en:'Phase 0 - Scoping'},buffer:.25,
+    items:[{desc:{nl:'Technisch onderzoek / materiaalanalyse',en:'Technical research / material analysis'},unit:'uur',qty:0,rate:0},
+           {desc:{nl:'Risicoanalyse en Go/No-go rapport',en:'Risk analysis and Go/No-go report'},unit:'uur',qty:0,rate:0}]},
+  {id:'b1',name:{nl:'Engineering',en:'Engineering'},full:{nl:'B1 - Engineering',en:'B1 - Engineering'},buffer:.20,
+    items:[{desc:{nl:'Constructieve berekeningen',en:'Structural calculations'},unit:'uur',qty:0,rate:0},
+           {desc:{nl:'Technische tekeningen (CAD)',en:'Technical drawings (CAD)'},unit:'uur',qty:0,rate:0},
+           {desc:{nl:'Materiaalspecificatie',en:'Material specification'},unit:'uur',qty:0,rate:0}]},
+  {id:'b2',name:{nl:'Procurement',en:'Procurement'},full:{nl:'B2 - Procurement & Fabrication',en:'B2 - Procurement & Fabrication'},buffer:.15,
+    items:[{desc:{nl:'Leveranciersselectie',en:'Supplier selection'},unit:'uur',qty:0,rate:0},
+           {desc:{nl:'Ingangscontrole',en:'First article inspection'},unit:'uur',qty:0,rate:0}]},
+  {id:'b3',name:{nl:'Assembly',en:'Assembly'},full:{nl:'B3 - Assembly',en:'B3 - Assembly'},buffer:.15,
+    items:[{desc:{nl:'Assemblage en integratie',en:'Assembly and integration'},unit:'uur',qty:0,rate:0},
+           {desc:{nl:'Factory Acceptance Test',en:'Factory Acceptance Test'},unit:'uur',qty:0,rate:0}]},
+  {id:'b4',name:{nl:'Installatie',en:'Installation'},full:{nl:'B4 - Installatie',en:'B4 - Installation'},buffer:.20,
+    items:[{desc:{nl:'Transport en site prep',en:'Transport and site prep'},unit:'uur',qty:0,rate:0},
+           {desc:{nl:'Installatie on-site',en:'On-site installation'},unit:'uur',qty:0,rate:0},
+           {desc:{nl:'Site Acceptance Test (SAT)',en:'Site Acceptance Test (SAT)'},unit:'uur',qty:0,rate:0}]},
+];
+
+const ASSEMBLE_PHASES=[
+  {id:'a0',name:{nl:'Setup',en:'Setup'},full:{nl:'Fase 0 - Intake & Setup',en:'Phase 0 - Intake & Setup'},buffer:0,
+    items:[{desc:{nl:'Maakbaarheidsanalyse',en:'Feasibility analysis'},unit:'uur',qty:0,rate:0},
+           {desc:{nl:'Tooling / jigs / mallen',en:'Tooling / jigs'},unit:'vaste kost',qty:1,rate:0},
+           {desc:{nl:'Werkinstructies + QC-protocol',en:'Work instructions + QC protocol'},unit:'uur',qty:0,rate:0}]},
+  {id:'a1',name:{nl:'Pilot',en:'Pilot'},full:{nl:'A1 - Pilotbatch',en:'A1 - Pilot batch'},buffer:0,
+    items:[{desc:{nl:'Arbeid pilot',en:'Pilot labour'},unit:'uur',qty:0,rate:0},
+           {desc:{nl:'Materialen pilot',en:'Pilot materials'},unit:'stuks',qty:0,rate:0}]},
+  {id:'a2',name:{nl:'Productie',en:'Production'},full:{nl:'A2 - Serieproductie',en:'A2 - Serial production'},buffer:0,
+    items:[{desc:{nl:'Assemblage per stuk',en:'Assembly per unit'},unit:'uur',qty:0,rate:0},
+           {desc:{nl:'QC per stuk',en:'QC per unit'},unit:'uur',qty:0,rate:0}]},
+  {id:'a3',name:{nl:'Verpakking',en:'Packing'},full:{nl:'A3 - Verpakking & QC',en:'A3 - Packing & QC'},buffer:0,
+    items:[{desc:{nl:'Verpakking',en:'Packing'},unit:'uur',qty:0,rate:0},
+           {desc:{nl:'Eindcontrole',en:'Final inspection'},unit:'uur',qty:0,rate:0}]},
+];
+
+const COLORS=['#D4ECE6','#B8D8CE','#9CCAB6','#80BC9E','#64AE86','#48A06E'];
+
+// ── Utils ──
+const fmt=n=>new Intl.NumberFormat('nl-NL',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n||0);
+const fmtE=n=>`\u20AC ${fmt(n)}`;
+const uid=()=>Math.random().toString(36).slice(2,9);
+const t=(obj,lang)=>typeof obj==='string'?obj:(obj&&obj[lang])||obj?.nl||'';
+
+function genRef(type){
+  const d=new Date();
+  const yy=String(d.getFullYear()).slice(2);
+  const mm=String(d.getMonth()+1).padStart(2,'0');
+  const dd=String(d.getDate()).padStart(2,'0');
+  const prefix=type==='build'?'B':'A';
+  return `${prefix}-${yy}${mm}${dd}-1`;
+}
+
+function calcHandling(v){
+  if(v<=25000)return v*.20;
+  if(v<=100000)return 25000*.20+(v-25000)*.12;
+  return 25000*.20+75000*.12+(v-100000)*.08;
+}
+
+function marginStatus(p){return p>=.20?'ok':p>=.10?'warn':'bad'}
+
+function createProject(type){
+  const phases=(type==='build'?BUILD_PHASES:ASSEMBLE_PHASES).map(p=>({
+    ...p,startWeek:0,durationWeeks:2,
+    description:{nl:'',en:''},
+    effort:'',
+    items:p.items.map(it=>({...it,id:uid()})),
+    clientAmount:0 // what the client sees
+  }));
+  return{
+    v:2,type,lang:'nl',
+    ref:genRef(type),
+    project:{name:'',date:new Date().toISOString().slice(0,10),version:'1.0',description:{nl:'',en:''},tealRole:{nl:'',en:''},exclusions:{nl:'',en:''}},
+    client:{name:'',contact:'',email:'',addr:'',zip:'',city:''},
+    phases,
+    procurement:{items:[],total:0},
+    subcontractors:{items:[],total:0,margin:.20},
+    extras:{travel:{enabled:true,rate:0.35,note:{nl:'Reiskosten binnen Nederland',en:'Travel costs within the Netherlands'}},
+            outOfPocket:{enabled:true,note:{nl:'Out-of-pocket kosten en facturen derden worden maandelijks doorgefactureerd.',en:'Out-of-pocket costs and third-party invoices are invoiced monthly.'}}},
+    payment:{milestones:type==='build'
+      ?[{name:{nl:'Opdrachtverstrekking',en:'Project start'},pct:30,date:''},{name:{nl:'Gereedmelding',en:'Production complete'},pct:40,date:''},{name:{nl:'Oplevering',en:'Delivery'},pct:30,date:''}]
+      :[{name:{nl:'Opdrachtverstrekking',en:'Project start'},pct:50,date:''},{name:{nl:'Oplevering',en:'Delivery'},pct:50,date:''}]
+    },
+    conditions:{validity:30,paymentTerm:30,warranty:{nl:'2 jaar',en:'2 years'},customTerms:[]},
+    batchSize:type==='assemble'?100:0,
+    targetMargin:.30,
+  };
+}
+
+// ── Persistence ──
+const SK='teal.offerte.v2';
+const save=d=>{try{localStorage.setItem(SK,JSON.stringify(d))}catch(e){}};
+const load=()=>{try{const r=localStorage.getItem(SK);return r?JSON.parse(r):null}catch(e){return null}};
+const loadHash=()=>{try{const h=location.hash.slice(1);if(!h)return null;const p=new URLSearchParams(h);const d=p.get('data');if(!d)return null;const j=LZString.decompressFromEncodedURIComponent(d);return j?JSON.parse(j):null}catch(e){return null}};
+const shareUrl=d=>{const c=LZString.compressToEncodedURIComponent(JSON.stringify(d));return`${location.origin}${location.pathname}#data=${c}`};
+
+// ── Components ──
+
+function Header({data,onPdf,onShare}){
+  return <div className="hdr">
+    <div className="flex" style={{alignItems:'baseline'}}>
+      <h1>TEAL</h1><span className="sub">Offerte Tool</span>
+    </div>
+    <div className="flex g8">
+      {data&&<button className="btn btn-g" onClick={()=>{const d={...data,lang:data.lang==='nl'?'en':'nl'};onShare(d)}}>{data.lang==='nl'?'EN':'NL'}</button>}
+      {data&&<button className="btn btn-g" onClick={()=>{navigator.clipboard.writeText(shareUrl(data));alert('Link gekopieerd')}}>Deel link</button>}
+      {data&&<button className="btn btn-s" onClick={onPdf}>Download PDF</button>}
+    </div>
+  </div>;
+}
+
+function TabNav({tabs,active,onChange}){
+  return <div className="tabs">{tabs.map(t=><button key={t.id} className={`tab ${active===t.id?'on':''}`} onClick={()=>onChange(t.id)}>{t.label}</button>)}</div>;
+}
+
+// ── Start ──
+function Start({onSelect}){
+  const recent=load();
+  return <div className="start">
+    <h2>Nieuwe offerte</h2>
+    <p>Kies het type project. De tool laadt automatisch de juiste fases, prijsstructuur en betalingsschema.</p>
+    <div className="tsel">
+      <div className="tc" onClick={()=>onSelect('build')}><h3>Build</h3><p>Eenmalig technisch project (B0-B4)</p></div>
+      <div className="tc" onClick={()=>onSelect('assemble')}><h3>Assemble</h3><p>Serieproductie (A0-A3)</p></div>
+    </div>
+    {recent&&<div className="mt24"><button className="btn btn-g" onClick={()=>onSelect('load')}>Hervat: {recent.project?.name||'Naamloos'} ({recent.type})</button></div>}
+  </div>;
+}
+
+// ── Project Tab ──
+function ProjectTab({data:d,set}){
+  const L=d.lang;
+  const up=(k,v)=>set({...d,project:{...d.project,[k]:v}});
+  const upC=(k,v)=>set({...d,client:{...d.client,[k]:v}});
+  const upLang=(k,v)=>{const o=d.project[k];const n=typeof o==='string'?{nl:o,en:o}:{...o};n[L]=v;up(k,n)};
+  return <>
+    <div className="card">
+      <div className="card-h">Projectgegevens</div>
+      <div className="row">
+        <div className="fg"><label>Projectnaam</label><input value={d.project.name} onChange={e=>up('name',e.target.value)} placeholder="Naam project"/></div>
+        <div className="fg"><label>Referentienummer</label><input value={d.ref} onChange={e=>set({...d,ref:e.target.value})}/></div>
+      </div>
+      <div className="row">
+        <div className="fg"><label>Datum</label><input type="date" value={d.project.date} onChange={e=>up('date',e.target.value)}/></div>
+        <div className="fg"><label>Versie</label><input value={d.project.version} onChange={e=>up('version',e.target.value)}/></div>
+      </div>
+      {d.type==='assemble'&&<div className="row">
+        <div className="fg"><label>Batchgrootte (stuks)</label><input type="number" value={d.batchSize||''} onChange={e=>set({...d,batchSize:parseInt(e.target.value)||0})}/></div>
+        <div className="fg"><label>Doelmarge %</label><input type="number" value={Math.round((d.targetMargin||.30)*100)} onChange={e=>set({...d,targetMargin:(parseInt(e.target.value)||30)/100})}/></div>
+      </div>}
+    </div>
+
+    <div className="card">
+      <div className="card-h">Klantgegevens</div>
+      <div className="row">
+        <div className="fg"><label>Bedrijfsnaam</label><input value={d.client.name} onChange={e=>upC('name',e.target.value)}/></div>
+        <div className="fg"><label>Contactpersoon</label><input value={d.client.contact} onChange={e=>upC('contact',e.target.value)}/></div>
+      </div>
+      <div className="row">
+        <div className="fg"><label>E-mail</label><input value={d.client.email} onChange={e=>upC('email',e.target.value)}/></div>
+        <div className="fg"><label>Adres</label><input value={d.client.addr} onChange={e=>upC('addr',e.target.value)}/></div>
+      </div>
+      <div className="row">
+        <div className="fg"><label>Postcode</label><input value={d.client.zip} onChange={e=>upC('zip',e.target.value)}/></div>
+        <div className="fg"><label>Plaats</label><input value={d.client.city} onChange={e=>upC('city',e.target.value)}/></div>
+      </div>
+    </div>
+
+    <div className="card">
+      <div className="card-h">Omschrijving ({L.toUpperCase()})</div>
+      <div className="row full"><div className="fg"><label>Projectomschrijving</label>
+        <textarea value={t(d.project.description,L)} onChange={e=>upLang('description',e.target.value)} placeholder="Beschrijving van het project"/></div></div>
+      <div className="row full"><div className="fg"><label>Rol van TEAL</label>
+        <textarea value={t(d.project.tealRole,L)} onChange={e=>upLang('tealRole',e.target.value)} placeholder="Technische scope"/></div></div>
+      <div className="row full"><div className="fg"><label>Niet inbegrepen / Exclusions</label>
+        <textarea value={t(d.project.exclusions,L)} onChange={e=>upLang('exclusions',e.target.value)} rows={3}/></div></div>
+    </div>
+  </>;
+}
+
+// ── Scope Tab ──
+function ScopeTab({data:d,set}){
+  const L=d.lang;
+  const upPhase=(i,k,v)=>{const p=[...d.phases];p[i]={...p[i],[k]:v};set({...d,phases:p})};
+  const upDesc=(i,v)=>{const p=[...d.phases];const o=p[i].description||{nl:'',en:''};const n=typeof o==='string'?{nl:o,en:o}:{...o};n[L]=v;p[i]={...p[i],description:n};set({...d,phases:p})};
+
+  return <div className="card">
+    <div className="card-h">Scope per fase ({L.toUpperCase()})</div>
+    <p className="sm muted mb16">Beschrijf per fase de activiteiten en inzet. Dit verschijnt in de offerte.</p>
+    {d.phases.map((ph,i)=><div key={ph.id} style={{marginBottom:24,paddingBottom:16,borderBottom:'1px solid #eee'}}>
+      <div className="between mb16">
+        <strong>{t(ph.full,L)}</strong>
+        <div className="fg" style={{width:200}}>
+          <label>Inzet (bijv. "+/- 4 uur/week")</label>
+          <input value={ph.effort||''} onChange={e=>upPhase(i,'effort',e.target.value)} placeholder="bijv. 2 weken fulltime"/>
+        </div>
+      </div>
+      <div className="fg">
+        <label>Activiteiten / beschrijving</label>
+        <textarea value={t(ph.description,L)} onChange={e=>upDesc(i,e.target.value)}
+          placeholder="Beschrijf de werkzaamheden in deze fase" rows={3}/>
+      </div>
+    </div>)}
+  </div>;
+}
+
+// ── Budget Tab (internal) ──
+function BudgetTab({data:d,set}){
+  const upItem=(pi,ii,k,v)=>{const p=[...d.phases];const items=[...p[pi].items];items[ii]={...items[ii],[k]:v};p[pi]={...p[pi],items};set({...d,phases:p})};
+  const addItem=pi=>{const p=[...d.phases];p[pi]={...p[pi],items:[...p[pi].items,{id:uid(),desc:{nl:'',en:''},unit:'uur',qty:0,rate:0}]};set({...d,phases:p})};
+  const rmItem=(pi,ii)=>{const p=[...d.phases];p[pi]={...p[pi],items:p[pi].items.filter((_,i)=>i!==ii)};set({...d,phases:p})};
+  const upClient=(pi,v)=>{const p=[...d.phases];p[pi]={...p[pi],clientAmount:parseFloat(v)||0};set({...d,phases:p})};
+
+  const pTotals=d.phases.map(p=>p.items.reduce((s,it)=>s+(it.qty||0)*(it.rate||0),0));
+  const blockA=pTotals.reduce((s,t)=>s+t,0);
+  const procTot=(d.procurement?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
+  const procFee=calcHandling(procTot);
+  const subTot=(d.subcontractors?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
+  const subFee=subTot*(d.subcontractors?.margin||.20);
+  const grand=blockA+(d.type==='build'?procTot+procFee+subTot+subFee:0);
+  const clientTotal=d.phases.reduce((s,p)=>s+(p.clientAmount||0),0)+(d.type==='build'?procTot+procFee+subTot+subFee:0);
+  const margin=clientTotal>0?(clientTotal-grand)/clientTotal:0;
+
+  return <>
+    <div className="card">
+      <div className="card-h">Intern budget (uren x tarief)</div>
+      <table className="bt">
+        <thead><tr><th style={{width:'30%'}}>Omschrijving</th><th style={{width:'10%'}}>Eenheid</th><th style={{width:'10%'}}>Aantal</th><th style={{width:'12%'}}>Tarief</th><th style={{width:'12%'}}>Subtotaal</th><th style={{width:'14%'}}>Klantprijs</th><th style={{width:'6%'}}></th></tr></thead>
+        <tbody>
+          {d.phases.map((ph,pi)=><React.Fragment key={ph.id}>
+            <tr className="ph"><td colSpan={5}>{t(ph.full,d.lang)}{ph.buffer>0&&<span style={{opacity:.7,marginLeft:8,fontSize:11}}>buffer {Math.round(ph.buffer*100)}%</span>}</td>
+              <td></td><td style={{textAlign:'right'}}><button className="btn btn-sm" style={{background:'rgba(212,236,230,.2)',color:'var(--teal-mint)',border:0}} onClick={()=>addItem(pi)}>+</button></td></tr>
+            {ph.items.map((it,ii)=>{const sub=(it.qty||0)*(it.rate||0);
+              return <tr key={it.id}>
+                <td><input value={t(it.desc,d.lang)} onChange={e=>{const o=it.desc;const n=typeof o==='string'?{nl:o,en:o}:{...o};n[d.lang]=e.target.value;upItem(pi,ii,'desc',n)}}/></td>
+                <td><select value={it.unit} onChange={e=>upItem(pi,ii,'unit',e.target.value)} style={{padding:'4px 6px',border:'1px solid #d0d0ce',borderRadius:3,fontSize:13,background:0,width:'100%'}}>
+                  <option value="uur">uur</option><option value="stuks">stuks</option><option value="set">set</option><option value="vaste kost">vaste kost</option><option value="dag">dag</option></select></td>
+                <td><input type="number" value={it.qty||''} onChange={e=>upItem(pi,ii,'qty',parseFloat(e.target.value)||0)}/></td>
+                <td><input type="number" value={it.rate||''} onChange={e=>upItem(pi,ii,'rate',parseFloat(e.target.value)||0)}/></td>
+                <td className="tr mono">{fmt(sub)}</td>
+                <td></td>
+                <td className="tr"><button className="btn btn-sm btn-g" onClick={()=>rmItem(pi,ii)}>&times;</button></td>
+              </tr>})}
+            <tr className="sub"><td colSpan={4}>Subtotaal intern</td><td className="tr mono">{fmt(pTotals[pi])}</td>
+              <td><input type="number" value={ph.clientAmount||''} onChange={e=>upClient(pi,e.target.value)} placeholder="Klantprijs" style={{fontWeight:600}}/></td><td></td></tr>
+          </React.Fragment>)}
+          <tr className="tot"><td colSpan={4}>Totaal intern</td><td className="tr mono">{fmtE(blockA)}</td><td className="tr mono" style={{color:'var(--teal-mint)'}}>{fmtE(clientTotal)}</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    {d.type==='build'&&<>
+      <div className="card">
+        <div className="card-h">Inkoop + handling fee</div>
+        <p className="sm muted mb16">Degressief: 20% tot 25k, 12% 25-100k, 8% boven 100k</p>
+        <table className="bt">
+          <thead><tr><th>Omschrijving</th><th style={{width:'20%'}}>Bedrag</th><th style={{width:'8%'}}></th></tr></thead>
+          <tbody>
+            {(d.procurement?.items||[]).map((it,i)=><tr key={i}>
+              <td><input value={it.desc||''} onChange={e=>{const items=[...(d.procurement?.items||[])];items[i]={...items[i],desc:e.target.value};set({...d,procurement:{...d.procurement,items}})}}/></td>
+              <td><input type="number" value={it.amount||''} onChange={e=>{const items=[...(d.procurement?.items||[])];items[i]={...items[i],amount:parseFloat(e.target.value)||0};set({...d,procurement:{...d.procurement,items}})}}/></td>
+              <td className="tr"><button className="btn btn-sm btn-g" onClick={()=>{const items=(d.procurement?.items||[]).filter((_,idx)=>idx!==i);set({...d,procurement:{...d.procurement,items}})}}>&times;</button></td>
+            </tr>)}
+            <tr className="sub"><td>Inkoopwaarde</td><td className="tr mono">{fmt(procTot)}</td><td></td></tr>
+            <tr className="sub"><td>Handling fee</td><td className="tr mono">{fmt(procFee)}</td><td></td></tr>
+          </tbody>
+        </table>
+        <button className="btn btn-sm btn-g mt16" onClick={()=>{const items=[...(d.procurement?.items||[]),{desc:'',amount:0}];set({...d,procurement:{...d.procurement,items}})}}>+ Inkooppost</button>
+      </div>
+
+      <div className="card">
+        <div className="card-h">Onderaannemers + 20% marge</div>
+        <table className="bt">
+          <thead><tr><th>Omschrijving</th><th style={{width:'20%'}}>Bedrag</th><th style={{width:'8%'}}></th></tr></thead>
+          <tbody>
+            {(d.subcontractors?.items||[]).map((it,i)=><tr key={i}>
+              <td><input value={it.desc||''} onChange={e=>{const items=[...(d.subcontractors?.items||[])];items[i]={...items[i],desc:e.target.value};set({...d,subcontractors:{...d.subcontractors,items}})}}/></td>
+              <td><input type="number" value={it.amount||''} onChange={e=>{const items=[...(d.subcontractors?.items||[])];items[i]={...items[i],amount:parseFloat(e.target.value)||0};set({...d,subcontractors:{...d.subcontractors,items}})}}/></td>
+              <td className="tr"><button className="btn btn-sm btn-g" onClick={()=>{const items=(d.subcontractors?.items||[]).filter((_,idx)=>idx!==i);set({...d,subcontractors:{...d.subcontractors,items}})}}>&times;</button></td>
+            </tr>)}
+            <tr className="sub"><td>Subtotaal + marge ({Math.round((d.subcontractors?.margin||.20)*100)}%)</td><td className="tr mono">{fmt(subTot+subFee)}</td><td></td></tr>
+          </tbody>
+        </table>
+        <button className="btn btn-sm btn-g mt16" onClick={()=>{const items=[...(d.subcontractors?.items||[]),{desc:'',amount:0}];set({...d,subcontractors:{...d.subcontractors,items}})}}>+ Onderaannemer</button>
+      </div>
+    </>}
+
+    <div className="card">
+      <div className="card-h">Marge-analyse</div>
+      <div className={`mbar ${marginStatus(margin)}`}>
+        <span>Marge: {Math.round(margin*100)}%</span>
+        <span style={{fontSize:12,fontWeight:400}}>Target: {Math.round((d.targetMargin||.30)*100)}% {margin>=(d.targetMargin||.30)?'(bereikt)':'(niet bereikt)'}</span>
+      </div>
+    </div>
+  </>;
+}
+
+// ── Planning Tab ──
+function PlanningTab({data:d,set}){
+  const total=Math.max(16,...d.phases.map(p=>(p.startWeek||0)+(p.durationWeeks||2)));
+  const upPh=(i,k,v)=>{const p=[...d.phases];p[i]={...p[i],[k]:v};set({...d,phases:p})};
+  const weeks=Array.from({length:total},(_,i)=>i+1);
+
+  return <div className="card">
+    <div className="card-h">Planning (indicatief)</div>
+    <div style={{overflowX:'auto'}}>
+      {d.phases.map((ph,pi)=>{
+        const left=((ph.startWeek||0)/total)*100;
+        const w=((ph.durationWeeks||2)/total)*100;
+        return <div key={ph.id} className="gantt-r">
+          <div className="gantt-l">{t(ph.name,d.lang)}</div>
+          <div className="gantt-t">
+            <div className="gantt-b" style={{left:`${left}%`,width:`${w}%`,background:COLORS[pi%COLORS.length]}}>{ph.durationWeeks||2}w</div>
+          </div>
+        </div>;
+      })}
+    </div>
+    <table className="bt mt24">
+      <thead><tr><th>Fase</th><th style={{width:'12%'}}>Start (week)</th><th style={{width:'12%'}}>Duur (weken)</th><th style={{width:'20%'}}>Startdatum</th></tr></thead>
+      <tbody>{d.phases.map((ph,pi)=>{
+        let sd='';
+        if(d.project.date&&ph.startWeek>=0){const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(ph.startWeek||0)*7);sd=dt.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})}
+        return <tr key={ph.id}>
+          <td>{t(ph.full,d.lang)}</td>
+          <td><input type="number" min={0} value={ph.startWeek||0} onChange={e=>upPh(pi,'startWeek',parseInt(e.target.value)||0)}/></td>
+          <td><input type="number" min={1} value={ph.durationWeeks||2} onChange={e=>upPh(pi,'durationWeeks',parseInt(e.target.value)||1)}/></td>
+          <td className="muted">{sd}</td>
+        </tr>;
+      })}</tbody>
+    </table>
+  </div>;
+}
+
+// ── Payment Tab ──
+function PaymentTab({data:d,set}){
+  const clientTotal=d.phases.reduce((s,p)=>s+(p.clientAmount||0),0);
+  const procTot=(d.procurement?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
+  const subTot=(d.subcontractors?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
+  const grand=clientTotal+(d.type==='build'?procTot+calcHandling(procTot)+subTot+subTot*(d.subcontractors?.margin||.20):0);
+  const upMs=(i,k,v)=>{const ms=[...d.payment.milestones];ms[i]={...ms[i],[k]:v};set({...d,payment:{...d.payment,milestones:ms}})};
+  const totPct=d.payment.milestones.reduce((s,m)=>s+(m.pct||0),0);
+
+  return <div className="card">
+    <div className="card-h">Betalingsschema</div>
+    <table className="bt">
+      <thead><tr><th>Mijlpaal</th><th style={{width:'10%'}}>%</th><th style={{width:'18%'}}>Bedrag</th><th style={{width:'18%'}}>Datum</th><th style={{width:'6%'}}></th></tr></thead>
+      <tbody>
+        {d.payment.milestones.map((ms,i)=><tr key={i}>
+          <td><input value={t(ms.name,d.lang)} onChange={e=>{const o=ms.name;const n=typeof o==='string'?{nl:o,en:o}:{...o};n[d.lang]=e.target.value;upMs(i,'name',n)}}/></td>
+          <td><input type="number" value={ms.pct||''} onChange={e=>upMs(i,'pct',parseInt(e.target.value)||0)}/></td>
+          <td className="mono">{fmtE(grand*(ms.pct||0)/100)}</td>
+          <td><input type="date" value={ms.date||''} onChange={e=>upMs(i,'date',e.target.value)}/></td>
+          <td><button className="btn btn-sm btn-g" onClick={()=>{const ms=d.payment.milestones.filter((_,idx)=>idx!==i);set({...d,payment:{...d.payment,milestones:ms}})}}>&times;</button></td>
+        </tr>)}
+        <tr className="sub"><td>Totaal</td><td className={totPct===100?'':''}style={{color:totPct===100?'var(--green)':'var(--red)',fontWeight:600}}>{totPct}%</td><td className="mono">{fmtE(grand)}</td><td></td><td></td></tr>
+      </tbody>
+    </table>
+    <button className="btn btn-sm btn-g mt16" onClick={()=>{const ms=[...d.payment.milestones,{name:{nl:'',en:''},pct:0,date:''}];set({...d,payment:{...d.payment,milestones:ms}})}}>+ Mijlpaal</button>
+
+    <div className="mt24"><div className="card-h">Voorwaarden</div>
+      <div className="row row3">
+        <div className="fg"><label>Geldigheid (dagen)</label><input type="number" value={d.conditions.validity} onChange={e=>set({...d,conditions:{...d.conditions,validity:parseInt(e.target.value)||30}})}/></div>
+        <div className="fg"><label>Betalingstermijn (dagen)</label><input type="number" value={d.conditions.paymentTerm} onChange={e=>set({...d,conditions:{...d.conditions,paymentTerm:parseInt(e.target.value)||30}})}/></div>
+        <div className="fg"><label>Garantie</label><input value={t(d.conditions.warranty,d.lang)} onChange={e=>{const o=d.conditions.warranty;const n=typeof o==='string'?{nl:o,en:o}:{...o};n[d.lang]=e.target.value;set({...d,conditions:{...d.conditions,warranty:n}})}}/></div>
+      </div>
+    </div>
+  </div>;
+}
+
+// ── Preview ──
+function PreviewTab({data:d}){
+  const L=d.lang;
+  const NL=L==='nl';
+  const clientTotal=d.phases.reduce((s,p)=>s+(p.clientAmount||0),0);
+  const procTot=(d.procurement?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
+  const subTot=(d.subcontractors?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
+  const grand=clientTotal+(d.type==='build'?procTot+calcHandling(procTot)+subTot+subTot*(d.subcontractors?.margin||.20):0);
+
+  return <div className="prev" id="offerte-preview">
+    {/* Header */}
+    <div style={{marginBottom:32}}>
+      <div style={{fontSize:20,fontWeight:800,letterSpacing:1,marginBottom:4}}>TEAL</div>
+      <div style={{fontSize:16,color:'#555'}}>{NL?'Offerte':'Quotation'}</div>
+    </div>
+
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:32,marginBottom:32}}>
+      <div>
+        <div className="sm muted">Project</div>
+        <div style={{fontWeight:600}}>{d.project.name||'[Projectnaam]'}</div>
+        <div className="sm muted" style={{marginTop:8}}>{NL?'Nummer':'Number'}</div>
+        <div>{d.ref}</div>
+        <div className="sm muted" style={{marginTop:8}}>{NL?'Datum':'Date'}</div>
+        <div>{d.project.date?new Date(d.project.date).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):''}</div>
+        <div className="sm muted" style={{marginTop:8}}>{NL?'Geldig':'Valid'}</div>
+        <div>{d.conditions.validity} {NL?'dagen':'days'}</div>
+      </div>
+      <div>
+        <div style={{fontWeight:600}}>{d.client.name||'[Klant]'}</div>
+        <div>{d.client.contact}</div>
+        {d.client.email&&<div>{d.client.email}</div>}
+        {d.client.addr&&<div>{d.client.addr}</div>}
+        {(d.client.zip||d.client.city)&&<div>{d.client.zip} {d.client.city}</div>}
+      </div>
+    </div>
+
+    <h2>{NL?'Projectomschrijving':'Project Description'}</h2>
+    <p style={{whiteSpace:'pre-wrap'}}>{t(d.project.description,L)||'[Beschrijving]'}</p>
+    {t(d.project.tealRole,L)&&<><h3>{NL?'Rol van TEAL':"TEAL's Role"}</h3><p style={{whiteSpace:'pre-wrap'}}>{t(d.project.tealRole,L)}</p></>}
+    {t(d.project.exclusions,L)&&<><h3>{NL?'Niet inbegrepen':'Exclusions'}</h3><p style={{whiteSpace:'pre-wrap'}}>{t(d.project.exclusions,L)}</p></>}
+
+    <h2>{NL?'Scope en aanpak':'Scope of Work'}</h2>
+    {d.phases.map(ph=>{
+      const desc=t(ph.description,L);
+      return desc?<div key={ph.id} style={{marginBottom:16}}>
+        <h3>{t(ph.full,L)}</h3>
+        <p style={{whiteSpace:'pre-wrap'}}>{desc}</p>
+        {ph.effort&&<p className="sm" style={{marginTop:4}}><strong>{NL?'Inzet':'Effort'}:</strong> {ph.effort}</p>}
+      </div>:null;
+    })}
+
+    <h2>{NL?'Kosten':'Financial Summary'}</h2>
+    <table>
+      <thead><tr><th>{NL?'Onderdeel':'Item'}</th><th style={{textAlign:'right'}}>{NL?'Bedrag':'Amount'}</th></tr></thead>
+      <tbody>
+        {d.phases.filter(p=>p.clientAmount>0).map(p=><tr key={p.id}>
+          <td>{t(p.full,L)}</td>
+          <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(p.clientAmount)}</td>
+        </tr>)}
+        {d.type==='build'&&procTot>0&&<tr><td>{NL?'Materialen en inkoop':'Materials and procurement'}</td><td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(procTot+calcHandling(procTot))}</td></tr>}
+        {d.type==='build'&&subTot>0&&<tr><td>{NL?'Onderaanneming':'Subcontractors'}</td><td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(subTot+subTot*(d.subcontractors?.margin||.20))}</td></tr>}
+        <tr style={{fontWeight:700,borderTop:'2px solid var(--teal-dark)'}}>
+          <td>{NL?'Totaal excl. BTW':'Total (excl. VAT)'}</td>
+          <td style={{textAlign:'right',fontFamily:'monospace'}}>{fmtE(grand)}</td>
+        </tr>
+      </tbody>
+    </table>
+    {d.extras?.outOfPocket?.enabled&&<p className="sm muted" style={{marginTop:8}}>{t(d.extras.outOfPocket.note,L)}</p>}
+    {d.extras?.travel?.enabled&&<p className="sm muted">{t(d.extras.travel.note,L)}: {fmtE(d.extras.travel.rate)}/km</p>}
+
+    <h2>{NL?'Betalingsschema':'Payment Schedule'}</h2>
+    {d.payment.milestones.map((ms,i)=><p key={i}>- {t(ms.name,L)} ({ms.pct}%): {fmtE(grand*ms.pct/100)}</p>)}
+    <p className="sm muted" style={{marginTop:8}}>{NL?`Betalingstermijn: ${d.conditions.paymentTerm} dagen na factuurdatum.`:`Payment is due within ${d.conditions.paymentTerm} days of the invoice date.`}</p>
+
+    <h2>{NL?'Voorwaarden':'Terms & Conditions'}</h2>
+    <p>- {NL?`Deze offerte is geldig tot ${d.conditions.validity} dagen na dagtekening.`:`This quotation is valid for ${d.conditions.validity} days.`}</p>
+    <p>- {NL?'De Algemene Voorwaarden van TEAL zijn van toepassing.':'The General Terms and Conditions of TEAL apply.'}</p>
+    <p>- {NL?`Garantie: ${t(d.conditions.warranty,L)}`:`Warranty: ${t(d.conditions.warranty,L)}`}</p>
+    <p>- {NL?'Prijzen exclusief BTW.':'Prices exclude VAT.'}</p>
+
+    <div style={{marginTop:48}}>
+      <p>{NL?'Hierbij verklaren partijen het eens te zijn met de afspraken en voorwaarden in dit document:':'By signing below, you agree to the terms outlined in this document:'}</p>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:32,marginTop:24}}>
+        <div><p style={{fontWeight:600}}>{d.client.name||'[Klant]'}</p><p style={{marginTop:16}}>Naam: __________</p><p>Datum: __________</p><p>Handtekening: __________</p></div>
+      </div>
+    </div>
+
+    <div className="foot">
+      <div>{TEAL_INFO.addr}, {TEAL_INFO.zip}, {TEAL_INFO.country}</div>
+      <div>{TEAL_INFO.name} | {TEAL_INFO.email}</div>
+      <div>KvK {TEAL_INFO.kvk} | BTW {TEAL_INFO.btw}</div>
+    </div>
+  </div>;
+}
+
+// ── PDF ──
+function exportPDF(d){
+  const{jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'mm',format:'a4'});
+  const m=20,pw=170;
+  let y=m;
+  const NL=d.lang==='nl';
+  const L=d.lang;
+
+  const txt=(text,sz,opts={})=>{
+    doc.setFontSize(sz);doc.setFont('helvetica',opts.b?'bold':'normal');
+    if(opts.c)doc.setTextColor(...opts.c);else doc.setTextColor(17,17,17);
+    if(y>272){doc.addPage();y=m;}
+    if(opts.w){const lines=doc.splitTextToSize(text,opts.w);doc.text(lines,m+(opts.x||0),y);y+=lines.length*sz*.38;}
+    else{doc.text(text,m+(opts.x||0),y);y+=sz*.42;}
+  };
+  const line=()=>{doc.setDrawColor(212,236,230);doc.setLineWidth(.5);doc.line(m,y,190,y);y+=4;};
+  const gap=(n=3)=>{y+=n};
+
+  // Title
+  doc.setFont('helvetica','bold');doc.setFontSize(20);doc.setTextColor(17,17,17);
+  doc.text('TEAL',m,y);y+=6;
+  doc.setFont('helvetica','normal');doc.setFontSize(14);doc.setTextColor(85,85,85);
+  doc.text(NL?'Offerte':'Quotation',m,y);y+=10;
+
+  // Meta left + client right
+  doc.setFontSize(9);doc.setTextColor(153,153,153);
+  doc.text('Project',m,y);doc.text(NL?'Nummer':'Number',m,y+5);doc.text(NL?'Datum':'Date',m,y+10);doc.text(NL?'Geldig':'Valid',m,y+15);
+  doc.setTextColor(17,17,17);doc.setFont('helvetica','bold');
+  doc.text(d.project.name||'[Project]',m+30,y);doc.setFont('helvetica','normal');
+  doc.text(d.ref,m+30,y+5);
+  doc.text(d.project.date?new Date(d.project.date).toLocaleDateString(NL?'nl-NL':'en-GB'):'-',m+30,y+5+5);
+  doc.text(`${d.conditions.validity} ${NL?'dagen':'days'}`,m+30,y+15);
+
+  // Client
+  if(d.client.name){
+    doc.setFont('helvetica','bold');doc.text(d.client.name,120,y);doc.setFont('helvetica','normal');
+    let cy=y+5;
+    if(d.client.contact){doc.text(d.client.contact,120,cy);cy+=4;}
+    if(d.client.email){doc.text(d.client.email,120,cy);cy+=4;}
+    if(d.client.addr){doc.text(d.client.addr,120,cy);cy+=4;}
+    if(d.client.zip||d.client.city){doc.text(`${d.client.zip} ${d.client.city}`,120,cy);}
+  }
+  y+=24;line();
+
+  // Description
+  txt(NL?'PROJECTOMSCHRIJVING':'PROJECT DESCRIPTION',10,{b:true,c:[7,20,18]});gap();
+  if(t(d.project.description,L)){txt(t(d.project.description,L),9,{w:pw});gap(4);}
+  if(t(d.project.tealRole,L)){txt(NL?'Rol van TEAL':"TEAL's Role",9,{b:true});txt(t(d.project.tealRole,L),9,{w:pw});gap(4);}
+  line();
+
+  // Scope
+  txt(NL?'SCOPE EN AANPAK':'SCOPE OF WORK',10,{b:true,c:[7,20,18]});gap();
+  d.phases.forEach(ph=>{
+    const desc=t(ph.description,L);
+    if(desc){txt(t(ph.full,L),9,{b:true});txt(desc,9,{w:pw});if(ph.effort)txt(`${NL?'Inzet':'Effort'}: ${ph.effort}`,8,{c:[153,153,153]});gap(3);}
+  });
+  line();
+
+  // Costs
+  txt(NL?'KOSTEN':'FINANCIAL SUMMARY',10,{b:true,c:[7,20,18]});gap(4);
+  const clientTotal=d.phases.reduce((s,p)=>s+(p.clientAmount||0),0);
+  const procTot=(d.procurement?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
+  const subTot=(d.subcontractors?.items||[]).reduce((s,it)=>s+(it.amount||0),0);
+  const grand=clientTotal+(d.type==='build'?procTot+calcHandling(procTot)+subTot+subTot*.20:0);
+
+  d.phases.filter(p=>p.clientAmount>0).forEach(p=>{
+    if(y>270){doc.addPage();y=m;}
+    doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(17,17,17);
+    doc.text(t(p.full,L),m,y);doc.text(fmtE(p.clientAmount),190,y,{align:'right'});y+=5;
+  });
+  gap(2);
+  doc.setLineWidth(.3);doc.setDrawColor(17,17,17);doc.line(m,y,190,y);y+=4;
+  doc.setFont('helvetica','bold');doc.setFontSize(10);
+  doc.text(NL?'Totaal excl. BTW':'Total (excl. VAT)',m,y);doc.text(fmtE(grand),190,y,{align:'right'});y+=8;
+
+  if(d.extras?.outOfPocket?.enabled){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(153,153,153);doc.text(t(d.extras.outOfPocket.note,L),m,y);y+=4;}
+  if(d.extras?.travel?.enabled){doc.text(`${t(d.extras.travel.note,L)}: ${fmtE(d.extras.travel.rate)}/km`,m,y);y+=4;}
+  y+=2;doc.setTextColor(17,17,17);line();
+
+  // Payment
+  txt(NL?'BETALINGSSCHEMA':'PAYMENT SCHEDULE',10,{b:true,c:[7,20,18]});gap();
+  d.payment.milestones.forEach(ms=>{
+    doc.setFontSize(9);doc.setFont('helvetica','normal');
+    doc.text(`- ${t(ms.name,L)} (${ms.pct}%)`,m,y);doc.text(fmtE(grand*ms.pct/100),190,y,{align:'right'});y+=5;
+  });
+  gap(2);doc.setFontSize(8);doc.setTextColor(153,153,153);
+  doc.text(NL?`Betalingstermijn: ${d.conditions.paymentTerm} dagen na factuurdatum.`:`Payment due within ${d.conditions.paymentTerm} days.`,m,y);y+=6;
+  doc.setTextColor(17,17,17);line();
+
+  // Conditions
+  txt(NL?'VOORWAARDEN':'TERMS & CONDITIONS',10,{b:true,c:[7,20,18]});gap();
+  doc.setFontSize(9);doc.setFont('helvetica','normal');
+  [NL?`- Deze offerte is geldig tot ${d.conditions.validity} dagen na dagtekening.`:`- Valid for ${d.conditions.validity} days.`,
+   NL?'- De Algemene Voorwaarden van TEAL B.V. zijn van toepassing.':'- TEAL General Terms and Conditions apply.',
+   NL?`- Garantie: ${t(d.conditions.warranty,L)}`:`- Warranty: ${t(d.conditions.warranty,L)}`,
+   NL?'- Prijzen exclusief BTW.':'- Prices exclude VAT.'].forEach(l=>{doc.text(l,m,y);y+=5;});
+
+  // Footer on all pages
+  const pc=doc.getNumberOfPages();
+  for(let i=1;i<=pc;i++){
+    doc.setPage(i);doc.setFontSize(7);doc.setTextColor(153,153,153);
+    doc.text(`${TEAL_INFO.addr}`,m,288);doc.text(TEAL_INFO.name,90,288);doc.text(`KvK ${TEAL_INFO.kvk}`,150,288);
+    doc.text(`${TEAL_INFO.email}`,m,292);doc.text(`BTW ${TEAL_INFO.btw}`,150,292);
+    doc.text(`${i}/${pc}`,190,288,{align:'right'});
+  }
+
+  doc.save(`TEAL_${NL?'Offerte':'Quotation'}_${(d.project.name||'Draft').replace(/\s+/g,'_')}_v${d.project.version}.pdf`);
+}
+
+// ── App ──
+function App(){
+  const[d,setD]=useState(null);
+  const[tab,setTab]=useState('project');
+
+  useEffect(()=>{const h=loadHash();if(h){setD(h);history.replaceState(null,'',location.pathname)}},[]);
+  useEffect(()=>{if(d)save(d)},[d]);
+
+  const sel=type=>{
+    if(type==='load'){const r=load();if(r)setD(r);}
+    else{setD(createProject(type));setTab('project');}
+  };
+
+  const toggleLang=nd=>{setD(nd)};
+
+  const tabs=[
+    {id:'project',label:'Project'},{id:'scope',label:'Scope'},
+    {id:'budget',label:'Budget (intern)'},{id:'planning',label:'Planning'},
+    {id:'payment',label:'Betaling'},{id:'preview',label:'Offerte preview'},
+  ];
+
+  return <div className="app">
+    <Header data={d} onPdf={()=>exportPDF(d)} onShare={toggleLang}/>
+    {d&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
+    <div className="main">
+      {!d?<Start onSelect={sel}/>:<>
+        <div className="between mb16">
+          <div><span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'var(--dark-grey)'}}>{d.type} offerte</span>
+            {d.project.name&&<span style={{marginLeft:8,color:'var(--mid-grey)'}}>{d.project.name}</span>}
+            <span style={{marginLeft:8,fontSize:11,color:'var(--mid-grey)'}}>{d.ref}</span>
+          </div>
+          <button className="btn btn-sm btn-g" onClick={()=>{if(confirm('Nieuwe offerte?'))setD(null)}}>Nieuw</button>
+        </div>
+        {tab==='project'&&<ProjectTab data={d} set={setD}/>}
+        {tab==='scope'&&<ScopeTab data={d} set={setD}/>}
+        {tab==='budget'&&<BudgetTab data={d} set={setD}/>}
+        {tab==='planning'&&<PlanningTab data={d} set={setD}/>}
+        {tab==='payment'&&<PaymentTab data={d} set={setD}/>}
+        {tab==='preview'&&<PreviewTab data={d}/>}
+      </>}
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
