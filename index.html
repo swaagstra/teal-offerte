@@ -1027,21 +1027,38 @@ function PreviewTab({data:d}){
   </div>;
 }
 
-// ── Logo as Base64 PNG (generated once) ──
-let _logoBase64=null;
-function getLogoBase64(){
-  if(_logoBase64)return _logoBase64;
-  const canvas=document.createElement('canvas');
-  const w=400,h=190;canvas.width=w;canvas.height=h;
-  const ctx=canvas.getContext('2d');
-  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 1815 864"><g transform="matrix(1,0,0,1,0,-1399.19)"><g transform="matrix(1,0,0,1,-274.091,1240.3)"><clipPath id="lc"><rect x="274.091" y="158.9" width="1814.02" height="863.303"/></clipPath><g clip-path="url(#lc)"><g transform="matrix(2.77287,0,0,2.77287,-1956.66,-1047.42)"><g transform="matrix(0.622415,0,0,0.622415,665.764,213.102)"><path d="M523.118,506.267L523.118,556.267L473.118,556.267L473.118,706.267L423.118,706.267L423.118,556.267L373.118,556.267L373.118,506.267L523.118,506.267Z" fill="#111"/></g><g transform="matrix(0.622415,0,0,0.622415,665.881,213.102)"><path d="M723.118,506.267L723.118,556.267L673.118,556.267L673.118,606.267L623.118,606.267L623.118,656.267L723.118,656.267L723.118,706.267L573.118,706.267L573.118,506.267L723.118,506.267Z" fill="#111"/></g><g transform="matrix(0.622415,0,0,0.622415,665.881,213.102)"><path d="M923.118,506.267L923.118,706.267L873.118,706.267L873.118,656.267L823.118,656.267L823.118,706.267L773.118,706.267L773.118,506.267L923.118,506.267ZM823.118,556.267L823.118,606.267L873.118,606.267L873.118,556.267L823.118,556.267Z" fill="#111"/></g><g transform="matrix(0.622415,0,0,0.622415,665.881,213.102)"><path d="M1023.12,506.267L1023.12,656.267L1123.12,656.267L1123.12,706.267L973.118,706.267L973.118,506.267L1023.12,506.267Z" fill="#111"/></g><g transform="matrix(0.656049,0,0,0.52407,71.8753,252.375)"><path d="M2113.9,942.639L1116.71,942.639L1116.71,348.559L2113.9,348.559L2113.9,942.639ZM2066.26,408.188L1164.34,408.188L1164.34,883.009L2066.26,883.009L2066.26,408.188Z" fill="#111"/></g></g></g></g></g></svg>`;
-  const img=new Image();
-  const blob=new Blob([svg],{type:'image/svg+xml'});
-  const url=URL.createObjectURL(blob);
-  // Sync render via offscreen technique
-  img.src=url;
-  // Use a tiny canvas trick: draw inline
-  try{const svgEl=new DOMParser().parseFromString(svg,'image/svg+xml').documentElement;const s=new XMLSerializer().serializeToString(svgEl);const b64='data:image/svg+xml;base64,'+btoa(s);_logoBase64=b64;return b64;}catch(e){return null;}
+// ── Draw TEAL pixel logo directly in jsPDF ──
+function drawLogoInPDF(doc,x,y,scale){
+  // TEAL pixel logo: each letter as filled rectangles, plus border frame
+  // Grid unit = scale (mm). Letters are 3 wide x 4 tall units. Frame is on the right.
+  const s=scale||1.2;
+  const c=[17,17,17]; // fill color
+  doc.setFillColor(...c);
+  // T (3x4 grid at offset 0)
+  doc.rect(x,y,3*s,s,'F'); // top bar
+  doc.rect(x+s,y+s,s,3*s,'F'); // stem
+  // E (3x4 grid at offset 4)
+  const ex=x+4*s;
+  doc.rect(ex,y,3*s,s,'F'); // top
+  doc.rect(ex,y,s,4*s,'F'); // left stem
+  doc.rect(ex,y+1.5*s,2*s,s,'F'); // middle
+  doc.rect(ex,y+3*s,3*s,s,'F'); // bottom
+  // A (3x4 grid at offset 8)
+  const ax=x+8*s;
+  doc.rect(ax,y,3*s,s,'F'); // top
+  doc.rect(ax,y,s,4*s,'F'); // left
+  doc.rect(ax+2*s,y,s,4*s,'F'); // right
+  doc.rect(ax,y+1.5*s,3*s,s,'F'); // middle
+  // L (3x4 grid at offset 12)
+  const lx=x+12*s;
+  doc.rect(lx,y,s,4*s,'F'); // left stem
+  doc.rect(lx,y+3*s,3*s,s,'F'); // bottom bar
+  // Frame (rectangle outline, to the right of L)
+  const fx=x+16*s,fw=4.5*s,fh=4*s,ft=0.4*s;
+  doc.rect(fx,y,fw,fh,'F'); // filled
+  doc.setFillColor(255,255,255);
+  doc.rect(fx+ft,y+ft,fw-2*ft,fh-2*ft,'F'); // inner cut-out (white)
+  doc.setFillColor(...c); // reset
 }
 
 // ── PDF ──
@@ -1064,7 +1081,7 @@ function exportPDF(d,setData){
     for(let i=1;i<=pc;i++){
       doc.setPage(i);doc.setFontSize(7);doc.setTextColor(153,153,153);doc.setFont('helvetica','normal');
       doc.text(TEAL.addr+', '+TEAL.zip,m,288);
-      doc.text(TEAL.name+' | '+TEAL.email,85,288);
+      doc.text('TEAL | '+TEAL.email,85,288);
       doc.text('KvK '+TEAL.kvk+' | BTW '+TEAL.btw,145,288);
       doc.text(`${i}/${pc}`,190,292,{align:'right'});
     }
@@ -1085,10 +1102,9 @@ function exportPDF(d,setData){
   const finLines=buildFinancialLines(d,totals,L);
 
   // ── Header with logo ──
-  const logoB64=getLogoBase64();
-  if(logoB64){try{doc.addImage(logoB64,'SVG',m,y,35,17);y+=20;}catch(e){txt('TEAL',20,{b:true});}}
-  else{txt('TEAL',20,{b:true});}
-  doc.setFontSize(12);doc.setTextColor(85,85,85);doc.setFont('helvetica','normal');
+  drawLogoInPDF(doc,m,y,1.6);
+  y+=9;
+  doc.setFontSize(11);doc.setTextColor(85,85,85);doc.setFont('helvetica','normal');
   doc.text(ll.offerte,m,y);y+=8;
 
   // ── CLIENT ──
@@ -1177,7 +1193,9 @@ function exportPDF(d,setData){
   doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(153,153,153);
   doc.text(`${NL?'Reiskosten':'Travel'}: \u20AC ${d.travel?.rateNL||0.50}/km`,m,y);y+=8;
 
-  // Payment sub-section (under costs)
+  // Payment sub-section (under costs) - keep together
+  const paymentBlockH=8+(d.payment.milestones.length+1)*5+6;
+  checkPage(paymentBlockH);
   doc.setTextColor(17,17,17);
   txt(ll.betalingVw+':',9,{b:true});gap(1);
   doc.setFontSize(9);doc.setFont('helvetica','normal');
@@ -1197,7 +1215,8 @@ function exportPDF(d,setData){
   doc.text('- '+ll.betalingstermijnTekst.replace('{n}',d.conditions.paymentTerm),m,y);y+=6;
   doc.setTextColor(17,17,17);line();
 
-  // ── TERMS & CONDITIONS ──
+  // ── TERMS & CONDITIONS ── (keep terms + signature together)
+  checkPage(60);
   txt(ll.voorwaardenLabel,10,{b:true,c:[7,20,18]});gap();
 
   // Exclusions sub-section
