@@ -1036,12 +1036,12 @@ function generateOfferteMD(d){
   if(t(cond.warranty,L))add('- ',ll.garantieLabel,': ',t(cond.warranty,L));
   if(t(proj.exclusions,L))add('- ',ll.exclusionsVw,': ',t(proj.exclusions,L));
   add('- ',ll.avTekst);
-  add('- ',ll.meerwerkTekst);
+  add('- ',t(cond.meerwerk,L)||ll.meerwerkTekst);
   blank();
 
   // Signature
   add('## ',ll.akkoord);
-  add(ll.akkoordTekst);
+  add(t(cond.akkoord,L)||ll.akkoordTekst);
   blank();
   add('____________________________&emsp;&emsp;&emsp;&emsp;____________________________');
   add(NL?'Handtekening':'Signature','&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;',NL?'Datum':'Date');
@@ -1726,6 +1726,14 @@ function PaymentTab({data:d,set}){
           <input type="checkbox" checked={d.conditions.avEN===true} onChange={e=>set({...d,conditions:{...d.conditions,avEN:e.target.checked}})}/> {ll.avEN}
         </label>
       </div>
+      <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
+        <label>{L==='nl'?'Meerwerk-clausule':'Additional-work clause'}</label>
+        <textarea rows={2} value={t(d.conditions.meerwerk,L)} placeholder={ll.meerwerkTekst} onChange={e=>{const o=d.conditions.meerwerk;const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=e.target.value;set({...d,conditions:{...d.conditions,meerwerk:nn}});}}/>
+      </div></div>
+      <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
+        <label>{L==='nl'?'Akkoordverklaring':'Approval statement'}</label>
+        <textarea rows={2} value={t(d.conditions.akkoord,L)} placeholder={ll.akkoordTekst} onChange={e=>{const o=d.conditions.akkoord;const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=e.target.value;set({...d,conditions:{...d.conditions,akkoord:nn}});}}/>
+      </div></div>
     </div>
   </div>;
 }
@@ -1844,7 +1852,8 @@ function PreviewTab({data:d}){
     {/* Gantt chart (balkenplanning) */}
     <h3 style={{marginTop:24}}>{ll.indicatieveTimeline}</h3>
     {(()=>{
-      const totalWeeksGantt=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
+      const _steps=Array.isArray(d.timeline)?d.timeline:[];
+      const totalWeeksGantt=Math.max(1,activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0),_steps.reduce((s,st)=>Math.max(s,(st.startWeek||0)+(st.durationWeeks||1)),0));
       const colors=COLORS;
       return <div style={{marginTop:12}}>
         {activePhases.map((ph,i)=>{
@@ -1858,6 +1867,19 @@ function PreviewTab({data:d}){
               <div className="gantt-b" style={{left:leftPct+'%',width:widthPct+'%',background:colors[i%colors.length]}}>
                 {dw}{NL?'w':'w'}
               </div>
+            </div>
+            <div style={{width:120,flexShrink:0,fontSize:11,color:'#999',paddingLeft:8}}>{startDt}</div>
+          </div>;
+        })}
+        {_steps.map((st)=>{
+          const sw=st.startWeek||0;const dw=st.durationWeeks||1;
+          const leftPct=(sw/totalWeeksGantt*100).toFixed(1);
+          const widthPct=(dw/totalWeeksGantt*100).toFixed(1);
+          const startDt=(()=>{if(!d.project.date)return'';const dt=new Date(d.project.date);dt.setDate(dt.getDate()+sw*7);return dt.toLocaleDateString(L==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'short',year:'numeric'});})();
+          return <div key={st.id} className="gantt-r">
+            <div className="gantt-l" style={{fontStyle:'italic',color:'#5a6b66'}}>↳ {t(st.name,L)||'—'}</div>
+            <div className="gantt-t">
+              <div className="gantt-b" style={{left:leftPct+'%',width:widthPct+'%',background:'#7A8C86'}}>{dw}w</div>
             </div>
             <div style={{width:120,flexShrink:0,fontSize:11,color:'#999',paddingLeft:8}}>{startDt}</div>
           </div>;
@@ -1895,12 +1917,12 @@ function PreviewTab({data:d}){
       <p style={{whiteSpace:'pre-wrap',marginBottom:12}}>{t(d.project.exclusions,L)}</p>
     </>}
 
-    <p style={{marginBottom:4}}>- {ll.meerwerkTekst}</p>
+    <p style={{marginBottom:4}}>- {t(d.conditions.meerwerk,L)||ll.meerwerkTekst}</p>
     {d.conditions.warrantyEnabled!==false&&<p style={{marginBottom:4}}>- {ll.garantieLabel}: {t(d.conditions.warranty,L)}</p>}
     {(d.conditions.avNL||d.conditions.avEN)&&<p style={{marginBottom:4}}>- {ll.avTekst}</p>}
 
     {/* APPROVAL */}
-    <p style={{marginTop:32,marginBottom:20}}>{ll.akkoordTekst}</p>
+    <p style={{marginTop:32,marginBottom:20,whiteSpace:'pre-wrap'}}>{t(d.conditions.akkoord,L)||ll.akkoordTekst}</p>
 
     <div style={{marginBottom:8}}>
       <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:4}}>{ll.acceptedBy}:</div>
@@ -1991,7 +2013,7 @@ function exportPDF(d,setData){
 
   // ── Header with logo ──
   drawLogoInPDF(doc,m,y,1.6);
-  y+=9;
+  y+=15;
   doc.setFontSize(11);doc.setTextColor(85,85,85);doc.setFont('helvetica','normal');
   doc.text(ll.offerte,m,y);y+=8;
 
@@ -2037,7 +2059,9 @@ function exportPDF(d,setData){
   const phaseDate=(ph)=>{if(!d.project.date||ph.startWeek==null)return'';const dt=new Date(d.project.date);dt.setDate(dt.getDate()+ph.startWeek*7);return fmtDateLong(dt.toISOString().slice(0,10))};
   gap(4);txt(ll.indicatieveTimeline,9,{b:true});gap(4);
   const ganttLeft=m+45,ganttRight=190,ganttW=ganttRight-ganttLeft;
-  const totalWeeksGantt=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
+  const _tlSteps=Array.isArray(d.timeline)?d.timeline:[];
+  const fitLbl=(str)=>{doc.setFontSize(8);doc.setFont('helvetica','normal');const maxW=ganttLeft-m-3;let v=str||'';if(doc.getTextWidth(v)<=maxW)return v;while(v.length>1&&doc.getTextWidth(v+'\u2026')>maxW)v=v.slice(0,-1);return v+'\u2026';};
+  const totalWeeksGantt=Math.max(1,activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0),_tlSteps.reduce((s,st)=>Math.max(s,(st.startWeek||0)+(st.durationWeeks||1)),0));
   const barH=6,barGap=2;
   const hexToRgb=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
   activePhases.forEach((ph,i)=>{
@@ -2047,7 +2071,7 @@ function exportPDF(d,setData){
     const barW=Math.max((dw/totalWeeksGantt)*ganttW,8);
     // Phase label
     doc.setFontSize(8);doc.setFont('helvetica','normal');doc.setTextColor(17,17,17);
-    doc.text(pn(ph),m,y+barH-1.5);
+    doc.text(fitLbl(pn(ph)),m,y+barH-1.5);
     // Bar background track
     doc.setDrawColor(230,230,230);doc.setFillColor(245,245,243);doc.rect(ganttLeft,y,ganttW,barH,'F');
     // Bar
@@ -2055,6 +2079,19 @@ function exportPDF(d,setData){
     doc.setFillColor(...clr);doc.rect(barX,y,barW,barH,'F');
     // Duration text inside bar
     doc.setFontSize(7);doc.setFont('helvetica','bold');doc.setTextColor(7,20,18);
+    doc.text(`${dw}w`,barX+2,y+barH-1.5);
+    y+=barH+barGap;
+  });
+  _tlSteps.forEach((st)=>{
+    checkPage(barH+barGap+4);
+    const sw=st.startWeek||0;const dw=st.durationWeeks||1;
+    const barX=ganttLeft+(sw/totalWeeksGantt)*ganttW;
+    const barW=Math.max((dw/totalWeeksGantt)*ganttW,8);
+    doc.setFontSize(8);doc.setFont('helvetica','normal');doc.setTextColor(90,107,102);
+    doc.text(fitLbl(t(st.name,L)||''),m,y+barH-1.5);
+    doc.setDrawColor(230,230,230);doc.setFillColor(245,245,243);doc.rect(ganttLeft,y,ganttW,barH,'F');
+    doc.setFillColor(122,140,134);doc.rect(barX,y,barW,barH,'F');
+    doc.setFontSize(7);doc.setFont('helvetica','bold');doc.setTextColor(255,255,255);
     doc.text(`${dw}w`,barX+2,y+barH-1.5);
     y+=barH+barGap;
   });
@@ -2117,14 +2154,14 @@ function exportPDF(d,setData){
 
   // Standard conditions
   doc.setFontSize(9);doc.setFont('helvetica','normal');
-  doc.text('- '+ll.meerwerkTekst,m,y);y+=5;
+  {const _mw=doc.splitTextToSize('- '+(t(d.conditions.meerwerk,L)||ll.meerwerkTekst),pw);doc.text(_mw,m,y);y+=_mw.length*4+1;}
   if(d.conditions.warrantyEnabled!==false){doc.text(`- ${ll.garantieLabel}: ${t(d.conditions.warranty,L)}`,m,y);y+=5;}
   if(d.conditions.avNL||d.conditions.avEN){doc.text('- '+ll.avTekst,m,y);y+=5;}
 
   // ── ACCEPTED BY ──
   gap(6);checkPage(30);
   doc.setFontSize(9);doc.setFont('helvetica','normal');
-  const akLines=doc.splitTextToSize(ll.akkoordTekst,pw);
+  const akLines=doc.splitTextToSize(t(d.conditions.akkoord,L)||ll.akkoordTekst,pw);
   doc.text(akLines,m,y);y+=akLines.length*4+6;
   doc.setFontSize(8);doc.setTextColor(153,153,153);doc.text(ll.acceptedBy+':',m,y);y+=5;
   doc.setFontSize(9);doc.setTextColor(17,17,17);doc.setFont('helvetica','bold');
@@ -2324,10 +2361,10 @@ function App(){
         {tab==='planning'&&<PlanningTab data={d} set={setDWithArchive}/>}
         {tab==='payment'&&<PaymentTab data={d} set={setDWithArchive}/>}
         {tab==='preview'&&<PreviewTab data={d}/>}
-        {tab!=='preview'&&<div className="between mt24">
-          <span/>
-          <button className="btn btn-s" onClick={()=>{const order=tabs.map(x=>x.id);const i=order.indexOf(tab);if(i>=0&&i<order.length-1)setTab(order[i+1]);}}>{d.lang==='nl'?'Volgende sectie ›':'Next section ›'}</button>
-        </div>}
+        <div className="between mt24">
+          {(()=>{const order=tabs.map(x=>x.id);const i=order.indexOf(tab);return i>0?<button className="btn btn-g" onClick={()=>setTab(order[i-1])}>{d.lang==='nl'?'‹ Vorige sectie':'‹ Previous section'}</button>:<span/>;})()}
+          {(()=>{const order=tabs.map(x=>x.id);const i=order.indexOf(tab);return i>=0&&i<order.length-1?<button className="btn btn-s" onClick={()=>setTab(order[i+1])}>{d.lang==='nl'?'Volgende sectie ›':'Next section ›'}</button>:<span/>;})()}
+        </div>
       </>}
     </div>
   </div>;
