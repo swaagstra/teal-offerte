@@ -401,6 +401,13 @@ function createProject(type){
     batchSize:type==='assemble'?100:0,
   };
 }
+function migrateConds(d){
+  if(!d||!d.conditions)return d;
+  const c={...d.conditions};let ch=false;
+  if(c.meerwerk===undefined){c.meerwerk={nl:I.nl.meerwerkTekst,en:I.en.meerwerkTekst};if(c.meerwerkEnabled===undefined)c.meerwerkEnabled=true;ch=true;}
+  if(c.akkoord===undefined){c.akkoord={nl:I.nl.akkoordTekst,en:I.en.akkoordTekst};if(c.akkoordEnabled===undefined)c.akkoordEnabled=true;ch=true;}
+  return ch?{...d,conditions:c}:d;
+}
 
 // ── Totals helper ──
 function calcTotals(d){
@@ -2014,7 +2021,8 @@ function exportPDF(d,setData){
       doc.text(`${i}/${pc}`,190,292,{align:'right'});
     }
   };
-  const checkPage=(need=12)=>{if(y>280-need){doc.addPage();y=m}};
+  const pageBg=()=>{doc.setFillColor(242,242,242);doc.rect(0,0,210,297,'F');};pageBg();
+  const checkPage=(need=12)=>{if(y>280-need){doc.addPage();pageBg();y=m}};
   const txt=(text,sz,opts={})=>{
     doc.setFontSize(sz);doc.setFont('helvetica',opts.b?'bold':'normal');
     if(opts.c)doc.setTextColor(...opts.c);else doc.setTextColor(17,17,17);
@@ -2075,7 +2083,7 @@ function exportPDF(d,setData){
   // Gantt chart (balkenplanning) in PDF
   const phaseDate=(ph)=>{if(!d.project.date||ph.startWeek==null)return'';const dt=new Date(d.project.date);dt.setDate(dt.getDate()+ph.startWeek*7);return fmtDateLong(dt.toISOString().slice(0,10))};
   gap(4);txt(ll.indicatieveTimeline,9,{b:true});gap(4);
-  const ganttLeft=m+45,ganttRight=160,ganttW=ganttRight-ganttLeft;
+  const ganttLeft=m+58,ganttRight=158,ganttW=ganttRight-ganttLeft;
   const ganttDateRange=(sw,dw)=>{if(!d.project.date)return '';const o={day:'numeric',month:'short'};const _s=new Date(d.project.date);_s.setDate(_s.getDate()+(sw||0)*7);const _e=new Date(d.project.date);_e.setDate(_e.getDate()+((sw||0)+(dw||1))*7);const loc=NL?'nl-NL':'en-GB';return _s.toLocaleDateString(loc,o)+' \u2013 '+_e.toLocaleDateString(loc,o);};
   const _tlSteps=Array.isArray(d.timeline)?d.timeline:[];
   const fitLbl=(str)=>{doc.setFontSize(8);doc.setFont('helvetica','normal');const maxW=ganttLeft-m-3;let v=str||'';if(doc.getTextWidth(v)<=maxW)return v;while(v.length>1&&doc.getTextWidth(v+'\u2026')>maxW)v=v.slice(0,-1);return v+'\u2026';};
@@ -2098,7 +2106,7 @@ function exportPDF(d,setData){
     // Duration text inside bar
     doc.setFontSize(7);doc.setFont('helvetica','bold');doc.setTextColor(7,20,18);
     doc.text(`${dw}w`,barX+2,y+barH-1.5);
-    doc.setFontSize(6.5);doc.setFont('helvetica','normal');doc.setTextColor(120,120,120);doc.text(ganttDateRange(sw,dw),ganttRight+3,y+barH-1.5);
+    doc.setFontSize(6.5);doc.setFont('helvetica','normal');doc.setTextColor(120,120,120);doc.text(ganttDateRange(sw,dw),190,y+barH-1.5,{align:'right'});
     y+=barH+barGap;
   });
   _tlSteps.forEach((st)=>{
@@ -2112,7 +2120,7 @@ function exportPDF(d,setData){
     doc.setFillColor(122,140,134);doc.rect(barX,y,barW,barH,'F');
     doc.setFontSize(7);doc.setFont('helvetica','bold');doc.setTextColor(255,255,255);
     doc.text(`${dw}w`,barX+2,y+barH-1.5);
-    doc.setFontSize(6.5);doc.setFont('helvetica','normal');doc.setTextColor(120,120,120);doc.text(ganttDateRange(sw,dw),ganttRight+3,y+barH-1.5);
+    doc.setFontSize(6.5);doc.setFont('helvetica','normal');doc.setTextColor(120,120,120);doc.text(ganttDateRange(sw,dw),190,y+barH-1.5,{align:'right'});
     y+=barH+barGap;
   });
   gap(2);line();
@@ -2318,9 +2326,9 @@ function App(){
 
   useEffect(()=>{
     const sid=loadShortId();
-    if(sid){fetchShared(sid).then(sd=>{if(sd){const saved=archiveSave(sd,'created');setD(saved);setShowDash(false);}history.replaceState(null,'','/');});return;}
+    if(sid){fetchShared(sid).then(sd=>{if(sd){const saved=archiveSave(migrateConds(sd),'created');setD(saved);setShowDash(false);}history.replaceState(null,'','/');});return;}
     const h=loadHash();
-    if(h){const saved=archiveSave(h,'created');setD(saved);setShowDash(false);history.replaceState(null,'',location.pathname);return;}
+    if(h){const saved=archiveSave(migrateConds(h),'created');setD(saved);setShowDash(false);history.replaceState(null,'',location.pathname);return;}
     // If there's an active quotation in old storage, keep it available but show dashboard
     const existing=load();
     if(existing&&!existing._archiveId){const saved=archiveSave(existing,'created');save(saved);}
@@ -2332,7 +2340,7 @@ function App(){
     else{setD(null);}
   },[]);
 
-  const openQuote=(data)=>{const saved=archiveSave(data,'updated');save(saved);setD(saved);setTab('project');setShowDash(false);};
+  const openQuote=(data)=>{const saved=archiveSave(migrateConds(data),'updated');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const newQuote=(type)=>{const proj=createProject(type);const saved=archiveSave(proj,'created');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const duplicateQuote=(data)=>{const copy={...JSON.parse(JSON.stringify(data)),_archiveId:undefined};delete copy._archiveId;const ref=data.ref.split('-');ref[ref.length-1]='1';copy.ref=ref.join('-')+'-copy';archiveSave(copy,'created');archiveLogAction(data,'duplicated');};
   const deleteQuote=(id)=>{archiveDelete(id);if(d&&d._archiveId===id){setD(null);save(null);}};
