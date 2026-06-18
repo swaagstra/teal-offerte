@@ -453,6 +453,9 @@ function calcTotals(d){
 // ── Persistence ──
 const SK='teal.offerte.v3';
 const AK='teal.offerte.all'; // archive key
+const AV_KEY={nl:'teal.av.nl.b64',en:'teal.av.en.b64'};
+const getAVB64=(lng)=>{try{return localStorage.getItem(lng==='en'?AV_KEY.en:AV_KEY.nl)||null;}catch(e){return null;}};
+const setAVB64=(lng,b64)=>{try{const k=lng==='en'?AV_KEY.en:AV_KEY.nl;if(b64)localStorage.setItem(k,b64);else localStorage.removeItem(k);}catch(e){}};
 const save=d=>{try{localStorage.setItem(SK,JSON.stringify(d))}catch(e){}};
 const load=()=>{try{const r=localStorage.getItem(SK);return r?JSON.parse(r):null}catch(e){return null}};
 const loadHash=()=>{try{const h=location.hash.slice(1);if(!h)return null;const p=new URLSearchParams(h);const dd=p.get('data');if(!dd)return null;const j=LZString.decompressFromEncodedURIComponent(dd);return j?JSON.parse(j):null}catch(e){return null}};
@@ -1686,6 +1689,7 @@ function PaymentTab({data:d,set}){
   const L=d.lang;const ll=L_(L);
   const totals=calcTotals(d);
   const grand=totals.grandClient;
+  const [avRefresh,setAvRefresh]=useState(0);
   const upMs=(i,k,v)=>{const ms=[...d.payment.milestones];ms[i]={...ms[i],[k]:v};set({...d,payment:{...d.payment,milestones:ms}})};
   const totPct=d.payment.milestones.reduce((s,m)=>s+(m.pct||0),0);
 
@@ -1725,6 +1729,18 @@ function PaymentTab({data:d,set}){
         <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer'}}>
           <input type="checkbox" checked={d.conditions.avEN===true} onChange={e=>set({...d,conditions:{...d.conditions,avEN:e.target.checked}})}/> {ll.avEN}
         </label>
+      </div>
+      <div className="mt16" style={{borderTop:'1px solid #eee',paddingTop:12}}>
+        <label style={{fontWeight:600,fontSize:13,display:'block',marginBottom:4}}>{L==='nl'?'Algemene Voorwaarden (PDF) uploaden':'General Terms (PDF) upload'}</label>
+        <p className="sm muted" style={{margin:'0 0 8px'}}>{L==='nl'?'Een geupload bestand wordt automatisch achter elke offerte geplakt en blijft bewaard in deze browser. Vervang het hier als je AV wijzigt, dan hoeft de code niet meer aangepast.':'An uploaded file is automatically appended to every quotation and stored in this browser. Replace it here when your terms change.'}</p>
+        {['nl','en'].map(lng=>{const has=getAVB64(lng);return <div key={lng+avRefresh} className="flex g8" style={{alignItems:'center',marginBottom:6}}>
+          <span style={{width:28,fontSize:12,fontWeight:700,textTransform:'uppercase'}}>{lng}</span>
+          <label className="btn btn-sm btn-g" style={{cursor:'pointer',margin:0}}>{has?(L==='nl'?'Vervang PDF':'Replace PDF'):(L==='nl'?'Upload PDF':'Upload PDF')}
+            <input type="file" accept="application/pdf" style={{display:'none'}} onChange={e=>{const fl=e.target.files&&e.target.files[0];if(!fl)return;const r=new FileReader();r.onload=()=>{const b64=String(r.result||'').split(',')[1]||'';setAVB64(lng,b64);setAvRefresh(x=>x+1);};r.readAsDataURL(fl);e.target.value='';}}/>
+          </label>
+          <span className="sm" style={{color:has?'var(--green)':'#999'}}>{has?(L==='nl'?'eigen versie actief':'custom version active'):(L==='nl'?'standaard versie':'built-in version')}</span>
+          {has&&<button className="btn btn-sm btn-g" onClick={()=>{setAVB64(lng,null);setAvRefresh(x=>x+1);}}>{L==='nl'?'Verwijder':'Remove'}</button>}
+        </div>;})}
       </div>
       <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
         <label style={{display:'flex',alignItems:'center',gap:6}}><input type="checkbox" checked={d.conditions.meerwerkEnabled!==false} onChange={e=>set({...d,conditions:{...d.conditions,meerwerkEnabled:e.target.checked}})} style={{width:14,height:14}}/>{L==='nl'?'Meerwerk-clausule':'Additional-work clause'}</label>
@@ -2182,7 +2198,7 @@ function exportPDF(d,setData){
   const shouldAppendAV=d.conditions.avNL||d.conditions.avEN;
   if(shouldAppendAV&&window.PDFLib){
     const quotePdfBytes=doc.output('arraybuffer');
-    const avB64=NL?window._AV_NL_B64:window._AV_EN_B64;
+    const avB64=getAVB64(NL?'nl':'en')||(NL?window._AV_NL_B64:window._AV_EN_B64);
     if(avB64){
       (async()=>{
         try{
