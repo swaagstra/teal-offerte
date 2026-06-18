@@ -244,7 +244,7 @@ const I={
     geldigheidVw:'Geldigheid',garantieLabel:'Garantie',
     avTekst:'Op deze offerte zijn de Algemene Voorwaarden van TEAL van toepassing (separaat bijgevoegd).',
     meerwerkTekst:'Meerwerk of vertraging die niet aan TEAL te wijten is, wordt apart in rekening gebracht.',
-    akkoord:'Akkoord',akkoordTekst:'Ondergetekende verklaart akkoord te gaan met de informatie in dit document en de bijgevoegde Algemene Voorwaarden.',
+    akkoord:'Akkoord',akkoordTekst:'Ondergetekende verklaart akkoord te gaan met de informatie in deze offerte.',
     acceptedBy:'AKKOORD DOOR',
     naamHandtekening:'Naam en handtekening',datumLabel:'Datum',
     weken:'weken',duur:'Duur',
@@ -304,7 +304,7 @@ const I={
     geldigheidVw:'Validity',garantieLabel:'Warranty',
     avTekst:'The General Terms and Conditions of TEAL apply (provided separately).',
     meerwerkTekst:'Additional work or delays not attributable to TEAL will be charged separately.',
-    akkoord:'Approval',akkoordTekst:'By signing below, you agree to the information outlined in this document and the General Terms and Conditions (attached to this document).',
+    akkoord:'Approval',akkoordTekst:'By signing below, you agree to the information outlined in this document.',
     acceptedBy:'ACCEPTED BY',
     naamHandtekening:'Name and signature',datumLabel:'Date',
     weken:'weeks',duur:'Duration',
@@ -394,6 +394,8 @@ function createProject(type){
     conditions:{validity:30,paymentTerm:14,
       warranty:{nl:'2 jaar na oplevering',en:'2 years after delivery'},
       warrantyEnabled:false,
+      meerwerk:{nl:I.nl.meerwerkTekst,en:I.en.meerwerkTekst},meerwerkEnabled:true,
+      akkoord:{nl:I.nl.akkoordTekst,en:I.en.akkoordTekst},akkoordEnabled:true,
       avNL:true,avEN:false,
     },
     batchSize:type==='assemble'?100:0,
@@ -1708,17 +1710,42 @@ function PaymentTab({data:d,set}){
     <button className="btn btn-sm btn-g mt16" onClick={()=>{const ms=[...d.payment.milestones,{name:{nl:'',en:''},pct:0,date:''}];set({...d,payment:{...d.payment,milestones:ms}})}}>{ll.plusMijlpaal}</button>
 
     <div className="mt24"><div className="card-h">{ll.voorwaarden}</div>
+      <p className="sm muted" style={{margin:'-4px 0 12px'}}>{L==='nl'?'Alles hieronder verschijnt in de offerte. Vink uit of maak leeg om iets weg te laten. Met "standaardtekst" vul je de TEAL-standaard in.':'Everything below appears in the quotation. Uncheck or clear to omit. Use "default text" to insert the TEAL standard.'}</p>
       <div className="row row3">
         <div className="fg"><label>{ll.geldigheid}</label><input type="number" value={d.conditions.validity} onChange={e=>set({...d,conditions:{...d.conditions,validity:parseInt(e.target.value)||30}})}/></div>
         <div className="fg"><label>{ll.betalingstermijn}</label><input type="number" value={d.conditions.paymentTerm} onChange={e=>set({...d,conditions:{...d.conditions,paymentTerm:parseInt(e.target.value)||14}})}/></div>
-        <div className="fg">
-          <label style={{display:'flex',alignItems:'center',gap:6}}>
-            <input type="checkbox" checked={d.conditions.warrantyEnabled!==false} onChange={e=>set({...d,conditions:{...d.conditions,warrantyEnabled:e.target.checked}})} style={{width:14,height:14}}/>
-            {ll.garantie}
-          </label>
-          {d.conditions.warrantyEnabled!==false&&<input value={t(d.conditions.warranty,L)} onChange={e=>{const o=d.conditions.warranty;const n=typeof o==='string'?{nl:o,en:o}:{...o};n[L]=e.target.value;set({...d,conditions:{...d.conditions,warranty:n}})}}/>}
-        </div>
+        <div className="fg"></div>
       </div>
+
+      <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
+        <label>{ll.nietInbegrepen}</label>
+        <textarea rows={2} value={t(d.project.exclusions,L)} placeholder={L==='nl'?'Wat valt buiten deze offerte (leeg = niet tonen)':'What is excluded (empty = hidden)'} onChange={e=>{const o=d.project.exclusions;const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=e.target.value;set({...d,project:{...d.project,exclusions:nn}});}}/>
+      </div></div>
+
+      <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
+        <div className="between" style={{alignItems:'center'}}>
+          <label style={{display:'flex',alignItems:'center',gap:6,margin:0}}><input type="checkbox" checked={d.conditions.warrantyEnabled!==false} onChange={e=>set({...d,conditions:{...d.conditions,warrantyEnabled:e.target.checked}})} style={{width:14,height:14}}/>{ll.garantie}</label>
+          <button className="btn btn-sm btn-g" style={{padding:'2px 8px',fontSize:11}} onClick={()=>set({...d,conditions:{...d.conditions,warrantyEnabled:true,warranty:{nl:'2 jaar na oplevering',en:'2 years after delivery'}}})}>{L==='nl'?'standaardtekst':'default text'}</button>
+        </div>
+        <textarea rows={2} value={t(d.conditions.warranty,L)} placeholder={L==='nl'?'Garantietekst':'Warranty text'} onChange={e=>{const o=d.conditions.warranty;const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=e.target.value;set({...d,conditions:{...d.conditions,warranty:nn}});}}/>
+      </div></div>
+
+      <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
+        <div className="between" style={{alignItems:'center'}}>
+          <label style={{display:'flex',alignItems:'center',gap:6,margin:0}}><input type="checkbox" checked={d.conditions.meerwerkEnabled!==false} onChange={e=>set({...d,conditions:{...d.conditions,meerwerkEnabled:e.target.checked}})} style={{width:14,height:14}}/>{L==='nl'?'Meerwerk-clausule':'Additional-work clause'}</label>
+          <button className="btn btn-sm btn-g" style={{padding:'2px 8px',fontSize:11}} onClick={()=>set({...d,conditions:{...d.conditions,meerwerkEnabled:true,meerwerk:{nl:I.nl.meerwerkTekst,en:I.en.meerwerkTekst}}})}>{L==='nl'?'standaardtekst':'default text'}</button>
+        </div>
+        <textarea rows={2} value={t(d.conditions.meerwerk,L)} placeholder={ll.meerwerkTekst} onChange={e=>{const o=d.conditions.meerwerk;const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=e.target.value;set({...d,conditions:{...d.conditions,meerwerk:nn}});}}/>
+      </div></div>
+
+      <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
+        <div className="between" style={{alignItems:'center'}}>
+          <label style={{display:'flex',alignItems:'center',gap:6,margin:0}}><input type="checkbox" checked={d.conditions.akkoordEnabled!==false} onChange={e=>set({...d,conditions:{...d.conditions,akkoordEnabled:e.target.checked}})} style={{width:14,height:14}}/>{L==='nl'?'Akkoordverklaring':'Approval statement'}</label>
+          <button className="btn btn-sm btn-g" style={{padding:'2px 8px',fontSize:11}} onClick={()=>set({...d,conditions:{...d.conditions,akkoordEnabled:true,akkoord:{nl:I.nl.akkoordTekst,en:I.en.akkoordTekst}}})}>{L==='nl'?'standaardtekst':'default text'}</button>
+        </div>
+        <textarea rows={2} value={t(d.conditions.akkoord,L)} placeholder={ll.akkoordTekst} onChange={e=>{const o=d.conditions.akkoord;const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=e.target.value;set({...d,conditions:{...d.conditions,akkoord:nn}});}}/>
+      </div></div>
+
       <div className="row mt16">
         <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer'}}>
           <input type="checkbox" checked={d.conditions.avNL!==false} onChange={e=>set({...d,conditions:{...d.conditions,avNL:e.target.checked}})}/> {ll.avNL}
@@ -1727,18 +1754,6 @@ function PaymentTab({data:d,set}){
           <input type="checkbox" checked={d.conditions.avEN===true} onChange={e=>set({...d,conditions:{...d.conditions,avEN:e.target.checked}})}/> {ll.avEN}
         </label>
       </div>
-      <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
-        <label>{ll.nietInbegrepen}</label>
-        <textarea rows={3} value={t(d.project.exclusions,L)} placeholder={L==='nl'?'Wat valt buiten deze offerte':'What is excluded from this quotation'} onChange={e=>{const o=d.project.exclusions;const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=e.target.value;set({...d,project:{...d.project,exclusions:nn}});}}/>
-      </div></div>
-      <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
-        <label style={{display:'flex',alignItems:'center',gap:6}}><input type="checkbox" checked={d.conditions.meerwerkEnabled!==false} onChange={e=>set({...d,conditions:{...d.conditions,meerwerkEnabled:e.target.checked}})} style={{width:14,height:14}}/>{L==='nl'?'Meerwerk-clausule':'Additional-work clause'}</label>
-        <textarea rows={2} value={t(d.conditions.meerwerk,L)} placeholder={ll.meerwerkTekst} onChange={e=>{const o=d.conditions.meerwerk;const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=e.target.value;set({...d,conditions:{...d.conditions,meerwerk:nn}});}}/>
-      </div></div>
-      <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
-        <label style={{display:'flex',alignItems:'center',gap:6}}><input type="checkbox" checked={d.conditions.akkoordEnabled!==false} onChange={e=>set({...d,conditions:{...d.conditions,akkoordEnabled:e.target.checked}})} style={{width:14,height:14}}/>{L==='nl'?'Akkoordverklaring':'Approval statement'}</label>
-        <textarea rows={2} value={t(d.conditions.akkoord,L)} placeholder={ll.akkoordTekst} onChange={e=>{const o=d.conditions.akkoord;const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=e.target.value;set({...d,conditions:{...d.conditions,akkoord:nn}});}}/>
-      </div></div>
     </div>
   </div>;
 }
