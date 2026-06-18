@@ -316,7 +316,7 @@ const L_=lang=>I[lang]||I.nl;
 const fmt=n=>new Intl.NumberFormat('nl-NL',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n||0);
 const fmtE=n=>`\u20AC ${fmt(n)}`;
 const uid=()=>Math.random().toString(36).slice(2,9);
-const t=(obj,lang)=>typeof obj==='string'?obj:(obj&&obj[lang])||obj?.nl||'';
+const t=(obj,lang)=>typeof obj==='string'?obj:(obj&&obj[lang]!=null?obj[lang]:'');
 
 // ── NL→EN auto-translation (fills empty `en` from `nl` on bilingual fields) ──
 async function gtrans(text,sl,tl){
@@ -1036,15 +1036,15 @@ function generateOfferteMD(d){
   add('## ',ll.voorwaardenLabel);
   add('- ',ll.geldigheidVw,': ',cond.validity||30,' ',NL?'dagen':'days');
   add('- ',ll.betalingstermijn,': ',cond.paymentTerm||14,' ',NL?'dagen':'days');
-  if(t(cond.warranty,L))add('- ',ll.garantieLabel,': ',t(cond.warranty,L));
   if(t(proj.exclusions,L))add('- ',ll.exclusionsVw,': ',t(proj.exclusions,L));
-  add('- ',ll.avTekst);
-  if(cond.meerwerkEnabled!==false)add('- ',t(cond.meerwerk,L)||ll.meerwerkTekst);
+  if(cond.warrantyEnabled!==false&&t(cond.warranty,L))add('- ',ll.garantieLabel,': ',t(cond.warranty,L));
+  if(cond.meerwerkEnabled!==false&&t(cond.meerwerk,L))add('- ',t(cond.meerwerk,L));
+  if(cond.avNL||cond.avEN)add('- ',ll.avTekst);
   blank();
 
   // Signature
   add('## ',ll.akkoord);
-  if(cond.akkoordEnabled!==false)add(t(cond.akkoord,L)||ll.akkoordTekst);
+  if(cond.akkoordEnabled!==false&&t(cond.akkoord,L))add(t(cond.akkoord,L));
   blank();
   add('____________________________&emsp;&emsp;&emsp;&emsp;____________________________');
   add(NL?'Handtekening':'Signature','&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;',NL?'Datum':'Date');
@@ -1405,8 +1405,6 @@ function ProjectTab({data:d,set}){
         <textarea value={t(d.project.description,L)} onChange={e=>upLang('description',e.target.value)} placeholder={ll.beschrijvingPlaceholder}/></div></div>
       <div className="row full"><div className="fg"><label>{ll.rolVanTeal}</label>
         <textarea value={t(d.project.tealRole,L)} onChange={e=>upLang('tealRole',e.target.value)} placeholder={ll.technischeScope}/></div></div>
-      <div className="row full"><div className="fg"><label>{ll.nietInbegrepen}</label>
-        <textarea value={t(d.project.exclusions,L)} onChange={e=>upLang('exclusions',e.target.value)} rows={3}/></div></div>
     </div>
   </>;
 }
@@ -1689,7 +1687,6 @@ function PaymentTab({data:d,set}){
   const L=d.lang;const ll=L_(L);
   const totals=calcTotals(d);
   const grand=totals.grandClient;
-  const [avRefresh,setAvRefresh]=useState(0);
   const upMs=(i,k,v)=>{const ms=[...d.payment.milestones];ms[i]={...ms[i],[k]:v};set({...d,payment:{...d.payment,milestones:ms}})};
   const totPct=d.payment.milestones.reduce((s,m)=>s+(m.pct||0),0);
 
@@ -1730,18 +1727,10 @@ function PaymentTab({data:d,set}){
           <input type="checkbox" checked={d.conditions.avEN===true} onChange={e=>set({...d,conditions:{...d.conditions,avEN:e.target.checked}})}/> {ll.avEN}
         </label>
       </div>
-      <div className="mt16" style={{borderTop:'1px solid #eee',paddingTop:12}}>
-        <label style={{fontWeight:600,fontSize:13,display:'block',marginBottom:4}}>{L==='nl'?'Algemene Voorwaarden (PDF) uploaden':'General Terms (PDF) upload'}</label>
-        <p className="sm muted" style={{margin:'0 0 8px'}}>{L==='nl'?'Een geupload bestand wordt automatisch achter elke offerte geplakt en blijft bewaard in deze browser. Vervang het hier als je AV wijzigt, dan hoeft de code niet meer aangepast.':'An uploaded file is automatically appended to every quotation and stored in this browser. Replace it here when your terms change.'}</p>
-        {['nl','en'].map(lng=>{const has=getAVB64(lng);return <div key={lng+avRefresh} className="flex g8" style={{alignItems:'center',marginBottom:6}}>
-          <span style={{width:28,fontSize:12,fontWeight:700,textTransform:'uppercase'}}>{lng}</span>
-          <label className="btn btn-sm btn-g" style={{cursor:'pointer',margin:0}}>{has?(L==='nl'?'Vervang PDF':'Replace PDF'):(L==='nl'?'Upload PDF':'Upload PDF')}
-            <input type="file" accept="application/pdf" style={{display:'none'}} onChange={e=>{const fl=e.target.files&&e.target.files[0];if(!fl)return;const r=new FileReader();r.onload=()=>{const b64=String(r.result||'').split(',')[1]||'';setAVB64(lng,b64);setAvRefresh(x=>x+1);};r.readAsDataURL(fl);e.target.value='';}}/>
-          </label>
-          <span className="sm" style={{color:has?'var(--green)':'#999'}}>{has?(L==='nl'?'eigen versie actief':'custom version active'):(L==='nl'?'standaard versie':'built-in version')}</span>
-          {has&&<button className="btn btn-sm btn-g" onClick={()=>{setAVB64(lng,null);setAvRefresh(x=>x+1);}}>{L==='nl'?'Verwijder':'Remove'}</button>}
-        </div>;})}
-      </div>
+      <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
+        <label>{ll.nietInbegrepen}</label>
+        <textarea rows={3} value={t(d.project.exclusions,L)} placeholder={L==='nl'?'Wat valt buiten deze offerte':'What is excluded from this quotation'} onChange={e=>{const o=d.project.exclusions;const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=e.target.value;set({...d,project:{...d.project,exclusions:nn}});}}/>
+      </div></div>
       <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
         <label style={{display:'flex',alignItems:'center',gap:6}}><input type="checkbox" checked={d.conditions.meerwerkEnabled!==false} onChange={e=>set({...d,conditions:{...d.conditions,meerwerkEnabled:e.target.checked}})} style={{width:14,height:14}}/>{L==='nl'?'Meerwerk-clausule':'Additional-work clause'}</label>
         <textarea rows={2} value={t(d.conditions.meerwerk,L)} placeholder={ll.meerwerkTekst} onChange={e=>{const o=d.conditions.meerwerk;const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=e.target.value;set({...d,conditions:{...d.conditions,meerwerk:nn}});}}/>
@@ -1929,17 +1918,13 @@ function PreviewTab({data:d}){
     {/* TERMS & CONDITIONS */}
     <div className="sec-h">{ll.voorwaardenLabel}</div>
 
-    {t(d.project.exclusions,L)&&<>
-      <h3>{ll.exclusionsVw}:</h3>
-      <p style={{whiteSpace:'pre-wrap',marginBottom:12}}>{t(d.project.exclusions,L)}</p>
-    </>}
-
-    {d.conditions.meerwerkEnabled!==false&&<p style={{marginBottom:4}}>- {t(d.conditions.meerwerk,L)||ll.meerwerkTekst}</p>}
-    {d.conditions.warrantyEnabled!==false&&<p style={{marginBottom:4}}>- {ll.garantieLabel}: {t(d.conditions.warranty,L)}</p>}
+    {t(d.project.exclusions,L)&&<p style={{marginBottom:4,whiteSpace:'pre-wrap'}}>- {ll.exclusionsVw}: {t(d.project.exclusions,L)}</p>}
+    {d.conditions.warrantyEnabled!==false&&t(d.conditions.warranty,L)&&<p style={{marginBottom:4}}>- {ll.garantieLabel}: {t(d.conditions.warranty,L)}</p>}
+    {d.conditions.meerwerkEnabled!==false&&t(d.conditions.meerwerk,L)&&<p style={{marginBottom:4}}>- {t(d.conditions.meerwerk,L)}</p>}
     {(d.conditions.avNL||d.conditions.avEN)&&<p style={{marginBottom:4}}>- {ll.avTekst}</p>}
 
     {/* APPROVAL */}
-    {d.conditions.akkoordEnabled!==false&&<p style={{marginTop:32,marginBottom:20,whiteSpace:'pre-wrap'}}>{t(d.conditions.akkoord,L)||ll.akkoordTekst}</p>}
+    {d.conditions.akkoordEnabled!==false&&t(d.conditions.akkoord,L)&&<p style={{marginTop:32,marginBottom:20,whiteSpace:'pre-wrap'}}>{t(d.conditions.akkoord,L)}</p>}
 
     <div style={{marginBottom:8}}>
       <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:4}}>{ll.acceptedBy}:</div>
@@ -2164,24 +2149,17 @@ function exportPDF(d,setData){
   checkPage(60);
   txt(ll.voorwaardenLabel,10,{b:true,c:[7,20,18]});gap();
 
-  // Exclusions sub-section
-  if(t(d.project.exclusions,L)){
-    txt(ll.exclusionsVw+':',9,{b:true});gap(1);
-    doc.setFontSize(9);doc.setFont('helvetica','normal');
-    const exLines=doc.splitTextToSize(t(d.project.exclusions,L),pw);
-    doc.text(exLines,m,y);y+=exLines.length*4;gap(4);
-  }
-
-  // Standard conditions
+  // Conditions list (uniform dashes, only non-empty/enabled lines)
   doc.setFontSize(9);doc.setFont('helvetica','normal');
-  if(d.conditions.meerwerkEnabled!==false){const _mw=doc.splitTextToSize('- '+(t(d.conditions.meerwerk,L)||ll.meerwerkTekst),pw);doc.text(_mw,m,y);y+=_mw.length*4+1;}
-  if(d.conditions.warrantyEnabled!==false){doc.text(`- ${ll.garantieLabel}: ${t(d.conditions.warranty,L)}`,m,y);y+=5;}
-  if(d.conditions.avNL||d.conditions.avEN){doc.text('- '+ll.avTekst,m,y);y+=5;}
+  if(t(d.project.exclusions,L)){const _ex=doc.splitTextToSize('- '+ll.exclusionsVw+': '+t(d.project.exclusions,L),pw);doc.text(_ex,m,y);y+=_ex.length*4+1;}
+  if(d.conditions.warrantyEnabled!==false&&t(d.conditions.warranty,L)){const _wl=doc.splitTextToSize('- '+ll.garantieLabel+': '+t(d.conditions.warranty,L),pw);doc.text(_wl,m,y);y+=_wl.length*4+1;}
+  if(d.conditions.meerwerkEnabled!==false&&t(d.conditions.meerwerk,L)){const _mw=doc.splitTextToSize('- '+t(d.conditions.meerwerk,L),pw);doc.text(_mw,m,y);y+=_mw.length*4+1;}
+  if(d.conditions.avNL||d.conditions.avEN){const _av=doc.splitTextToSize('- '+ll.avTekst,pw);doc.text(_av,m,y);y+=_av.length*4+1;}
 
   // ── ACCEPTED BY ──
   gap(6);checkPage(30);
   doc.setFontSize(9);doc.setFont('helvetica','normal');
-  if(d.conditions.akkoordEnabled!==false){const akLines=doc.splitTextToSize(t(d.conditions.akkoord,L)||ll.akkoordTekst,pw);
+  if(d.conditions.akkoordEnabled!==false&&t(d.conditions.akkoord,L)){const akLines=doc.splitTextToSize(t(d.conditions.akkoord,L),pw);
   doc.text(akLines,m,y);y+=akLines.length*4+6;}
   doc.setFontSize(8);doc.setTextColor(153,153,153);doc.text(ll.acceptedBy+':',m,y);y+=5;
   doc.setFontSize(9);doc.setTextColor(17,17,17);doc.setFont('helvetica','bold');
@@ -2235,6 +2213,7 @@ function exportPDF(d,setData){
 function Dashboard({onOpen,onNew,onDuplicate,onDelete}){
   const[archive,setArchive]=useState(loadArchive());
   const[expandedId,setExpandedId]=useState(null);
+  const[avRefresh,setAvRefresh]=useState(0);
   const refresh=()=>setArchive(loadArchive());
   const sorted=[...archive].sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
   const fmtDt=iso=>{if(!iso)return'-';const d=new Date(iso);return d.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});};
@@ -2258,6 +2237,19 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete}){
         <button className="btn btn-p" onClick={()=>onNew('build')}>+ Build</button>
         <button className="btn btn-p" onClick={()=>onNew('assemble')}>+ Assemble</button>
       </div>
+    </div>
+
+    <div className="card" style={{marginBottom:16}}>
+      <div className="card-h">Algemene Voorwaarden (PDF)</div>
+      <p className="sm muted" style={{margin:'0 0 10px'}}>Geldt voor alle offertes. Een geupload bestand wordt automatisch achter elke offerte geplakt en blijft bewaard in deze browser. Wijzig je je AV, vervang hier de PDF; de code hoef je niet meer aan te passen.</p>
+      {['nl','en'].map(lng=>{const has=getAVB64(lng);return <div key={lng+avRefresh} className="flex g8" style={{alignItems:'center',marginBottom:6}}>
+        <span style={{width:28,fontSize:12,fontWeight:700,textTransform:'uppercase'}}>{lng}</span>
+        <label className="btn btn-sm btn-g" style={{cursor:'pointer',margin:0}}>{has?'Vervang PDF':'Upload PDF'}
+          <input type="file" accept="application/pdf" style={{display:'none'}} onChange={e=>{const fl=e.target.files&&e.target.files[0];if(!fl)return;const r=new FileReader();r.onload=()=>{const b64=String(r.result||'').split(',')[1]||'';setAVB64(lng,b64);setAvRefresh(x=>x+1);};r.readAsDataURL(fl);e.target.value='';}}/>
+        </label>
+        <span className="sm" style={{color:has?'var(--green)':'#999'}}>{has?'eigen versie actief':'standaard versie'}</span>
+        {has&&<button className="btn btn-sm btn-g" onClick={()=>{setAVB64(lng,null);setAvRefresh(x=>x+1);}}>Verwijder</button>}
+      </div>;})}
     </div>
 
     {sorted.length===0?<div className="card" style={{textAlign:'center',padding:48}}>
