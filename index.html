@@ -318,6 +318,36 @@ const fmtE=n=>`\u20AC ${fmt(n)}`;
 const uid=()=>Math.random().toString(36).slice(2,9);
 const t=(obj,lang)=>typeof obj==='string'?obj:(obj&&obj[lang])||obj?.nl||'';
 
+// ── NL→EN auto-translation (fills empty `en` from `nl` on bilingual fields) ──
+async function gtrans(text,sl,tl){
+  if(!text||!String(text).trim())return text;
+  try{
+    const r=await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=`+encodeURIComponent(text));
+    if(!r.ok)return null;
+    const j=await r.json();
+    return (j[0]||[]).map(seg=>seg[0]).join('');
+  }catch(e){return null;}
+}
+async function translateData(d,{force=false}={}){
+  const copy=JSON.parse(JSON.stringify(d));
+  const jobs=[];
+  const visit=o=>{
+    if(!o||typeof o!=='object')return;
+    if(Object.prototype.hasOwnProperty.call(o,'nl')&&Object.prototype.hasOwnProperty.call(o,'en')){
+      const hasEn=o.en&&String(o.en).trim();
+      if(o.nl&&String(o.nl).trim()&&(force||!hasEn)){
+        jobs.push((async()=>{const tr=await gtrans(o.nl,'nl','en');if(tr!=null)o.en=tr;})());
+      }
+      return;
+    }
+    if(Array.isArray(o)){o.forEach(visit);return;}
+    Object.values(o).forEach(visit);
+  };
+  visit(copy);
+  await Promise.all(jobs);
+  return copy;
+}
+
 function genRef(type){
   const d=new Date();
   const yy=String(d.getFullYear()).slice(2);
@@ -427,6 +457,26 @@ const save=d=>{try{localStorage.setItem(SK,JSON.stringify(d))}catch(e){}};
 const load=()=>{try{const r=localStorage.getItem(SK);return r?JSON.parse(r):null}catch(e){return null}};
 const loadHash=()=>{try{const h=location.hash.slice(1);if(!h)return null;const p=new URLSearchParams(h);const dd=p.get('data');if(!dd)return null;const j=LZString.decompressFromEncodedURIComponent(dd);return j?JSON.parse(j):null}catch(e){return null}};
 const shareUrl=d=>{const{_archiveId,...clean}=d;const c=LZString.compressToEncodedURIComponent(JSON.stringify(clean));return`${location.origin}${location.pathname}#data=${c}`};
+
+// ── Short share links (/s/<id> via /api/share, falls back to #data= hash) ──
+async function createShareLink(d){
+  const{_archiveId,...clean}=d;
+  const body=LZString.compressToEncodedURIComponent(JSON.stringify(clean));
+  const res=await fetch('/api/share',{method:'POST',headers:{'Content-Type':'text/plain'},body});
+  if(!res.ok)throw new Error('share-failed');
+  const j=await res.json();
+  if(!j||!j.id)throw new Error('share-failed');
+  return `${location.origin}/s/${j.id}`;
+}
+const loadShortId=()=>{const m=location.pathname.match(/^\/s\/([a-z0-9]+)$/i);return m?m[1]:null;};
+async function fetchShared(id){
+  try{
+    const res=await fetch('/api/share?id='+encodeURIComponent(id));
+    if(!res.ok)return null;
+    const txt=await res.text();
+    return JSON.parse(LZString.decompressFromEncodedURIComponent(txt));
+  }catch(e){return null;}
+}
 
 // ── Archive (all quotations) ──
 const loadArchive=()=>{try{const r=localStorage.getItem(AK);return r?JSON.parse(r):[];}catch(e){return[];}};
@@ -1187,6 +1237,19 @@ function exportToPlanner(d){
       start:phEnd,end:phEnd,assignee:'',personId:null,people:1,note:'',milestone:true});
   });
 
+  // Custom timeline steps (tussenstappen)
+  const tlSteps=Array.isArray(d.timeline)?d.timeline:[];
+  if(tlSteps.length){
+    const gid='g_timeline';
+    groups.push({id:gid,name:NL?'Tussenstappen':'Steps',color:GROUP_PALETTE[activePhases.length%GROUP_PALETTE.length],expanded:true});
+    tlSteps.forEach(s=>{
+      const sStart=addDays(projectStart,(s.startWeek||0)*7);
+      const sEnd=addDays(projectStart,((s.startWeek||0)+(s.durationWeeks||1))*7);
+      tasks.push({id:'t_'+(tid++),name:t(s.name,L)||(NL?'Tussenstap':'Step'),groupId:gid,categoryId:null,
+        start:sStart,end:sEnd,assignee:'',personId:null,people:1,note:'',milestone:(s.durationWeeks||1)<=0});
+    });
+  }
+
   // Build planner state (v4 schema)
   const state={
     version:4,
@@ -1261,11 +1324,17 @@ function Header({data:d,onPdf,onExport,setData}){
       <span className="sub">{ll.offertetool}</span>
     </div>
     <div className="flex g8">
-      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>{
+      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={async(ev)=>{
         const newLang=d.lang==='nl'?'en':'nl';
-        setData({...d,lang:newLang,conditions:{...d.conditions,avNL:newLang==='nl',avEN:newLang==='en'}});
+        let nd={...d,lang:newLang,conditions:{...d.conditions,avNL:newLang==='nl',avEN:newLang==='en'}};
+        if(newLang==='en'){
+          const btn=ev.currentTarget;const prev=btn.textContent;btn.textContent='…';btn.disabled=true;
+          try{nd=await translateData(nd);nd.lang='en';nd.conditions={...nd.conditions,avNL:false,avEN:true};}catch(e){}
+          btn.disabled=false;btn.textContent=prev;
+        }
+        setData(nd);
       }}>{d.lang==='nl'?'EN':'NL'}</button>}
-      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>{navigator.clipboard.writeText(shareUrl(d));archiveLogAction(d,'shared');alert(ll.linkKopie)}}>{ll.deelLink}</button>}
+      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={async()=>{let url;try{url=await createShareLink(d);}catch(e){url=shareUrl(d);}try{await navigator.clipboard.writeText(url);}catch(e){}archiveLogAction(d,'shared');alert(ll.linkKopie+'\n'+url);}}>{ll.deelLink}</button>}
       {d&&<ExportDropdown data={d} onExport={onExport}/>}
       {d&&<button className="btn btn-s" onClick={onPdf}>PDF</button>}
     </div>
@@ -1546,10 +1615,19 @@ function BudgetTab({data:d,set}){
 // ── Planning Tab ──
 function PlanningTab({data:d,set}){
   const L=d.lang;const ll=L_(L);
+  const steps=Array.isArray(d.timeline)?d.timeline:[];
   const active=d.phases.filter(p=>p.enabled!==false);
-  const total=Math.max(16,...active.map(p=>(p.startWeek||0)+(p.durationWeeks||4)));
+  const total=Math.max(16,
+    ...active.map(p=>(p.startWeek||0)+(p.durationWeeks||4)),
+    ...steps.map(s=>(s.startWeek||0)+(s.durationWeeks||1)));
   const upPh=(i,k,v)=>{const p=[...d.phases];p[i]={...p[i],[k]:v};set({...d,phases:p})};
   const phaseName=(ph)=>ph.customName||t(ph.name,L);
+  const setSteps=(arr)=>set({...d,timeline:arr});
+  const upStep=(i,k,v)=>{const a=[...steps];a[i]={...a[i],[k]:v};setSteps(a);};
+  const upStepName=(i,v)=>{const a=[...steps];const o=a[i].name||{nl:'',en:''};const nn=typeof o==='string'?{nl:o,en:o}:{...o};nn[L]=v;a[i]={...a[i],name:nn};setSteps(a);};
+  const addStep=()=>{const lastEnd=Math.max(0,...active.map(p=>(p.startWeek||0)+(p.durationWeeks||4)));setSteps([...steps,{id:uid(),name:{nl:'Tussenstap',en:'Step'},startWeek:lastEnd,durationWeeks:1}]);};
+  const rmStep=(i)=>setSteps(steps.filter((_,j)=>j!==i));
+  const dateFor=(sw)=>{if(!d.project.date)return'';const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(sw||0)*7);return dt.toLocaleDateString(L==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'short',year:'numeric'});};
   return <div className="card">
     <div className="card-h">{ll.planningTitle}</div>
     <div style={{overflowX:'auto'}}>
@@ -1564,21 +1642,42 @@ function PlanningTab({data:d,set}){
           </div>
         </div>;
       })}
+      {steps.map((s,si)=>{
+        const left=((s.startWeek||0)/total)*100;
+        const w=((s.durationWeeks||1)/total)*100;
+        return <div key={s.id} className="gantt-r">
+          <div className="gantt-l" style={{fontStyle:'italic',color:'#5a6b66'}}>↳ {t(s.name,L)||'—'}</div>
+          <div className="gantt-t">
+            <div className="gantt-b" style={{left:`${left}%`,width:`${w}%`,background:'#7A8C86'}}>{s.durationWeeks||1}w</div>
+          </div>
+        </div>;
+      })}
     </div>
     <table className="bt mt24">
-      <thead><tr><th>{ll.fase}</th><th style={{width:'12%'}}>{ll.startWeek}</th><th style={{width:'12%'}}>{ll.duurWeken}</th><th style={{width:'20%'}}>{ll.startdatum}</th></tr></thead>
-      <tbody>{d.phases.map((ph,pi)=>{
-        if(ph.enabled===false)return null;
-        let sd='';
-        if(d.project.date&&ph.startWeek>=0){const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(ph.startWeek||0)*7);sd=dt.toLocaleDateString(L==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'short',year:'numeric'})}
-        return <tr key={ph.id}>
-          <td>{ph.code} - {phaseName(ph)}</td>
-          <td><input type="number" min={0} value={ph.startWeek||0} onChange={e=>upPh(pi,'startWeek',parseInt(e.target.value)||0)}/></td>
-          <td><input type="number" min={1} value={ph.durationWeeks||4} onChange={e=>upPh(pi,'durationWeeks',parseInt(e.target.value)||1)}/></td>
-          <td className="muted">{sd}</td>
-        </tr>;
-      })}</tbody>
+      <thead><tr><th>{ll.fase}</th><th style={{width:'12%'}}>{ll.startWeek}</th><th style={{width:'12%'}}>{ll.duurWeken}</th><th style={{width:'20%'}}>{ll.startdatum}</th><th style={{width:'6%'}}></th></tr></thead>
+      <tbody>
+        {d.phases.map((ph,pi)=>{
+          if(ph.enabled===false)return null;
+          return <tr key={ph.id}>
+            <td>{ph.code} - {phaseName(ph)}</td>
+            <td><input type="number" min={0} value={ph.startWeek||0} onChange={e=>upPh(pi,'startWeek',parseInt(e.target.value)||0)}/></td>
+            <td><input type="number" min={1} value={ph.durationWeeks||4} onChange={e=>upPh(pi,'durationWeeks',parseInt(e.target.value)||1)}/></td>
+            <td className="muted">{dateFor(ph.startWeek)}</td>
+            <td></td>
+          </tr>;
+        })}
+        {steps.map((s,si)=>(
+          <tr key={s.id} style={{background:'#fafafa'}}>
+            <td><input value={t(s.name,L)} onChange={e=>upStepName(si,e.target.value)} placeholder={L==='nl'?'Naam tussenstap':'Step name'} style={{width:'100%',fontStyle:'italic'}}/></td>
+            <td><input type="number" min={0} value={s.startWeek||0} onChange={e=>upStep(si,'startWeek',parseInt(e.target.value)||0)}/></td>
+            <td><input type="number" min={1} value={s.durationWeeks||1} onChange={e=>upStep(si,'durationWeeks',parseInt(e.target.value)||1)}/></td>
+            <td className="muted">{dateFor(s.startWeek)}</td>
+            <td><button className="btn btn-sm btn-g" onClick={()=>rmStep(si)} title={L==='nl'?'Verwijder':'Remove'}>✕</button></td>
+          </tr>
+        ))}
+      </tbody>
     </table>
+    <button className="btn btn-sm btn-g mt16" onClick={addStep}>+ {L==='nl'?'Tussenstap toevoegen':'Add step'}</button>
   </div>;
 }
 
@@ -2154,6 +2253,8 @@ function App(){
   const[showDash,setShowDash]=useState(true);
 
   useEffect(()=>{
+    const sid=loadShortId();
+    if(sid){fetchShared(sid).then(sd=>{if(sd){const saved=archiveSave(sd,'created');setD(saved);setShowDash(false);}history.replaceState(null,'','/');});return;}
     const h=loadHash();
     if(h){const saved=archiveSave(h,'created');setD(saved);setShowDash(false);history.replaceState(null,'',location.pathname);return;}
     // If there's an active quotation in old storage, keep it available but show dashboard
@@ -2223,6 +2324,10 @@ function App(){
         {tab==='planning'&&<PlanningTab data={d} set={setDWithArchive}/>}
         {tab==='payment'&&<PaymentTab data={d} set={setDWithArchive}/>}
         {tab==='preview'&&<PreviewTab data={d}/>}
+        {tab!=='preview'&&<div className="between mt24">
+          <span/>
+          <button className="btn btn-s" onClick={()=>{const order=tabs.map(x=>x.id);const i=order.indexOf(tab);if(i>=0&&i<order.length-1)setTab(order[i+1]);}}>{d.lang==='nl'?'Volgende sectie ›':'Next section ›'}</button>
+        </div>}
       </>}
     </div>
   </div>;
