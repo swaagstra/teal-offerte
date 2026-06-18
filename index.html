@@ -242,7 +242,7 @@ const I={
     voorwaardenLabel:'VOORWAARDEN',
     exclusionsVw:'Exclusies',
     geldigheidVw:'Geldigheid',garantieLabel:'Garantie',
-    avTekst:'Op deze offerte zijn de Algemene Voorwaarden van TEAL van toepassing (separaat bijgevoegd).',
+    avTekst:'Op deze offerte zijn de Algemene Voorwaarden van TEAL van toepassing (bijgevoegd aan dit document).',
     meerwerkTekst:'Meerwerk of vertraging die niet aan TEAL te wijten is, wordt apart in rekening gebracht.',
     akkoord:'Akkoord',akkoordTekst:'Ondergetekende verklaart akkoord te gaan met de informatie in deze offerte.',
     acceptedBy:'AKKOORD DOOR',
@@ -302,7 +302,7 @@ const I={
     voorwaardenLabel:'TERMS & CONDITIONS',
     exclusionsVw:'Exclusions',
     geldigheidVw:'Validity',garantieLabel:'Warranty',
-    avTekst:'The General Terms and Conditions of TEAL apply (provided separately).',
+    avTekst:'The General Terms and Conditions of TEAL apply (attached to this document).',
     meerwerkTekst:'Additional work or delays not attributable to TEAL will be charged separately.',
     akkoord:'Approval',akkoordTekst:'By signing below, you agree to the information outlined in this document.',
     acceptedBy:'ACCEPTED BY',
@@ -2027,11 +2027,12 @@ function exportPDF(d,setData){
     doc.setFontSize(sz);doc.setFont('helvetica',opts.b?'bold':'normal');
     if(opts.c)doc.setTextColor(...opts.c);else doc.setTextColor(17,17,17);
     checkPage(sz*.5);
-    if(opts.w){const lines=doc.splitTextToSize(text||'',opts.w);doc.text(lines,m+(opts.x||0),y);y+=lines.length*sz*.38;}
-    else{doc.text(text||'',m+(opts.x||0),y);y+=sz*.42;}
+    if(opts.w){const lines=doc.splitTextToSize(text||'',opts.w);doc.text(lines,m+(opts.x||0),y);y+=lines.length*sz*.44;}
+    else{doc.text(text||'',m+(opts.x||0),y);y+=sz*.44;}
   };
   const line=()=>{doc.setDrawColor(212,236,230);doc.setLineWidth(.5);doc.line(m,y,190,y);y+=4;};
   const gap=(n=3)=>{y+=n};
+  const sectionHead=(title)=>{gap(3);doc.setDrawColor(212,236,230);doc.setLineWidth(.5);doc.line(m,y,190,y);y+=4.5;doc.setFontSize(10);doc.setFont('helvetica','bold');doc.setTextColor(7,20,18);doc.text(title,m,y);y+=5;};
 
   const fmtDateLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
   const finLines=buildFinancialLines(d,totals,L);
@@ -2040,7 +2041,7 @@ function exportPDF(d,setData){
   doc.addImage(window._TEAL_LOGO_PNG,'PNG',m,y,21,10);
   y+=15;
   doc.setFontSize(11);doc.setTextColor(85,85,85);doc.setFont('helvetica','normal');
-  doc.text(ll.offerte,m,y);y+=8;
+  doc.text(ll.offerte,m,y);y+=10;
 
   // ── CLIENT ──
   txt(ll.klantLabel,10,{b:true,c:[7,20,18]});gap();
@@ -2063,32 +2064,31 @@ function exportPDF(d,setData){
     doc.setFont('helvetica','normal');doc.setTextColor(153,153,153);doc.text(lbl,m,y);
     doc.setTextColor(17,17,17);doc.text(val||'-',m+40,y);y+=5;
   });
-  gap(4);line();
+  gap(2);
 
   // ── PROJECT DESCRIPTION ──
   if(t(d.project.description,L)||t(d.project.tealRole,L)){
-    txt(ll.projectBeschrijving,10,{b:true,c:[7,20,18]});gap();
-    if(t(d.project.description,L)){txt(t(d.project.description,L),9,{w:pw});gap(4);}
-    if(t(d.project.tealRole,L)){txt(ll.rolTeal,9,{b:true});txt(t(d.project.tealRole,L),9,{w:pw});gap(4);}
-    line();
+    sectionHead(ll.projectBeschrijving);
+    if(t(d.project.description,L)){txt(t(d.project.description,L),9,{w:pw});gap(3);}
+    if(t(d.project.tealRole,L)){gap(1);txt(ll.rolTeal,9,{b:true});gap(1);txt(t(d.project.tealRole,L),9,{w:pw});gap(2);}
   }
 
   // ── SCOPE OF WORK & TIMELINE (combined) ──
-  txt(ll.scopeTimeline,10,{b:true,c:[7,20,18]});gap();
+  sectionHead(ll.scopeTimeline);
   activePhases.forEach(ph=>{
     const desc=t(ph.description,L);
-    if(desc){checkPage(20);txt(pn(ph),9,{b:true});txt(desc,9,{w:pw});if(ph.effort)txt(`${ll.inzet}: ${ph.effort}`,8,{c:[153,153,153]});gap(3);}
+    if(desc){checkPage(20);txt(pn(ph),9,{b:true});gap(1);txt(desc,9,{w:pw});if(ph.effort){gap(1);txt(`${ll.inzet}: ${ph.effort}`,8,{c:[153,153,153]});}gap(4);}
   });
 
   // Gantt chart (balkenplanning) in PDF
   const phaseDate=(ph)=>{if(!d.project.date||ph.startWeek==null)return'';const dt=new Date(d.project.date);dt.setDate(dt.getDate()+ph.startWeek*7);return fmtDateLong(dt.toISOString().slice(0,10))};
-  gap(4);txt(ll.indicatieveTimeline,9,{b:true});gap(4);
+  gap(1);txt(ll.indicatieveTimeline,9,{b:true});gap(2);
   const ganttLeft=m+58,ganttRight=158,ganttW=ganttRight-ganttLeft;
   const ganttDateRange=(sw,dw)=>{if(!d.project.date)return '';const o={day:'numeric',month:'short'};const _s=new Date(d.project.date);_s.setDate(_s.getDate()+(sw||0)*7);const _e=new Date(d.project.date);_e.setDate(_e.getDate()+((sw||0)+(dw||1))*7);const loc=NL?'nl-NL':'en-GB';return _s.toLocaleDateString(loc,o)+' \u2013 '+_e.toLocaleDateString(loc,o);};
   const _tlSteps=Array.isArray(d.timeline)?d.timeline:[];
   const fitLbl=(str)=>{doc.setFontSize(8);doc.setFont('helvetica','normal');const maxW=ganttLeft-m-3;let v=str||'';if(doc.getTextWidth(v)<=maxW)return v;while(v.length>1&&doc.getTextWidth(v+'\u2026')>maxW)v=v.slice(0,-1);return v+'\u2026';};
   const totalWeeksGantt=Math.max(1,activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0),_tlSteps.reduce((s,st)=>Math.max(s,(st.startWeek||0)+(st.durationWeeks||1)),0));
-  const barH=6,barGap=2;
+  const barH=6,barGap=2.5;
   const hexToRgb=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
   activePhases.forEach((ph,i)=>{
     checkPage(barH+barGap+4);
@@ -2123,10 +2123,9 @@ function exportPDF(d,setData){
     doc.setFontSize(6.5);doc.setFont('helvetica','normal');doc.setTextColor(120,120,120);doc.text(ganttDateRange(sw,dw),190,y+barH-1.5,{align:'right'});
     y+=barH+barGap;
   });
-  gap(2);line();
 
   // ── COSTS + PAYMENT ──
-  txt(ll.kostenLabel,10,{b:true,c:[7,20,18]});gap(2);
+  sectionHead(ll.kostenLabel);
   // Table header (2 columns: description + amount)
   const colItem=m,colTotal=190;
   doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(85,85,85);
@@ -2147,7 +2146,7 @@ function exportPDF(d,setData){
   doc.text(`${NL?'Reiskosten':'Travel'}: \u20AC ${d.travel?.rateNL||0.50}/km`,m,y);y+=8;
 
   // Payment sub-section (under costs) - keep together
-  const paymentBlockH=8+(d.payment.milestones.length+1)*5+6;
+  const paymentBlockH=4+(d.payment.milestones.length+1)*4.5;
   checkPage(paymentBlockH);
   doc.setTextColor(17,17,17);
   txt(ll.betalingVw+':',9,{b:true});gap(1);
@@ -2170,7 +2169,7 @@ function exportPDF(d,setData){
 
   // ── TERMS & CONDITIONS ── (keep terms + signature together)
   checkPage(60);
-  txt(ll.voorwaardenLabel,10,{b:true,c:[7,20,18]});gap();
+  sectionHead(ll.voorwaardenLabel);
 
   // Conditions list (uniform dashes, only non-empty/enabled lines)
   doc.setFontSize(9);doc.setFont('helvetica','normal');
