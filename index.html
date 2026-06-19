@@ -334,9 +334,9 @@ async function translateData(d,{force=false}={}){
   const visit=o=>{
     if(!o||typeof o!=='object')return;
     if(Object.prototype.hasOwnProperty.call(o,'nl')&&Object.prototype.hasOwnProperty.call(o,'en')){
-      const hasEn=o.en&&String(o.en).trim();
-      if(o.nl&&String(o.nl).trim()&&(force||!hasEn)){
-        jobs.push((async()=>{const tr=await gtrans(o.nl,'nl','en');if(tr!=null)o.en=tr;})());
+      const nl=o.nl?String(o.nl):'';
+      if(nl.trim()&&(force||o._ensrc!==o.nl)){
+        jobs.push((async()=>{const tr=await gtrans(o.nl,'nl','en');if(tr!=null){o.en=tr;o._ensrc=o.nl;}})());
       }
       return;
     }
@@ -394,8 +394,8 @@ function createProject(type){
     conditions:{validity:30,paymentTerm:14,
       warranty:{nl:'2 jaar na oplevering',en:'2 years after delivery'},
       warrantyEnabled:false,
-      meerwerk:{nl:I.nl.meerwerkTekst,en:I.en.meerwerkTekst},meerwerkEnabled:true,
-      akkoord:{nl:I.nl.akkoordTekst,en:I.en.akkoordTekst},akkoordEnabled:true,
+      meerwerk:{nl:I.nl.meerwerkTekst,en:I.en.meerwerkTekst,_ensrc:I.nl.meerwerkTekst},meerwerkEnabled:true,
+      akkoord:{nl:I.nl.akkoordTekst,en:I.en.akkoordTekst,_ensrc:I.nl.akkoordTekst},akkoordEnabled:true,
       avNL:true,avEN:false,
     },
     batchSize:type==='assemble'?100:0,
@@ -404,8 +404,8 @@ function createProject(type){
 function migrateConds(d){
   if(!d||!d.conditions)return d;
   const c={...d.conditions};let ch=false;
-  if(c.meerwerk===undefined){c.meerwerk={nl:I.nl.meerwerkTekst,en:I.en.meerwerkTekst};if(c.meerwerkEnabled===undefined)c.meerwerkEnabled=true;ch=true;}
-  if(c.akkoord===undefined){c.akkoord={nl:I.nl.akkoordTekst,en:I.en.akkoordTekst};if(c.akkoordEnabled===undefined)c.akkoordEnabled=true;ch=true;}
+  if(c.meerwerk===undefined){c.meerwerk={nl:I.nl.meerwerkTekst,en:I.en.meerwerkTekst,_ensrc:I.nl.meerwerkTekst};if(c.meerwerkEnabled===undefined)c.meerwerkEnabled=true;ch=true;}
+  if(c.akkoord===undefined){c.akkoord={nl:I.nl.akkoordTekst,en:I.en.akkoordTekst,_ensrc:I.nl.akkoordTekst};if(c.akkoordEnabled===undefined)c.akkoordEnabled=true;ch=true;}
   return ch?{...d,conditions:c}:d;
 }
 
@@ -1328,12 +1328,13 @@ function ExportDropdown({data:d,onExport}){
   </div>;
 }
 
-function Header({data:d,onPdf,onExport,setData}){
+function Header({data:d,onPdf,onExport,setData,onBack}){
   const ll=d?L_(d.lang):I.nl;
   return <div className="hdr">
     <div className="hdr-left">
       <Logo color="#D4ECE6" h={28}/>
       <span className="sub">{ll.offertetool}</span>
+      {d&&onBack&&<button className="btn btn-sm btn-g" onClick={onBack} title="Terug naar overzicht" style={{marginLeft:10,padding:'4px 10px',fontSize:13}}>← {d.lang==='en'?'Overview':'Overzicht'}</button>}
     </div>
     <div className="flex g8">
       {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={async(ev)=>{
@@ -2032,16 +2033,17 @@ function exportPDF(d,setData){
   };
   const line=()=>{doc.setDrawColor(212,236,230);doc.setLineWidth(.5);doc.line(m,y,190,y);y+=4;};
   const gap=(n=3)=>{y+=n};
-  const sectionHead=(title)=>{gap(3);doc.setDrawColor(212,236,230);doc.setLineWidth(.5);doc.line(m,y,190,y);y+=4.5;doc.setFontSize(10);doc.setFont('helvetica','bold');doc.setTextColor(7,20,18);doc.text(title,m,y);y+=5;};
+  const sectionHead=(title)=>{gap(8);doc.setDrawColor(212,236,230);doc.setLineWidth(.5);doc.line(m,y,190,y);y+=7;doc.setFontSize(10);doc.setFont('helvetica','bold');doc.setTextColor(7,20,18);doc.text(title,m,y);y+=5;};
 
   const fmtDateLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
   const finLines=buildFinancialLines(d,totals,L);
 
   // ── Header with logo ──
-  doc.addImage(window._TEAL_LOGO_PNG,'PNG',m,y,21,10);
-  y+=15;
-  doc.setFontSize(11);doc.setTextColor(85,85,85);doc.setFont('helvetica','normal');
-  doc.text(ll.offerte,m,y);y+=10;
+  const logoTop=y;
+  doc.addImage(window._TEAL_LOGO_PNG,'PNG',m,logoTop,21,10);
+  doc.setFontSize(20);doc.setFont('helvetica','bold');doc.setTextColor(7,20,18);
+  doc.text(ll.offerte,190,logoTop+8,{align:'right'});
+  y=logoTop+18;
 
   // ── CLIENT ──
   txt(ll.klantLabel,10,{b:true,c:[7,20,18]});gap();
@@ -2375,19 +2377,17 @@ function App(){
   ];
 
   return <div className="app">
-    <Header data={showDash?null:d} onPdf={handlePdf} onExport={handleExport} setData={setDWithArchive}/>
+    <Header data={showDash?null:d} onPdf={handlePdf} onExport={handleExport} setData={setDWithArchive} onBack={goToDash}/>
     {!showDash&&d&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
     <div className="main">
       {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onDuplicate={duplicateQuote} onDelete={deleteQuote}/>:
       !d?<Start onSelect={type=>{if(type==='load'){const r=load();if(r)openQuote(r);}else newQuote(type);}}/>:<>
         <div className="between mb16">
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <button className="btn btn-sm btn-g" onClick={goToDash} title="Terug naar overzicht" style={{padding:'4px 8px',fontSize:14}}>←</button>
             <span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#555'}}>{d.type} {d.lang==='nl'?'offerte':'quotation'}</span>
             {d.project.name&&<span style={{color:'#999'}}>{d.project.name}</span>}
             <span style={{fontSize:11,color:'#999'}}>{d.ref}</span>
           </div>
-          <button className="btn btn-sm btn-g" onClick={()=>{newQuote(d.type)}}>{ll.nieuw}</button>
         </div>
         {tab==='project'&&<ProjectTab data={d} set={setDWithArchive}/>}
         {tab==='scope'&&<ScopeTab data={d} set={setDWithArchive}/>}
