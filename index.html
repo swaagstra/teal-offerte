@@ -538,6 +538,8 @@ function entryTotal(e){try{const dt=e.data||{};if((e.kind==='change_order')||dt.
 function effectiveStatus(entry){const s=(entry&&entry.status)||'concept';if(s==='verstuurd'){const ex=quoteExpiry(entry.data);if(ex&&ex<new Date())return 'verlopen';}return s;}
 function archiveSetStatus(id,status){if(!id)return;const all=loadArchive();const idx=all.findIndex(x=>x.id===id);if(idx>=0){const now=new Date().toISOString();all[idx].status=status;all[idx].statusAt=now;all[idx].updatedAt=now;all[idx].changelog.push({action:'status_'+status,date:now});saveArchive(all);}}
 function bumpSent(id){if(!id)return;const all=loadArchive();const i=all.findIndex(x=>x.id===id);if(i>=0&&((all[i].status||'concept')==='concept'))archiveSetStatus(id,'verstuurd');}
+function currentVersion(ref){const parts=String(ref||'').split('-');const v=parseInt(parts[parts.length-1]);return isNaN(v)?1:v;}
+function archiveBumpVersion(id,note){const all=loadArchive();const idx=all.findIndex(x=>x.id===id);if(idx<0)return null;const e=all[idx];const parts=String(e.ref||(e.data&&e.data.ref)||'').split('-');let v=parseInt(parts[parts.length-1]);if(isNaN(v)){parts.push('2');v=2;}else{v=v+1;parts[parts.length-1]=String(v);}const newRef=parts.join('-');const now=new Date().toISOString();e.ref=newRef;e.data={...e.data,ref:newRef};e.updatedAt=now;e.changelog.push({action:'version',version:v,note:note||'',date:now});all[idx]=e;saveArchive(all);return e;}
 
 // ── Archive cloud backup (Upstash via /api/archive) ──
 const WSK='teal.offerte.ws';
@@ -2316,7 +2318,6 @@ function exportPDF(d,setData){
       }catch(e){console.error('AV merge failed',e);dl(buf);}})();
     } else { dl(buf); }
   });
-  if(setData){const parts=d.ref.split('-');const curV=parseInt(parts[parts.length-1])||1;parts[parts.length-1]=String(curV+1);setData({...d,ref:parts.join('-')});}
 }
 
 // ── Change order: factory, tokens, PDF ──
@@ -2454,7 +2455,7 @@ async function pushToOdoo(entry){
 }
 
 // ── Dashboard ──
-function Dashboard({onOpen,onNew,onDuplicate,onDelete,onNewCO}){
+function Dashboard({onOpen,onNew,onDuplicate,onDelete,onNewCO,onBumpVersion}){
   const[archive,setArchive]=useState(loadArchive());
   const[expandedId,setExpandedId]=useState(null);
   const[avRefresh,setAvRefresh]=useState(0);
@@ -2585,18 +2586,19 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete,onNewCO}){
           <div className="flex g8" style={{marginBottom:16}}>
             <button className="btn btn-sm btn-p" onClick={()=>onOpen(item.data)}>Openen</button>
             <button className="btn btn-sm btn-s" onClick={()=>{onDuplicate(item.data);refresh();}}>Dupliceren</button>
+            {!isCO&&<button className="btn btn-sm btn-g" onClick={()=>{onBumpVersion(item.id);refresh();}}>Nieuwe versie</button>}
             <button className="btn btn-sm btn-g" onClick={()=>{navigator.clipboard.writeText(shareUrl(item.data));bumpSent(item.id);refresh();alert('Link gekopieerd');}}>Deel link</button>
             {!isCO&&<button className="btn btn-sm btn-g" onClick={()=>onNewCO(item)}>+ Change order</button>}
             <button className="btn btn-sm btn-g" title="Maak een concept-factuur in TEAL Odoo" onClick={()=>{pushToOdoo(item).then(refresh);}}>Naar Odoo</button>
             <button className="btn btn-sm btn-g" style={{color:'var(--red)'}} onClick={()=>{if(confirm(`"${item.projectName||'Naamloos'}" verwijderen?`)){onDelete(item.id);refresh();}}}>Verwijderen</button>
           </div>
           <div style={{fontSize:12,color:'#555'}}>
-            <strong style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999'}}>Changelog</strong>
-            <div style={{marginTop:6,maxHeight:200,overflowY:'auto'}}>
-              {[...item.changelog].reverse().map((log,i)=><div key={i} style={{display:'flex',gap:8,marginBottom:4}}>
+            <strong style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999'}}>Versies</strong>
+            <div style={{marginTop:6,maxHeight:220,overflowY:'auto'}}>
+              {(()=>{const vs=item.changelog.filter(l=>l.action==='version');if(!vs.length)return <div style={{color:'#999'}}>Versie {currentVersion(item.ref)}. Nog geen wijzigingen vastgelegd. Klik op Nieuwe versie om bij een aanpassing te noteren wat er anders is.</div>;return [...vs].reverse().map((log,i)=><div key={i} style={{display:'flex',gap:8,marginBottom:8}}>
                 <span style={{color:'#999',flexShrink:0,width:130}}>{fmtDt(log.date)}</span>
-                <span>{actionLabel[log.action]||log.action}</span>
-              </div>)}
+                <span><strong>Versie {log.version}</strong>{log.note?' — '+log.note:''}</span>
+              </div>);})()}
             </div>
           </div>
         </div>}
@@ -2780,6 +2782,7 @@ function App(){
   const openQuote=(data)=>{const md=data&&data.kind==='change_order'?data:migrateConds(data);const saved=archiveSave(md,'updated');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const newQuote=(type)=>{const proj=createProject(type);const saved=archiveSave(proj,'created');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const newCO=(parentEntry)=>{const lang=parentEntry?parentEntry.lang:((d&&d.lang)||'nl');const co=createChangeOrder(parentEntry,lang);const saved=archiveSave(co,'created');save(saved);setD(saved);setShowDash(false);};
+  const bumpVersion=(id)=>{const note=window.prompt('Wat is er anders in deze nieuwe versie? (kort)');if(note===null)return;const e=archiveBumpVersion(id,note);if(e&&d&&d._archiveId===id){setD(e.data);save(e.data);}};
   const duplicateQuote=(data)=>{const copy={...JSON.parse(JSON.stringify(data)),_archiveId:undefined};delete copy._archiveId;const ref=data.ref.split('-');ref[ref.length-1]='1';copy.ref=ref.join('-')+'-copy';archiveSave(copy,'created');archiveLogAction(data,'duplicated');};
   const deleteQuote=(id)=>{archiveDelete(id);if(d&&d._archiveId===id){setD(null);save(null);}};
   const goToDash=()=>{if(d)archiveSave(d,'updated');setShowDash(true);};
@@ -2818,7 +2821,7 @@ function App(){
     <Header data={showDash||isCO?null:d} onPdf={handlePdf} onExport={handleExport} setData={setDWithArchive} onBack={goToDash}/>
     {!showDash&&d&&!isCO&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
     <div className="main">
-      {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onDuplicate={duplicateQuote} onDelete={deleteQuote} onNewCO={newCO}/>:
+      {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onDuplicate={duplicateQuote} onDelete={deleteQuote} onNewCO={newCO} onBumpVersion={bumpVersion}/>:
       isCO?<ChangeOrderFlow data={d} set={setDWithArchive} onBack={goToDash}/>:
       !d?<Start onSelect={type=>{if(type==='load'){const r=load();if(r)openQuote(r);}else newQuote(type);}}/>:<>
         <div className="between mb16">
@@ -2827,6 +2830,7 @@ function App(){
             {d.project.name&&<span style={{color:'#999'}}>{d.project.name}</span>}
             <span style={{fontSize:11,color:'#999'}}>{d.ref}</span>
           </div>
+          <button className="btn btn-g btn-sm" onClick={()=>bumpVersion(d._archiveId)}>Nieuwe versie</button>
         </div>
         {tab==='project'&&<ProjectTab data={d} set={setDWithArchive}/>}
         {tab==='scope'&&<ScopeTab data={d} set={setDWithArchive}/>}
