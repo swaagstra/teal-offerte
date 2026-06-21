@@ -2470,7 +2470,15 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete,onNewCO,onBumpVersion}){
     afgewezen:{label:'Afgewezen',color:'#b3261e',bg:'#fce8e6'},
     verlopen:{label:'Verlopen',color:'#8a6d00',bg:'#fff6e0'},
   };
-  const sorted=[...archive].sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
+  // Nest change orders directly under their parent quote
+  const isCOf=e=>e.kind==='change_order'||(e.data&&e.data.kind==='change_order');
+  const parents=archive.filter(e=>!isCOf(e)).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
+  const cosByParent={};const orphanCOs=[];
+  archive.filter(isCOf).forEach(co=>{const pid=co.parentId||(co.data&&co.data.parentId);const pref=co.parentRef||(co.data&&co.data.parentRef);const parent=parents.find(p=>p.id===pid)||parents.find(p=>p.ref===pref);if(parent){(cosByParent[parent.id]=cosByParent[parent.id]||[]).push(co);}else{orphanCOs.push(co);}});
+  Object.keys(cosByParent).forEach(k=>cosByParent[k].sort((a,b)=>(currentVersion(a.ref)-currentVersion(b.ref))||(new Date(a.updatedAt)-new Date(b.updatedAt))));
+  const ordered=[];
+  parents.forEach(p=>{ordered.push(p);(cosByParent[p.id]||[]).forEach(co=>ordered.push(co));});
+  orphanCOs.sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt)).forEach(co=>ordered.push(co));
   // KPI's
   const _now=new Date();const _q0=new Date(_now.getFullYear(),Math.floor(_now.getMonth()/3)*3,1);
   let openVal=0,wonQ=0,acc=0,rej=0;
@@ -2480,7 +2488,7 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete,onNewCO,onBumpVersion}){
     if(st==='afgewezen')rej++;});
   const winRate=(acc+rej)>0?Math.round(acc/(acc+rej)*100):null;
   const counts={alle:archive.length};STATUS_ORDER.concat('verlopen').forEach(s=>{counts[s]=archive.filter(e=>effectiveStatus(e)===s).length;});
-  const visible=sorted.filter(e=>filter==='alle'?true:effectiveStatus(e)===filter);
+  const visible=ordered.filter(e=>filter==='alle'?true:effectiveStatus(e)===filter);
   const copyWsUrl=()=>{navigator.clipboard.writeText(workspaceUrl());alert('Werkruimte-link gekopieerd. Open deze op een ander apparaat om je offertes daar te zien. Houd de link prive.');};
   const fmtDt=iso=>{if(!iso)return'-';const d=new Date(iso);return d.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});};
   const actionLabel={
