@@ -494,7 +494,7 @@ async function fetchShared(id){
 
 // ── Archive (all quotations) ──
 const loadArchive=()=>{try{const r=localStorage.getItem(AK);return r?JSON.parse(r):[];}catch(e){return[];}};
-const saveArchive=a=>{try{localStorage.setItem(AK,JSON.stringify(a))}catch(e){}};
+const saveArchive=a=>{try{localStorage.setItem(AK,JSON.stringify(a))}catch(e){}schedulePush();};
 const genId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
 function archiveSave(d,action='updated'){
@@ -505,6 +505,8 @@ function archiveSave(d,action='updated'){
   const entry={
     id,ref:d.ref,type:d.type,lang:d.lang,
     projectName:d.project?.name||'',clientName:d.client?.name||'',
+    status:idx>=0?(all[idx].status||'concept'):'concept',
+    statusAt:idx>=0?(all[idx].statusAt||null):null,
     createdAt:idx>=0?all[idx].createdAt:now,
     updatedAt:now,
     changelog:idx>=0?[...all[idx].changelog,{action,date:now}]:[{action:'created',date:now}],
@@ -526,7 +528,52 @@ function archiveLogAction(d,action){
   const idx=all.findIndex(x=>x.id===d._archiveId);
   if(idx>=0){all[idx].changelog.push({action,date:new Date().toISOString()});all[idx].updatedAt=new Date().toISOString();saveArchive(all);}
 }
-function archiveLogExport(d){archiveLogAction(d,'pdf_exported');}
+function archiveLogExport(d){archiveLogAction(d,'pdf_exported');bumpSent(d&&d._archiveId);}
+
+// ── Status lifecycle ──
+const STATUS_ORDER=['concept','verstuurd','geaccepteerd','afgewezen'];
+function quoteExpiry(data){try{const base=data&&data.project&&data.project.date;const days=parseInt(data&&data.conditions&&data.conditions.validity)||0;if(!base||!days)return null;const dt=new Date(base);dt.setDate(dt.getDate()+days);return dt;}catch(e){return null;}}
+function effectiveStatus(entry){const s=(entry&&entry.status)||'concept';if(s==='verstuurd'){const ex=quoteExpiry(entry.data);if(ex&&ex<new Date())return 'verlopen';}return s;}
+function archiveSetStatus(id,status){if(!id)return;const all=loadArchive();const idx=all.findIndex(x=>x.id===id);if(idx>=0){const now=new Date().toISOString();all[idx].status=status;all[idx].statusAt=now;all[idx].updatedAt=now;all[idx].changelog.push({action:'status_'+status,date:now});saveArchive(all);}}
+function bumpSent(id){if(!id)return;const all=loadArchive();const i=all.findIndex(x=>x.id===id);if(i>=0&&((all[i].status||'concept')==='concept'))archiveSetStatus(id,'verstuurd');}
+
+// ── Archive cloud backup (Upstash via /api/archive) ──
+const WSK='teal.offerte.ws';
+function getWorkspaceId(){
+  try{
+    const q=new URLSearchParams(location.search).get('ws');
+    if(q&&/^[a-z0-9]{8,40}$/i.test(q)){localStorage.setItem(WSK,q);return q;}
+    let w=localStorage.getItem(WSK);
+    if(!w){w=(Date.now().toString(36)+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2)).slice(0,22);localStorage.setItem(WSK,w);}
+    return w;
+  }catch(e){return null;}
+}
+function workspaceUrl(){const ws=getWorkspaceId();return location.origin+location.pathname+'?ws='+ws;}
+const syncState={status:'idle',at:null};
+let _pushTimer=null;
+function schedulePush(){if(_pushTimer)clearTimeout(_pushTimer);_pushTimer=setTimeout(pushArchive,1500);}
+async function pushArchive(){
+  const ws=getWorkspaceId();if(!ws)return;
+  try{syncState.status='syncing';
+    const res=await fetch('/api/archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ws,archive:loadArchive()})});
+    syncState.status=res.ok?'ok':'error';syncState.at=Date.now();
+  }catch(e){syncState.status='error';syncState.at=Date.now();}
+}
+async function pullArchive(){
+  const ws=getWorkspaceId();if(!ws)return loadArchive();
+  try{
+    const res=await fetch('/api/archive?ws='+encodeURIComponent(ws));
+    if(!res.ok)return loadArchive();
+    const remote=await res.json();
+    if(!Array.isArray(remote))return loadArchive();
+    const byId={};
+    loadArchive().forEach(e=>{byId[e.id]=e;});
+    remote.forEach(e=>{if(!e||!e.id)return;const cur=byId[e.id];if(!cur||new Date(e.updatedAt||0)>new Date(cur.updatedAt||0))byId[e.id]=e;});
+    const merged=Object.keys(byId).map(k=>byId[k]);
+    try{localStorage.setItem(AK,JSON.stringify(merged));}catch(e){}
+    return merged;
+  }catch(e){return loadArchive();}
+}
 
 // ── Google API Integration ──
 const GOOGLE_CID_KEY='teal.google.clientId';
@@ -2276,7 +2323,28 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete}){
   const[expandedId,setExpandedId]=useState(null);
   const[avRefresh,setAvRefresh]=useState(0);
   const refresh=()=>setArchive(loadArchive());
+  const[filter,setFilter]=useState('alle');
+  const[synced,setSynced]=useState(false);
+  useEffect(()=>{pullArchive().then(a=>{setArchive(a);setSynced(true);});},[]);
+  const statusMeta={
+    concept:{label:'Concept',color:'#7a807e',bg:'#f0f0ee'},
+    verstuurd:{label:'Verstuurd',color:'#1d6fb8',bg:'#e7f0fb'},
+    geaccepteerd:{label:'Geaccepteerd',color:'#2D8659',bg:'#e6f5ec'},
+    afgewezen:{label:'Afgewezen',color:'#b3261e',bg:'#fce8e6'},
+    verlopen:{label:'Verlopen',color:'#8a6d00',bg:'#fff6e0'},
+  };
   const sorted=[...archive].sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
+  // KPI's
+  const _now=new Date();const _q0=new Date(_now.getFullYear(),Math.floor(_now.getMonth()/3)*3,1);
+  let openVal=0,wonQ=0,acc=0,rej=0;
+  archive.forEach(e=>{const st=effectiveStatus(e);let tot=0;try{tot=calcTotals(e.data).grandClient;}catch(_e){}
+    if(st==='concept'||st==='verstuurd')openVal+=tot;
+    if(st==='geaccepteerd'){acc++;const at=new Date(e.statusAt||e.updatedAt);if(at>=_q0)wonQ+=tot;}
+    if(st==='afgewezen')rej++;});
+  const winRate=(acc+rej)>0?Math.round(acc/(acc+rej)*100):null;
+  const counts={alle:archive.length};STATUS_ORDER.concat('verlopen').forEach(s=>{counts[s]=archive.filter(e=>effectiveStatus(e)===s).length;});
+  const visible=sorted.filter(e=>filter==='alle'?true:effectiveStatus(e)===filter);
+  const copyWsUrl=()=>{navigator.clipboard.writeText(workspaceUrl());alert('Werkruimte-link gekopieerd. Open deze op een ander apparaat om je offertes daar te zien. Houd de link prive.');};
   const fmtDt=iso=>{if(!iso)return'-';const d=new Date(iso);return d.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});};
   const actionLabel={
     created:'Aangemaakt',updated:'Bewerkt',
@@ -2286,6 +2354,10 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete}){
     planner_exported:'Planning geëxporteerd',
     duplicated:'Gedupliceerd',
     shared:'Link gedeeld',
+    status_concept:'Status: concept',
+    status_verstuurd:'Status: verstuurd',
+    status_geaccepteerd:'Status: geaccepteerd',
+    status_afgewezen:'Status: afgewezen',
   };
 
   return <div>
@@ -2294,10 +2366,39 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete}){
         <Logo color="#071412" h={36}/>
         <p style={{color:'#999',marginTop:4,fontSize:13}}>Offerte overzicht</p>
       </div>
-      <div className="flex g8">
+      <div className="flex g8" style={{alignItems:'center'}}>
+        <span className="sm" style={{color:synced?'var(--green)':'#999'}} title="Back-up naar de cloud">{synced?'● Back-up actief':'○ Synchroniseren…'}</span>
+        <button className="btn btn-g btn-sm" onClick={copyWsUrl} title="Kopieer een prive-link om je offertes op een ander apparaat te openen">Apparaten</button>
         <button className="btn btn-p" onClick={()=>onNew('build')}>+ Build</button>
         <button className="btn btn-p" onClick={()=>onNew('assemble')}>+ Assemble</button>
       </div>
+    </div>
+
+    {/* KPI's */}
+    <div className="flex g16" style={{marginBottom:16}}>
+      <div className="card" style={{flex:1,marginBottom:0}}>
+        <div className="card-h" style={{border:0,padding:0,marginBottom:6}}>Openstaand</div>
+        <div style={{fontSize:24,fontWeight:700,color:'#071412'}}>{fmtE(openVal)}</div>
+        <div className="sm muted">Concept + verstuurd</div>
+      </div>
+      <div className="card" style={{flex:1,marginBottom:0}}>
+        <div className="card-h" style={{border:0,padding:0,marginBottom:6}}>Gewonnen dit kwartaal</div>
+        <div style={{fontSize:24,fontWeight:700,color:'#2D8659'}}>{fmtE(wonQ)}</div>
+        <div className="sm muted">{acc} geaccepteerd totaal</div>
+      </div>
+      <div className="card" style={{flex:1,marginBottom:0}}>
+        <div className="card-h" style={{border:0,padding:0,marginBottom:6}}>Win-rate</div>
+        <div style={{fontSize:24,fontWeight:700,color:'#071412'}}>{winRate==null?'–':winRate+'%'}</div>
+        <div className="sm muted">{acc} gewonnen / {rej} verloren</div>
+      </div>
+    </div>
+
+    {/* Status filter */}
+    <div className="flex g8" style={{marginBottom:16,flexWrap:'wrap'}}>
+      {[['alle','Alle']].concat(STATUS_ORDER.concat('verlopen').map(s=>[s,statusMeta[s].label])).map(([id,lab])=>{
+        const on=filter===id;const c=id==='alle'?'#071412':statusMeta[id].color;
+        return <button key={id} className="btn btn-sm" onClick={()=>setFilter(id)} style={{border:'1px solid '+(on?c:'#d0d0ce'),background:on?c:'#fff',color:on?'#fff':'#555',fontWeight:on?700:600}}>{lab} <span style={{opacity:.7}}>({counts[id]||0})</span></button>;
+      })}
     </div>
 
     <div className="card" style={{marginBottom:16}}>
@@ -2313,10 +2414,10 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete}){
       </div>;})}
     </div>
 
-    {sorted.length===0?<div className="card" style={{textAlign:'center',padding:48}}>
-      <p style={{color:'#999',marginBottom:16}}>Nog geen offertes. Begin met een nieuwe offerte.</p>
+    {visible.length===0?<div className="card" style={{textAlign:'center',padding:48}}>
+      <p style={{color:'#999',marginBottom:16}}>{archive.length===0?'Nog geen offertes. Begin met een nieuwe offerte.':'Geen offertes in dit filter.'}</p>
     </div>:
-    <div>{sorted.map(item=>{
+    <div>{visible.map(item=>{
       const isExpanded=expandedId===item.id;
       const totals=calcTotals(item.data);
       return <div key={item.id} className="card" style={{padding:0,overflow:'hidden'}}>
@@ -2326,6 +2427,7 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete}){
               <span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#fff',background:item.type==='build'?'#071412':'#2D8659',padding:'2px 8px',borderRadius:3}}>{item.type}</span>
               <span style={{fontWeight:600,fontSize:15}}>{item.projectName||'Naamloos'}</span>
               <span style={{color:'#999',fontSize:12}}>{item.ref}</span>
+              {(()=>{const m=statusMeta[effectiveStatus(item)]||statusMeta.concept;return <span style={{fontSize:11,fontWeight:600,color:m.color,background:m.bg,padding:'2px 8px',borderRadius:3}}>{m.label}</span>;})()}
             </div>
             <div style={{marginTop:4,fontSize:12,color:'#999'}}>
               {item.clientName||'Geen klant'} · {fmtE(totals.grandClient)} · {fmtDt(item.updatedAt)}
@@ -2335,10 +2437,16 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete}){
         </div>
 
         {isExpanded&&<div style={{borderTop:'1px solid #eee',padding:'16px 20px'}}>
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:6}}>Status</div>
+            <div className="flex g8" style={{flexWrap:'wrap'}}>
+              {STATUS_ORDER.map(st=>{const on=(item.status||'concept')===st;const m=statusMeta[st];return <button key={st} className="btn btn-sm" onClick={()=>{archiveSetStatus(item.id,st);refresh();}} style={{border:'1px solid '+(on?m.color:'#d0d0ce'),background:on?m.bg:'#fff',color:on?m.color:'#555',fontWeight:on?700:600}}>{m.label}</button>;})}
+            </div>
+          </div>
           <div className="flex g8" style={{marginBottom:16}}>
             <button className="btn btn-sm btn-p" onClick={()=>onOpen(item.data)}>Openen</button>
             <button className="btn btn-sm btn-s" onClick={()=>{onDuplicate(item.data);refresh();}}>Dupliceren</button>
-            <button className="btn btn-sm btn-g" onClick={()=>{navigator.clipboard.writeText(shareUrl(item.data));alert('Link gekopieerd');}}>Deel link</button>
+            <button className="btn btn-sm btn-g" onClick={()=>{navigator.clipboard.writeText(shareUrl(item.data));bumpSent(item.id);refresh();alert('Link gekopieerd');}}>Deel link</button>
             <button className="btn btn-sm btn-g" style={{color:'var(--red)'}} onClick={()=>{if(confirm(`"${item.projectName||'Naamloos'}" verwijderen?`)){onDelete(item.id);refresh();}}}>Verwijderen</button>
           </div>
           <div style={{fontSize:12,color:'#555'}}>
