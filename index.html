@@ -2437,10 +2437,20 @@ function odooPayloadFromEntry(entry){
     return {type:'change_order',ref:d.ref,lang:L,client:{name:d.client?.name,email:d.client?.email,contact:d.client?.contact},
       note:(NL?'Change order ':'Change order ')+d.ref+(d.parentRef?(NL?' bij offerte ':' to quote ')+d.parentRef:''),lines};
   }
-  const totals=calcTotals(d);const fl=buildFinancialLines(d,totals,L);
+  const totals=calcTotals(d);const grand=totals.grandClient;const fl=buildFinancialLines(d,totals,L);
   const lines=fl.map(ln=>({name:ln.desc||'',price:+ln.total||0}));
+  const msArr=(d.payment&&d.payment.milestones)||[];
+  let milestones=[];
+  if(msArr.length>1){
+    const active=d.phases.filter(p=>p.enabled!==false);
+    const steps=Array.isArray(d.timeline)?d.timeline:[];
+    const totalWeeks=Math.max(1,...active.map(p=>(p.startWeek||0)+(p.durationWeeks||4)),...steps.map(s=>(s.startWeek||0)+(s.durationWeeks||1)));
+    const addDays=(iso,dd)=>{const dt=new Date(iso);dt.setDate(dt.getDate()+dd);return dt.toISOString().slice(0,10);};
+    const n=msArr.length;let acc=0;
+    milestones=msArr.map((m,i)=>{let amt=Math.round(grand*(m.pct||0)/100*100)/100;if(i===n-1)amt=Math.round((grand-acc)*100)/100;else acc+=amt;const date=m.date||(d.project.date?addDays(d.project.date,Math.round(totalWeeks*(i+1)/n)*7):'');return {name:t(m.name,L)||((NL?'Termijn ':'Instalment ')+(i+1)),pct:m.pct||0,amount:amt,date};});
+  }
   return {type:'quote',ref:d.ref,lang:L,client:{name:d.client?.name,email:d.client?.email,contact:d.client?.contact},
-    note:(d.project?.name||'')+' · '+d.ref,lines};
+    note:(d.project?.name||'')+' · '+d.ref,lines,milestones};
 }
 async function pushToOdoo(entry){
   const payload=odooPayloadFromEntry(entry);
@@ -2449,7 +2459,7 @@ async function pushToOdoo(entry){
   try{
     const res=await fetch('/api/odoo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     let j={};try{j=await res.json();}catch(e){}
-    if(res.ok&&j&&j.ok){archiveLogAction(entry.data,'odoo_exported');alert('Concept-factuur aangemaakt in Odoo.'+(j.url?'\n\nOpen in Odoo:\n'+j.url:''));}
+    if(res.ok&&j&&j.ok){archiveLogAction(entry.data,'odoo_exported');const inv=(j.invoices&&j.invoices.length)?j.invoices:(j.url?[{label:'Factuur',url:j.url}]:[]);const head=inv.length>1?(inv.length+' concept-facturen aangemaakt in Odoo:'):'Concept-factuur aangemaakt in Odoo:';alert(head+'\n'+inv.map(x=>'• '+x.label+': '+x.url).join('\n'));}
     else{const err=(j&&j.error)||('HTTP '+res.status);alert('Odoo-koppeling mislukt: '+err+'\n\nControleer de API-key en de Vercel env-variabelen (ODOO_URL, ODOO_DB, ODOO_LOGIN, ODOO_APIKEY).');}
   }catch(e){alert('Odoo-koppeling mislukt: '+(e&&e.message||e));}
 }

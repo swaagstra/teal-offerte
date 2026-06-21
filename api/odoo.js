@@ -113,31 +113,42 @@ module.exports = async (req, res) => {
     }
     if (!partnerId) return res.status(500).json({ error: 'partner-failed' });
 
-    // 3) create the DRAFT customer invoice
-    const invoiceLines = lines.map(l => {
+    // 3) create the DRAFT customer invoice(s)
+    const lineVals = (l) => {
       const vals = { name: String(l.name || '').slice(0, 500) || (body.ref || 'Regel'), quantity: 1, price_unit: Number(l.price) || 0 };
       if (INCOME_ACCT) vals.account_id = INCOME_ACCT;
       if (TAX_ID) vals.tax_ids = [[6, 0, [TAX_ID]]];
       return [0, 0, vals];
-    });
-    const moveVals = {
-      move_type: 'out_invoice',
-      partner_id: partnerId,
-      invoice_line_ids: invoiceLines,
     };
-    if (body.ref) moveVals.ref = String(body.ref).slice(0, 100);
-    if (body.note) moveVals.narration = String(body.note).slice(0, 2000);
-    if (JOURNAL_ID) moveVals.journal_id = JOURNAL_ID;
+    const createInvoice = async (invLines, ref, note, date) => {
+      const moveVals = { move_type: 'out_invoice', partner_id: partnerId, invoice_line_ids: invLines.map(lineVals) };
+      if (ref) moveVals.ref = String(ref).slice(0, 100);
+      if (note) moveVals.narration = String(note).slice(0, 2000);
+      if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) moveVals.invoice_date = date;
+      if (JOURNAL_ID) moveVals.journal_id = JOURNAL_ID;
+      return firstInt(await exec('account.move', 'create', [moveVals]));
+    };
+    const urlFor = (id) => URLB + '/web#id=' + id + '&model=account.move&view_type=form';
 
-    const invoiceId = firstInt(await exec('account.move', 'create', [moveVals]));
-    if (!invoiceId) return res.status(500).json({ error: 'invoice-failed' });
+    const milestones = Array.isArray(body.milestones) ? body.milestones : [];
+    const invoices = [];
+    if (milestones.length > 1) {
+      // one draft invoice per payment instalment
+      const n = milestones.length;
+      for (let i = 0; i < n; i++) {
+        const m = milestones[i];
+        const lineName = (body.note ? body.note + ' — ' : '') + (m.name || ('Termijn ' + (i + 1))) + ' (' + (m.pct || 0) + '%)';
+        const id = await createInvoice([{ name: lineName, price: Number(m.amount) || 0 }], (body.ref || '') + ' T' + (i + 1) + '/' + n, body.note, m.date);
+        if (!id) return res.status(500).json({ error: 'invoice-failed' });
+        invoices.push({ id, label: 'Termijn ' + (i + 1) + '/' + n, url: urlFor(id) });
+      }
+    } else {
+      const id = await createInvoice(lines, body.ref, body.note);
+      if (!id) return res.status(500).json({ error: 'invoice-failed' });
+      invoices.push({ id, label: 'Factuur', url: urlFor(id) });
+    }
 
-    return res.status(200).json({
-      ok: true,
-      partnerId,
-      invoiceId,
-      url: URLB + '/web#id=' + invoiceId + '&model=account.move&view_type=form',
-    });
+    return res.status(200).json({ ok: true, partnerId, invoices, invoiceId: invoices[0].id, url: invoices[0].url });
   } catch (e) {
     const msg = String((e && e.message) || e);
     const code = msg === 'odoo-not-configured' ? 501 : 500;
