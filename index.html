@@ -15,7 +15,7 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://apis.google.com/js/api.js" async defer></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
   :root {
     --teal-black:#111;--teal-mint:#D4ECE6;--teal-dark:#071412;--teal-white:#FFF;
     --warm-grey:#F2F2F0;--mid-grey:#999;--dark-grey:#555;--mint-light:#EDF7F4;
@@ -1842,7 +1842,132 @@ function PreviewTab({data:d}){
   };
   const msISOs=milestoneDateISOs();
 
-  return <div className="prev" id="offerte-preview">
+  // ── House-style preview (mirrors the PDF / approved design 1:1) ──
+  const T=mapQuoteToTokens(d);
+  const ink='#05100e',body='#2b302f',sec='#4a4f4e',muted='#7a807e',faint='#9aa09e',hair='#e5e4e0',paper='#f6f5f1',track='#ecebe6',grid='#dedcd5',mono="'JetBrains Mono',monospace";
+  const Sheet=({children})=><div style={{width:794,minHeight:1123,background:paper,boxSizing:'border-box',padding:'62px 58px',color:ink,display:'flex',flexDirection:'column',boxShadow:'0 1px 3px rgba(5,16,14,.16)'}}>{children}</div>;
+  const SecHead=({n,title})=><div style={{display:'flex',alignItems:'baseline',gap:12,marginBottom:14}}><span style={{fontFamily:mono,fontSize:13,color:muted}}>{n}</span><span style={{fontSize:13,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:ink}}>{title}</span></div>;
+  const Eyebrow=({children,mb})=><div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:600,color:ink,marginBottom:mb||0}}>{children}</div>;
+  const Para=({text})=>{const ps=String(text||'').split(/\n\s*\n+/).map(s=>s.trim()).filter(Boolean);return <React.Fragment>{ps.map((p,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0,whiteSpace:'pre-wrap'}}>{p}</div>)}</React.Fragment>;};
+  const runHdr=T.title+(T.subtitle?' — '+T.subtitle:'');
+  const word=(ll.offerte||'Quotation');
+
+  return <div style={{background:'#d8d6cf',padding:28,display:'flex',flexDirection:'column',alignItems:'center',gap:28,borderRadius:8}} id="offerte-preview">
+    {/* ===== PAGE 1 ===== */}
+    <Sheet>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <Logo color={ink} h={34}/>
+        <div style={{fontSize:26,lineHeight:1,letterSpacing:'0.04em',textTransform:'uppercase',fontWeight:700,color:'#000'}}>{word}</div>
+      </div>
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:18}}>
+        <div style={{fontSize:12,lineHeight:1.7,color:sec}}>{(NL?'Opgesteld door ':'Prepared by ')+T.prepared_by}<br/>{T.address}<br/>{T.registration}</div>
+        <div style={{fontSize:12,lineHeight:1.7,color:sec,textAlign:'right'}}><span style={{color:faint}}>{NL?'Nr.':'No.'}</span> {T.number}<br/><span style={{color:faint}}>{NL?'Datum':'Date'}</span> {T.date}<br/><span style={{color:faint}}>{NL?'Geldig':'Valid for'}</span> {T.valid}</div>
+      </div>
+      <div style={{height:1,background:hair,margin:'30px 0'}}/>
+      <Eyebrow mb={0}>{NL?'Project':'Project'}</Eyebrow>
+      <h1 style={{fontSize:36,lineHeight:1.06,letterSpacing:'-0.02em',fontWeight:500,margin:'10px 0 0'}}>{T.title||'[Project]'}</h1>
+      {T.subtitle&&<div style={{fontSize:18,fontWeight:400,color:sec,marginTop:8}}>{T.subtitle}</div>}
+      <div style={{display:'flex',gap:48,marginTop:48}}>
+        <div style={{flex:1}}>
+          <SecHead n="01" title={NL?'Klant':'Client'}/>
+          <div style={{fontSize:13,lineHeight:1.6,color:body}}>{[T.client_name,T.client_contact&&T.client_contact!==T.client_name?T.client_contact:null,T.client_email].filter(Boolean).map((x,i)=><React.Fragment key={i}>{i?<br/>:null}{x}</React.Fragment>)}</div>
+        </div>
+        <div style={{flex:1}}>
+          <SecHead n="02" title={NL?'Projectdetails':'Project details'}/>
+          <div style={{fontSize:13,lineHeight:1.7,color:body}}>
+            {T.location&&<React.Fragment><span style={{color:muted}}>{NL?'Locatie':'Location'}</span>{'  '}{T.location}<br/></React.Fragment>}
+            {T.phase&&<React.Fragment><span style={{color:muted}}>{NL?'Fase':'Phase'}</span>{'  '}{T.phase}<br/></React.Fragment>}
+            {T.delivery&&<React.Fragment><span style={{color:muted}}>{NL?'Oplevering':'Expected delivery'}</span>{'  '}{T.delivery}</React.Fragment>}
+          </div>
+        </div>
+      </div>
+      {(T.description||T.teal_role)&&<div style={{marginTop:48}}>
+        <SecHead n="03" title={NL?'Projectomschrijving':'Project description'}/>
+        {T.description&&<Para text={T.description}/>}
+        {T.teal_role&&<div style={{marginTop:16}}><Eyebrow mb={6}>{NL?"TEAL's rol":"TEAL's role"}</Eyebrow><Para text={T.teal_role}/></div>}
+      </div>}
+      <div style={{marginTop:48}}>
+        <SecHead n="04" title={NL?'Werkzaamheden & planning':'Scope of work & timeline'}/>
+        {T.scope.map((s,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0}}><strong style={{fontWeight:600}}>{s.lead} </strong>{s.body}</div>)}
+        {(T.delivery||T.effort)&&<div style={{fontSize:13,color:sec,marginTop:10}}>{(NL?'Oplevering: ':'Expected delivery: ')+(T.delivery||'')+(T.effort?' — '+T.effort:'')}</div>}
+        {T.weeks.length>0&&<div style={{marginTop:26}}>
+          <Eyebrow mb={14}>{NL?'Indicatieve planning':'Indicative timeline'}</Eyebrow>
+          <div style={{display:'flex',paddingLeft:172,marginBottom:8}}>
+            {T.weeks.map((w,i)=><div key={i} style={{flex:1,fontFamily:mono,fontSize:10,color:faint}}>{w}</div>)}
+          </div>
+          {T.tasks.map((tk,i)=><div key={i} style={{display:'flex',alignItems:'center',marginBottom:8}}>
+            <div style={{width:172,fontSize:13,color:ink,paddingRight:16}}>{tk.name}</div>
+            <div style={{flex:1,position:'relative',height:26,background:track,borderRadius:3}}>
+              {[25,50,75].map(p=><div key={p} style={{position:'absolute',top:0,bottom:0,left:p+'%',width:1,background:grid}}/>)}
+              <div style={{position:'absolute',top:0,height:26,left:(tk.left*100).toFixed(1)+'%',width:Math.max(tk.width*100,2).toFixed(1)+'%',background:tk.color,borderRadius:3,display:'flex',alignItems:'center',paddingLeft:12,fontFamily:mono,fontSize:10,letterSpacing:'0.04em',color:paper,overflow:'hidden',whiteSpace:'nowrap'}}>{tk.label}</div>
+            </div>
+          </div>)}
+        </div>}
+      </div>
+      <div style={{flex:1}}/>
+      <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:30,display:'flex',justifyContent:'space-between'}}>
+        <span></span><span>{word} {T.number} · 1 / 2</span>
+      </div>
+    </Sheet>
+
+    {/* ===== PAGE 2 ===== */}
+    <Sheet>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid '+hair,paddingBottom:18}}>
+        <Logo color={ink} h={20}/>
+        <div style={{fontFamily:mono,fontSize:11,color:sec}}>{runHdr}</div>
+      </div>
+      <div style={{marginTop:48}}>
+        <SecHead n="05" title={NL?'Kosten':'Costs'}/>
+        <div style={{display:'flex',alignItems:'baseline',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
+          <div style={{flex:1}}>{NL?'Omschrijving':'Description'}</div><div style={{width:140,textAlign:'right'}}>{NL?'Bedrag':'Amount'}</div>
+        </div>
+        {T.cost_items.map((it,i)=><div key={i} style={{display:'flex',alignItems:'baseline',padding:'12px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
+          <div style={{flex:1,color:ink}}>{it.d}</div><div style={{width:140,textAlign:'right',fontWeight:500,fontVariantNumeric:'tabular-nums'}}>{it.a}</div>
+        </div>)}
+        <div style={{display:'flex',justifyContent:'flex-end'}}>
+          <div style={{width:300}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:16,fontWeight:500,color:ink,padding:'14px 0 0',borderTop:'1px solid '+ink}}><span>{NL?'Totaal ':'Total '}<span style={{fontSize:11,color:muted,fontWeight:400}}>{NL?'(excl. btw)':'(excl. VAT)'}</span></span><span style={{fontVariantNumeric:'tabular-nums'}}>{T.total}</span></div>
+          </div>
+        </div>
+      </div>
+      {T.payment.length>0&&<div style={{marginTop:48}}>
+        <SecHead n="06" title={NL?'Betaling':'Payment'}/>
+        {T.payment.map((p,i)=><div key={i} style={{display:'flex',gap:10,fontSize:14,lineHeight:1.6,color:body,marginBottom:9}}><span style={{color:muted}}>·</span><span>{p}</span></div>)}
+      </div>}
+      {T.conditions.length>0&&<div style={{marginTop:48}}>
+        <SecHead n="07" title={NL?'Voorwaarden':'Terms & conditions'}/>
+        {T.conditions.map((c,i)=><div key={i} style={{display:'flex',gap:10,fontSize:14,lineHeight:1.6,color:body,marginBottom:9}}><span style={{color:muted}}>·</span><span>{c}</span></div>)}
+      </div>}
+      <div style={{flex:1}}/>
+      <div style={{marginTop:40}}>
+        {T.sign_line&&<div style={{fontSize:13,color:body,marginBottom:22,maxWidth:'60ch'}}>{T.sign_line}</div>}
+        <Eyebrow mb={6}>{NL?'Akkoord namens':'Accepted by'}</Eyebrow>
+        <div style={{fontSize:15,fontWeight:500,color:ink}}>{T.accepted_by||'[Client]'}</div>
+        <div style={{display:'flex',gap:32,marginTop:64,alignItems:'flex-end'}}>
+          {[NL?'Naam':'Name',NL?'Handtekening':'Signature',NL?'Datum':'Date'].map((lab,i)=><div key={i} style={{width:i===2?130:undefined,flex:i===2?undefined:1}}>
+            <div style={{height:16}}/><div style={{borderTop:'1px solid '+ink,paddingTop:5,fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:muted}}>{lab}</div>
+          </div>)}
+        </div>
+      </div>
+      <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:30,display:'flex',justifyContent:'space-between'}}>
+        <span></span><span>{word} {T.number} · 2 / 2</span>
+      </div>
+    </Sheet>
+  </div>;
+}
+
+function PreviewTab_OLD({data:d}){
+  const L=d.lang;const ll=L_(L);
+  const NL=L==='nl';
+  const totals=calcTotals(d);
+  const grand=totals.grandClient;
+  const phaseName=(ph)=>ph.customName||t(ph.name,L);
+  const activePhases=d.phases.filter(p=>p.enabled!==false);
+  const fmtDateLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
+  const finLines=buildFinancialLines(d,totals,L);
+  const fmtMonth=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{month:'long',year:'numeric'}):'';
+  const msISOs=[];
+  return <div className="prev" id="offerte-preview-old">
     {/* Header */}
     <div style={{marginBottom:36}}>
       <Logo color="#111" h={28}/>
@@ -1872,8 +1997,8 @@ function PreviewTab({data:d}){
     {/* PROJECT DESCRIPTION */}
     {(t(d.project.description,L)||t(d.project.tealRole,L))&&<>
       <div className="sec-h">{ll.projectBeschrijving}</div>
-      {t(d.project.description,L)&&<p style={{whiteSpace:'pre-wrap',marginBottom:12}}>{t(d.project.description,L)}</p>}
-      {t(d.project.tealRole,L)&&<><h3>{ll.rolTeal}</h3><p style={{whiteSpace:'pre-wrap',marginBottom:12}}>{t(d.project.tealRole,L)}</p></>}
+      {t(d.project.description,L)&&t(d.project.description,L).split(/\n\s*\n+/).map(s=>s.trim()).filter(Boolean).map((p,i)=><p key={i} style={{whiteSpace:'pre-wrap',marginBottom:10}}>{p}</p>)}
+      {t(d.project.tealRole,L)&&<><h3>{ll.rolTeal}</h3>{t(d.project.tealRole,L).split(/\n\s*\n+/).map(s=>s.trim()).filter(Boolean).map((p,i)=><p key={i} style={{whiteSpace:'pre-wrap',marginBottom:10}}>{p}</p>)}</>}
     </>}
 
     {/* SCOPE OF WORK & TIMELINE (combined) */}
