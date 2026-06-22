@@ -191,7 +191,7 @@ const I={
     buildDesc:'Eenmalig technisch project (B0-B4)',assembleDesc:'Serieproductie (A0-A3)',
     nieuweOfferteBtn:'Nieuwe offerte starten? Huidige data blijft in localStorage.',
     // Tabs
-    tabProject:'Project',tabScope:'Scope',tabBudget:'Budget',tabPlanning:'Planning',tabPayment:'Betaling',tabPreview:'Preview',
+    tabProject:'Project',tabScope:'Scope',tabBudget:'Budget',tabPlanning:'Planning',tabPayment:'Betaling',tabAnnexes:'Bijlagen',tabPreview:'Preview',
     // Project tab
     projectGegevens:'Projectgegevens',projectnaam:'Projectnaam',referentie:'Referentienummer',datum:'Datum',
     locatie:'Locatie',batchgrootte:'Batchgrootte (stuks)',klantGegevens:'Klantgegevens',bedrijfsnaam:'Bedrijfsnaam',
@@ -257,7 +257,7 @@ const I={
     kiesType:'Choose the project type. The tool loads the right phases, rates and payment schedule.',
     buildDesc:'One-off technical project (B0-B4)',assembleDesc:'Serial production (A0-A3)',
     nieuweOfferteBtn:'Start a new quotation? Current data remains in localStorage.',
-    tabProject:'Project',tabScope:'Scope',tabBudget:'Budget',tabPlanning:'Planning',tabPayment:'Payment',tabPreview:'Preview',
+    tabProject:'Project',tabScope:'Scope',tabBudget:'Budget',tabPlanning:'Planning',tabPayment:'Payment',tabAnnexes:'Annexes',tabPreview:'Preview',
     projectGegevens:'Project Details',projectnaam:'Project name',referentie:'Reference number',datum:'Date',
     locatie:'Location',batchgrootte:'Batch size (units)',klantGegevens:'Client Details',bedrijfsnaam:'Company name',
     contactpersoon:'Contact person',email:'E-mail',adres:'Address',postcode:'Postal code',plaats:'City',
@@ -360,6 +360,27 @@ function genRef(type){
 
 function marginStatus(p){return p>=.20?'ok':p>=.10?'warn':'bad'}
 
+function defaultAnnexes(){return {
+  assumptions:{enabled:false,items:[
+    {nl:'Transport van onderdelen loopt rechtstreeks van leverancier naar de installatielocatie. Routing via TEAL is niet inbegrepen.',en:'Transport of parts runs directly from each supplier to the installation site. Routing via TEAL is not included.'},
+    {nl:'De klant levert stroom, een stabiele datalijn en de fundering inclusief ankers en bouten.',en:'The client provides power, a stable data line, and the foundation including anchor rods and bolts.'},
+    {nl:'De klant ontvangt en verplaatst geleverde onderdelen op locatie, en levert een kraan met machinist en hijsplan.',en:'The client receives and moves delivered parts on site, and provides a crane with operator and hoisting plan.'},
+    {nl:'Opslag na de afgesproken installatiedatum wordt apart in rekening gebracht volgens de tarievenkaart.',en:'Storage beyond the agreed installation date is charged separately at the rate card.'}
+  ]},
+  meerwerk:{enabled:false,text:{
+    nl:'Meerwerk omvat al het werk buiten de overeengekomen scope, werk dat voortkomt uit niet-nagekomen verantwoordelijkheden van de klant, wijzigingen op verzoek van de klant, en werk dat voortvloeit uit onjuist gebleken uitgangspunten. TEAL meldt dit, stuurt een change order met de werkzaamheden en de kosten, en start het werk pas na schriftelijke bevestiging van de klant. Bevestigd meerwerk wordt aan het eind van de kalendermaand gefactureerd volgens de bijgevoegde tarievenkaart. De betalingstermijn van de hoofdovereenkomst is van toepassing.',
+    en:'Additional work includes any work outside the agreed scope, work arising from client responsibilities that are not met, changes requested by the client, and work resulting from assumptions that prove incorrect. TEAL will notify the client and issue a change order specifying the work and the cost, and will start work only after the client’s written confirmation. Confirmed additional work is invoiced at the end of the calendar month at the attached rate card. The payment terms of the main agreement apply.'}},
+  rateCard:{enabled:false,rows:[
+    {label:{nl:'Ontwerp & engineering',en:'Design & engineering'},rate:'',unit:{nl:'per uur',en:'per hour'}},
+    {label:{nl:'Productie & assemblage',en:'Production & assembly'},rate:'',unit:{nl:'per uur',en:'per hour'}},
+    {label:{nl:'Installatieteam',en:'Installation crew'},rate:'',unit:{nl:'per uur',en:'per hour'}},
+    {label:{nl:'Projectmanagement',en:'Project management'},rate:'',unit:{nl:'per uur',en:'per hour'}},
+    {label:{nl:'Transport',en:'Transport'},rate:'',unit:{nl:'per rit',en:'per trip'}},
+    {label:{nl:'Opslag',en:'Storage'},rate:'',unit:{nl:'per m² per maand',en:'per m² per month'}},
+    {label:{nl:'Reiskosten',en:'Travel'},rate:'',unit:{nl:'per km',en:'per km'}},
+    {label:{nl:'Handlingtoeslag materiaal',en:'Material handling surcharge'},rate:'',unit:{nl:'percentage',en:'percentage'}}
+  ]}
+};}
 function createProject(type){
   const tpl=type==='build'?BUILD_PHASES:ASSEMBLE_PHASES;
   let cumulWeek=0;
@@ -401,11 +422,13 @@ function createProject(type){
       avNL:true,avEN:false,
     },
     batchSize:type==='assemble'?100:0,
+    annexes:defaultAnnexes(),
   };
 }
 function migrateConds(d){
   if(!d||!d.conditions)return d;
   const c={...d.conditions};let ch=false;
+  if(!d.annexes){d={...d,annexes:defaultAnnexes()};ch=true;}
   if(c.meerwerk===undefined){c.meerwerk={nl:I.nl.meerwerkTekst,en:I.en.meerwerkTekst,_ensrc:I.nl.meerwerkTekst};if(c.meerwerkEnabled===undefined)c.meerwerkEnabled=true;ch=true;}
   if(c.akkoord===undefined){c.akkoord={nl:I.nl.akkoordTekst,en:I.en.akkoordTekst,_ensrc:I.nl.akkoordTekst};if(c.akkoordEnabled===undefined)c.akkoordEnabled=true;ch=true;}
   return ch?{...d,conditions:c}:d;
@@ -1827,6 +1850,51 @@ function PaymentTab({data:d,set}){
   </div>;
 }
 
+// ── Annexes (toggleable per quote) ──
+function AnnexesTab({data:d,set}){
+  const L=d.lang,NL=L==='nl';
+  const ax=d.annexes||defaultAnnexes();
+  const up=(patch)=>set({...d,annexes:{...ax,...patch}});
+  const tval=(o)=>t(o,L);
+  const setAssumpEnabled=(v)=>up({assumptions:{...ax.assumptions,enabled:v}});
+  const setAssumpItem=(i,val)=>{const items=ax.assumptions.items.slice();items[i]={...items[i],[L]:val};up({assumptions:{...ax.assumptions,items}});};
+  const addAssump=()=>up({assumptions:{...ax.assumptions,items:[...ax.assumptions.items,{nl:'',en:''}]}});
+  const delAssump=(i)=>up({assumptions:{...ax.assumptions,items:ax.assumptions.items.filter((_,j)=>j!==i)}});
+  const setMwEnabled=(v)=>up({meerwerk:{...ax.meerwerk,enabled:v}});
+  const setMwText=(val)=>up({meerwerk:{...ax.meerwerk,text:{...ax.meerwerk.text,[L]:val}}});
+  const setRcEnabled=(v)=>up({rateCard:{...ax.rateCard,enabled:v}});
+  const setRcRow=(i,field,val)=>{const rows=ax.rateCard.rows.slice();if(field==='rate'){rows[i]={...rows[i],rate:val};}else{rows[i]={...rows[i],[field]:{...(rows[i][field]||{nl:'',en:''}),[L]:val}};}up({rateCard:{...ax.rateCard,rows}});};
+  const addRc=()=>up({rateCard:{...ax.rateCard,rows:[...ax.rateCard.rows,{label:{nl:'',en:''},rate:'',unit:{nl:'',en:''}}]}});
+  const delRc=(i)=>up({rateCard:{...ax.rateCard,rows:ax.rateCard.rows.filter((_,j)=>j!==i)}});
+  return <div>
+    <p className="sm muted" style={{marginBottom:16}}>{NL?'Bijlagen verschijnen alleen in deze offerte als je ze aanzet. Standaard uit, zo gaan ze alleen mee bij grote projecten.':'Annexes appear in this quotation only when enabled. Off by default.'}</p>
+    <div className="card">
+      <div className="between mb16"><div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Uitgangspunten':'Assumptions'}</div>
+        <label className="flex g8" style={{alignItems:'center',fontSize:13}}><input type="checkbox" checked={ax.assumptions.enabled} onChange={e=>setAssumpEnabled(e.target.checked)}/> {NL?'Tonen':'Show'}</label></div>
+      {ax.assumptions.items.map((it,i)=><div key={i} className="flex g8" style={{marginBottom:8,alignItems:'flex-start'}}>
+        <textarea style={{flex:1,minHeight:46}} value={tval(it)} onChange={e=>setAssumpItem(i,e.target.value)}/>
+        <button className="btn btn-sm btn-g" onClick={()=>delAssump(i)}>×</button></div>)}
+      <button className="btn btn-sm btn-g" onClick={addAssump}>+ {NL?'Uitgangspunt':'Assumption'}</button>
+    </div>
+    <div className="card">
+      <div className="between mb16"><div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Meerwerkclausule':'Additional work clause'}</div>
+        <label className="flex g8" style={{alignItems:'center',fontSize:13}}><input type="checkbox" checked={ax.meerwerk.enabled} onChange={e=>setMwEnabled(e.target.checked)}/> {NL?'Tonen':'Show'}</label></div>
+      <textarea style={{width:'100%',minHeight:120}} value={tval(ax.meerwerk.text)} onChange={e=>setMwText(e.target.value)}/>
+    </div>
+    <div className="card">
+      <div className="between mb16"><div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Tarievenkaart':'Rate card'}</div>
+        <label className="flex g8" style={{alignItems:'center',fontSize:13}}><input type="checkbox" checked={ax.rateCard.enabled} onChange={e=>setRcEnabled(e.target.checked)}/> {NL?'Tonen':'Show'}</label></div>
+      <div className="flex g8 sm muted" style={{marginBottom:6}}><span style={{flex:2}}>{NL?'Activiteit':'Activity'}</span><span style={{width:120}}>{NL?'Tarief':'Rate'}</span><span style={{width:140}}>{NL?'Eenheid':'Unit'}</span><span style={{width:28}}></span></div>
+      {ax.rateCard.rows.map((r,i)=><div key={i} className="flex g8" style={{marginBottom:8,alignItems:'center'}}>
+        <input style={{flex:2}} placeholder={NL?'Activiteit':'Activity'} value={tval(r.label)} onChange={e=>setRcRow(i,'label',e.target.value)}/>
+        <input style={{width:120}} placeholder={NL?'bijv. € 95':'e.g. € 95'} value={r.rate||''} onChange={e=>setRcRow(i,'rate',e.target.value)}/>
+        <input style={{width:140}} placeholder={NL?'per uur':'per hour'} value={tval(r.unit)} onChange={e=>setRcRow(i,'unit',e.target.value)}/>
+        <button className="btn btn-sm btn-g" onClick={()=>delRc(i)}>×</button></div>)}
+      <button className="btn btn-sm btn-g" onClick={addRc}>+ {NL?'Regel':'Row'}</button>
+    </div>
+  </div>;
+}
+
 // ── Preview (Whispers format) ──
 function buildFinancialLines(d,totals,L){
   // Build client-friendly lump-sum line items (no hourly rates visible)
@@ -2000,6 +2068,22 @@ function PreviewTab({data:d}){
           </div>)}
         </div>
       </div>
+      {T.assumptions&&T.assumptions.length>0&&<div style={{marginTop:48}}>
+        <SecHead n="A" title={NL?'Uitgangspunten':'Assumptions'}/>
+        <div style={{fontSize:13,color:sec,lineHeight:1.6,marginBottom:12}}>{NL?'Deze offerte is gebaseerd op onderstaande uitgangspunten. Wijkt de praktijk hiervan af, dan is het resulterende werk meerwerk.':'This quotation is based on the assumptions below. Where the actual situation deviates, the resulting work is additional work.'}</div>
+        {T.assumptions.map((a,i)=><div key={i} style={{display:'flex',gap:10,fontSize:14,lineHeight:1.6,color:body,marginBottom:9}}><span style={{color:muted}}>·</span><span>{a}</span></div>)}
+      </div>}
+      {T.meerwerkClause&&<div style={{marginTop:48}}>
+        <SecHead n="B" title={NL?'Meerwerk':'Additional work'}/>
+        <Para text={T.meerwerkClause}/>
+      </div>}
+      {T.rateCard&&T.rateCard.length>0&&<div style={{marginTop:48}}>
+        <SecHead n="C" title={NL?'Tarievenkaart':'Rate card'}/>
+        <div style={{display:'flex',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
+          <div style={{flex:1}}>{NL?'Activiteit':'Activity'}</div><div style={{textAlign:'right'}}>{NL?'Tarief (excl. btw)':'Rate (ex VAT)'}</div></div>
+        {T.rateCard.map((r,i)=><div key={i} style={{display:'flex',alignItems:'baseline',padding:'11px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
+          <div style={{flex:1,color:ink}}>{r.label}</div><div style={{textAlign:'right'}}><span style={{fontWeight:500}}>{r.rate||'—'}</span>{r.unit?<span style={{color:muted,fontSize:11,marginLeft:6}}>{r.unit}</span>:null}</div></div>)}
+      </div>}
       <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:30,display:'flex',justifyContent:'space-between'}}>
         <span></span><span>{word} {T.number} · 2 / 2</span>
       </div>
@@ -2250,6 +2334,9 @@ function buildQuoteDocDef(D, logoImg){
     {columns:[{width:'*',stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:140,y2:0,lineWidth:0.5,lineColor:ink}]},{text:'NAME',font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]},
       {width:'*',stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:140,y2:0,lineWidth:0.5,lineColor:ink}]},{text:'SIGNATURE',font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]},
       {width:130,stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:97,y2:0,lineWidth:0.5,lineColor:ink}]},{text:'DATE',font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]}],columnGap:24,margin:[0,48,0,0]}],margin:[0,40,0,0],unbreakable:true});
+  if(D.assumptions&&D.assumptions.length)c.push({stack:[secHead('A',D.nl?'Uitgangspunten':'Assumptions'),{text:D.nl?'Deze offerte is gebaseerd op onderstaande uitgangspunten. Wijkt de praktijk hiervan af, dan is het resulterende werk meerwerk.':'This quotation is based on the assumptions below. Where the actual situation deviates, the resulting work is additional work.',fontSize:13*k,color:sec,margin:[0,0,0,12]}].concat(bullets(D.assumptions)),margin:[0,36,0,0],unbreakable:true});
+  if(D.meerwerkClause)c.push({stack:[secHead('B',D.nl?'Meerwerk':'Additional work'),paras(D.meerwerkClause,14*k)],margin:[0,36,0,0],unbreakable:true});
+  if(D.rateCard&&D.rateCard.length){var rcb=[[{text:(D.nl?'Activiteit':'Activity').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:(D.nl?'Tarief (excl. btw)':'Rate (ex VAT)').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];D.rateCard.forEach(function(r){rcb.push([{text:r.label,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:[{text:(r.rate||'—'),font:'I5',color:ink},{text:(r.unit?'  '+r.unit:''),color:muted,fontSize:11*k}],fontSize:13*k,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});c.push({stack:[secHead('C',D.nl?'Tarievenkaart':'Rate card'),{table:{widths:['*','auto'],body:rcb},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,36,0,0],unbreakable:true});}
   return {pageSize:'A4',pageMargins:[ML,MT,ML,MT],
     background:function(cp,ps){return {canvas:[{type:'rect',x:0,y:0,w:ps.width,h:ps.height,color:'#ffffff'}]};},
     footer:function(cp,pc){return {margin:[ML,8,ML,0],columns:[{width:'*',text:''},{width:'auto',text:'Quotation '+D.number+' · '+cp+' / '+pc,font:'M4',fontSize:10*k,color:muted,characterSpacing:lsf(0.03,10*k)}]};},
@@ -2284,13 +2371,18 @@ function mapQuoteToTokens(d){
   if(d.conditions.meerwerkEnabled!==false&&t(d.conditions.meerwerk,L))conditions.push(t(d.conditions.meerwerk,L));
   if(d.conditions.avNL||d.conditions.avEN)conditions.push(ll.avTekst);
   const sign_line=(d.conditions.akkoordEnabled!==false&&t(d.conditions.akkoord,L))?t(d.conditions.akkoord,L):'';
+  const ax=d.annexes||{};
+  const assumptions=(ax.assumptions&&ax.assumptions.enabled)?(ax.assumptions.items||[]).map(it=>t(it,L)).filter(Boolean):[];
+  const meerwerkClause=(ax.meerwerk&&ax.meerwerk.enabled)?t(ax.meerwerk.text,L):'';
+  const rateCard=(ax.rateCard&&ax.rateCard.enabled)?(ax.rateCard.rows||[]).filter(r=>t(r.label,L)).map(r=>({label:t(r.label,L),rate:r.rate||'',unit:t(r.unit,L)})):[];
   return {prepared_by:d.project.preparedBy||'Erik Swaagstra',address:TEAL.addr+', '+TEAL.zip,registration:'KvK '+TEAL.kvk+' · BTW '+TEAL.btw,
     number:d.ref,date:fmtLong(d.project.date),valid:(d.conditions.validity||30)+' '+(NL?'dagen':'days'),
     title:d.project.name||'',subtitle:d.project.subtitle||'',
     client_name:d.client.name||'',client_contact:d.client.contact||'',client_email:d.client.email||'',
     location:d.project.location||'',phase:d.project.phaseLabel||'',delivery,
     description:t(d.project.description,L),teal_role:t(d.project.tealRole,L),
-    scope,effort,cost_items,total:fmtE(grand),payment,conditions,accepted_by:d.client.name||'',sign_line,weeks,tasks};
+    scope,effort,cost_items,total:fmtE(grand),payment,conditions,accepted_by:d.client.name||'',sign_line,weeks,tasks,
+    assumptions,meerwerkClause,rateCard,nl:NL};
 }
 
 // ── PDF ──
@@ -2835,7 +2927,7 @@ function App(){
   const tabs=[
     {id:'project',label:ll.tabProject},{id:'scope',label:ll.tabScope},
     {id:'budget',label:ll.tabBudget},{id:'planning',label:ll.tabPlanning},
-    {id:'payment',label:ll.tabPayment},{id:'preview',label:ll.tabPreview},
+    {id:'payment',label:ll.tabPayment},{id:'annexes',label:ll.tabAnnexes},{id:'preview',label:ll.tabPreview},
   ];
 
   const isCO=d&&d.kind==='change_order';
@@ -2859,6 +2951,7 @@ function App(){
         {tab==='budget'&&<BudgetTab data={d} set={setDWithArchive}/>}
         {tab==='planning'&&<PlanningTab data={d} set={setDWithArchive}/>}
         {tab==='payment'&&<PaymentTab data={d} set={setDWithArchive}/>}
+        {tab==='annexes'&&<AnnexesTab data={d} set={setDWithArchive}/>}
         {tab==='preview'&&<PreviewTab data={d}/>}
         <div className="between mt24">
           {(()=>{const order=tabs.map(x=>x.id);const i=order.indexOf(tab);return i>0?<button className="btn btn-g" onClick={()=>setTab(order[i-1])}>{d.lang==='nl'?'‹ Vorige sectie':'‹ Previous section'}</button>:<span/>;})()}
