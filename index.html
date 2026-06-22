@@ -1989,11 +1989,11 @@ function PreviewTab({data:d}){
       <div style={{display:'flex',gap:48,marginTop:48}}>
         <div style={{flex:1}}>
           <SecHead n="01" title={NL?'Klant':'Client'}/>
-          <div style={{fontSize:13,lineHeight:1.6,color:body}}>{[T.client_name,T.client_contact&&T.client_contact!==T.client_name?T.client_contact:null,T.client_email].filter(Boolean).map((x,i)=><React.Fragment key={i}>{i?<br/>:null}{x}</React.Fragment>)}</div>
+          <div style={{fontSize:13,lineHeight:1.45,color:body}}>{[T.client_name,T.client_contact&&T.client_contact!==T.client_name?T.client_contact:null,T.client_email].filter(Boolean).map((x,i)=><React.Fragment key={i}>{i?<br/>:null}{x}</React.Fragment>)}</div>
         </div>
         <div style={{flex:1}}>
           <SecHead n="02" title={NL?'Projectdetails':'Project details'}/>
-          <div style={{fontSize:13,lineHeight:1.7,color:body}}>
+          <div style={{fontSize:13,lineHeight:1.45,color:body}}>
             {T.location&&<React.Fragment><span style={{color:muted}}>{NL?'Locatie':'Location'}</span>{'  '}{T.location}<br/></React.Fragment>}
             {T.phase&&<React.Fragment><span style={{color:muted}}>{NL?'Fase':'Phase'}</span>{'  '}{T.phase}<br/></React.Fragment>}
             {T.delivery&&<React.Fragment><span style={{color:muted}}>{NL?'Oplevering':'Expected delivery'}</span>{'  '}{T.delivery}</React.Fragment>}
@@ -2305,10 +2305,10 @@ function buildQuoteDocDef(D, logoImg){
   c.push({text:D.title,font:'I5d',fontSize:36*k,color:ink,characterSpacing:lsf(-0.02,36*k),margin:[0,7.5,0,0]});
   if(D.subtitle)c.push({text:D.subtitle,font:'I4d',fontSize:18*k,color:sec,margin:[0,5,0,0]});
   var det=[];
-  if(D.location)det.push({text:[{text:'Location  ',color:muted},{text:D.location,color:body}],fontSize:13*k,lineHeight:1.7});
-  if(D.phase)det.push({text:[{text:'Phase  ',color:muted},{text:D.phase,color:body}],fontSize:13*k,lineHeight:1.7});
-  if(D.delivery)det.push({text:[{text:'Expected delivery  ',color:muted},{text:D.delivery,color:body}],fontSize:13*k,lineHeight:1.7});
-  c.push({columns:[{width:'*',stack:[secHead('01','Client'),{text:[D.client_name,D.client_contact,D.client_email].filter(Boolean).join('\n'),fontSize:13*k,color:body,lineHeight:1.6}]},{width:'*',stack:[secHead('02','Project details'),{stack:det}]}],columnGap:36,margin:[0,30,0,0]});
+  if(D.location)det.push({text:[{text:'Location  ',color:muted},{text:D.location,color:body}],fontSize:13*k,lineHeight:1.45});
+  if(D.phase)det.push({text:[{text:'Phase  ',color:muted},{text:D.phase,color:body}],fontSize:13*k,lineHeight:1.45});
+  if(D.delivery)det.push({text:[{text:'Expected delivery  ',color:muted},{text:D.delivery,color:body}],fontSize:13*k,lineHeight:1.45});
+  c.push({columns:[{width:'*',stack:[secHead('01','Client'),{text:[D.client_name,D.client_contact,D.client_email].filter(Boolean).join('\n'),fontSize:13*k,color:body,lineHeight:1.45}]},{width:'*',stack:[secHead('02','Project details'),{stack:det}]}],columnGap:36,margin:[0,30,0,0]});
   if(D.description||D.teal_role){
     var ds=[secHead('03','Project description')];
     if(D.description)ds.push(paras(D.description,14*k));
@@ -2462,7 +2462,7 @@ function buildChangeOrderDocDef(D,logoImg){
   function secHead(no,title){return {columns:[{width:'auto',text:no,font:'M4',fontSize:13*k,color:muted,margin:[0,0,9,0]},{width:'*',text:String(title).toUpperCase(),font:'I6',fontSize:13*k,color:ink,characterSpacing:lsf(0.12,13*k)}],margin:[0,0,0,12]};}
   function eyebrow(t,mb){return {text:String(t).toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.14,11*k),margin:[0,0,0,mb||0]};}
   function paras(txt,fs){var parts=String(txt||'').split(/\n\s*\n+/).map(function(p){return p.trim();}).filter(Boolean);if(parts.length<=1)return {text:String(txt||''),fontSize:fs,color:body,lineHeight:1.65};return {stack:parts.map(function(p,i){return {text:p,fontSize:fs,color:body,lineHeight:1.65,margin:[0,i?10:0,0,0]};})};}
-  function field(label,val){return {text:[{text:label+'  ',color:muted},{text:val||'',color:body}],fontSize:13*k,lineHeight:1.7};}
+  function field(label,val){return {text:[{text:label+'  ',color:muted},{text:val||'',color:body}],fontSize:13*k,lineHeight:1.45};}
   var c=[];
   c.push({columns:[{width:'auto',image:logoImg,fit:[240,34*k]},{width:'*',text:lab.word,font:'I7d',fontSize:26*k,color:'#000',characterSpacing:lsf(0.04,26*k),alignment:'right'}]});
   c.push({columns:[{width:'*',stack:[{text:(NL?'Opgesteld door ':'Prepared by ')+D.prepared_by,fontSize:12*k,color:sec,lineHeight:1.5},{text:D.address,fontSize:12*k,color:sec,lineHeight:1.5},{text:D.registration,fontSize:12*k,color:sec,lineHeight:1.5}]},
@@ -2473,7 +2473,7 @@ function buildChangeOrderDocDef(D,logoImg){
   if(D.subtitle)c.push({text:D.subtitle,font:'I4d',fontSize:15*k,color:sec,margin:[0,5,0,0]});
   // 01 details
   var det=[];det.push(field(lab.contract,D.parentRef));if(D.current_phase)det.push(field(lab.phase,D.current_phase));det.push(field(lab.date,D.date));
-  c.push({columns:[{width:'*',stack:[secHead('01',lab.client),{text:[D.client_name,D.client_contact,D.client_email].filter(Boolean).join('\n'),fontSize:13*k,color:body,lineHeight:1.6}]},{width:'*',stack:[secHead('02',lab.details),{stack:det}]}],columnGap:36,margin:[0,30,0,0]});
+  c.push({columns:[{width:'*',stack:[secHead('01',lab.client),{text:[D.client_name,D.client_contact,D.client_email].filter(Boolean).join('\n'),fontSize:13*k,color:body,lineHeight:1.45}]},{width:'*',stack:[secHead('02',lab.details),{stack:det}]}],columnGap:36,margin:[0,30,0,0]});
   // 03 description of change
   var ds=[secHead('03',lab.descChange)];
   if(D.requested_by)ds.push({stack:[eyebrow(lab.requestedBy,4.5),{text:D.requested_by,fontSize:14*k,color:body,lineHeight:1.65}]});
@@ -2784,7 +2784,7 @@ function ChangeOrderPreview({data:co}){
   const SecHead=({n,title})=><div style={{display:'flex',alignItems:'baseline',gap:12,marginBottom:14}}><span style={{fontFamily:mono,fontSize:13,color:muted}}>{n}</span><span style={{fontSize:13,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:ink}}>{title}</span></div>;
   const Eyebrow=({children,mb})=><div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:600,color:ink,marginBottom:mb||0}}>{children}</div>;
   const Para=({text})=>{const ps=String(text||'').split(/\n\s*\n+/).map(s=>s.trim()).filter(Boolean);return <React.Fragment>{ps.map((p,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0,whiteSpace:'pre-wrap'}}>{p}</div>)}</React.Fragment>;};
-  const field=(label,val)=><div style={{fontSize:13,lineHeight:1.7,color:body}}><span style={{color:muted}}>{label}</span>{'  '}{val}</div>;
+  const field=(label,val)=><div style={{fontSize:13,lineHeight:1.45,color:body}}><span style={{color:muted}}>{label}</span>{'  '}{val}</div>;
   return <div style={{background:'#d8d6cf',padding:28,display:'flex',justifyContent:'center',borderRadius:8}}>
     <div style={{width:794,minHeight:1123,background:paper,boxSizing:'border-box',padding:'62px 58px',color:ink,display:'flex',flexDirection:'column',boxShadow:'0 1px 3px rgba(5,16,14,.16)'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -2801,7 +2801,7 @@ function ChangeOrderPreview({data:co}){
       <div style={{fontSize:15,fontWeight:400,color:sec,marginTop:6}}>{T.subtitle}</div>
       <div style={{display:'flex',gap:48,marginTop:48}}>
         <div style={{flex:1}}><SecHead n="01" title={NL?'Klant':'Client'}/>
-          <div style={{fontSize:13,lineHeight:1.6,color:body}}>{[T.client_name,T.client_contact,T.client_email].filter(Boolean).map((x,i)=><React.Fragment key={i}>{i?<br/>:null}{x}</React.Fragment>)}</div>
+          <div style={{fontSize:13,lineHeight:1.45,color:body}}>{[T.client_name,T.client_contact,T.client_email].filter(Boolean).map((x,i)=><React.Fragment key={i}>{i?<br/>:null}{x}</React.Fragment>)}</div>
         </div>
         <div style={{flex:1}}><SecHead n="02" title={NL?'Projectdetails':'Project details'}/>
           {field(NL?'Contractref.':'Contract ref.',T.parentRef)}
