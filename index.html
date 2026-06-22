@@ -2485,7 +2485,7 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete,onNewCO,onBumpVersion}){
   const isCOf=e=>e.kind==='change_order'||(e.data&&e.data.kind==='change_order');
   const parents=archive.filter(e=>!isCOf(e)).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
   const cosByParent={};const orphanCOs=[];
-  archive.filter(isCOf).forEach(co=>{const pid=co.parentId||(co.data&&co.data.parentId);const pref=co.parentRef||(co.data&&co.data.parentRef);const parent=parents.find(p=>p.id===pid)||parents.find(p=>p.ref===pref);if(parent){(cosByParent[parent.id]=cosByParent[parent.id]||[]).push(co);}else{orphanCOs.push(co);}});
+  archive.filter(isCOf).forEach(co=>{const pid=co.parentId||(co.data&&co.data.parentId);const pref=co.parentRef||(co.data&&co.data.parentRef);const parent=parents.find(p=>p.ref===pref)||parents.find(p=>p.id===pid);if(parent){(cosByParent[parent.id]=cosByParent[parent.id]||[]).push(co);}else{orphanCOs.push(co);}});
   Object.keys(cosByParent).forEach(k=>cosByParent[k].sort((a,b)=>(currentVersion(a.ref)-currentVersion(b.ref))||(new Date(a.updatedAt)-new Date(b.updatedAt))));
   const ordered=[];
   parents.forEach(p=>{ordered.push(p);(cosByParent[p.id]||[]).forEach(co=>ordered.push(co));});
@@ -2643,7 +2643,7 @@ function ChangeOrderEditor({data:co,set}){
   return <div>
     <div className="card"><div className="card-h">{NL?'Projectdetails':'Project details'}</div>
       <div className="row"><div className="fg"><label>{NL?'Projectnaam':'Project name'}</label><input value={co.project.name} onChange={e=>upProj({name:e.target.value})}/></div>
-        <div className="fg"><label>{NL?'Contractref.':'Contract ref.'}</label><input value={co.parentRef||''} onChange={e=>{const pr=e.target.value;let num=(String(co.ref||'').match(/-CO(\d+)$/)||[])[1]||'1';if(pr.trim()){try{num=String(loadArchive().filter(x=>x.kind==='change_order'&&x.id!==co._archiveId&&x.parentRef===pr.trim()).length+1);}catch(_e){}}up({parentRef:pr,ref:pr.trim()?pr.trim()+'-CO'+num:co.ref});}}/></div></div>
+        <div className="fg"><label>{NL?'Contractref.':'Contract ref.'}</label><input value={co.parentRef||''} onChange={e=>{const pr=e.target.value;let num=(String(co.ref||'').match(/-CO(\d+)$/)||[])[1]||'1';let pid=null;if(pr.trim()){try{const par=loadArchive().find(x=>x.kind!=='change_order'&&x.ref===pr.trim());pid=par?par.id:null;num=String(loadArchive().filter(x=>x.kind==='change_order'&&x.id!==co._archiveId&&x.parentRef===pr.trim()).length+1);}catch(_e){}}up({parentRef:pr,parentId:pid,ref:pr.trim()?pr.trim()+'-CO'+num:co.ref});}}/></div></div>
       <div className="row"><div className="fg"><label>{NL?'Huidige fase':'Current phase'}</label><input value={co.project.currentPhase} onChange={e=>upProj({currentPhase:e.target.value})}/></div>
         <div className="fg"><label>{NL?'Datum':'Date'}</label><input type="date" value={co.date} onChange={e=>up({date:e.target.value})}/></div></div>
       <div className="row3"><div className="fg"><label>{NL?'Klant':'Client'}</label><input value={co.client.name} onChange={e=>upClient({name:e.target.value})}/></div>
