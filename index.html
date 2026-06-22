@@ -2487,6 +2487,7 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete,onNewCO,onBumpVersion}){
   const cosByParent={};const orphanCOs=[];
   archive.filter(isCOf).forEach(co=>{const pid=co.parentId||(co.data&&co.data.parentId);const pref=co.parentRef||(co.data&&co.data.parentRef);const parent=parents.find(p=>p.ref===pref)||parents.find(p=>p.id===pid);if(parent){(cosByParent[parent.id]=cosByParent[parent.id]||[]).push(co);}else{orphanCOs.push(co);}});
   Object.keys(cosByParent).forEach(k=>cosByParent[k].sort((a,b)=>(currentVersion(a.ref)-currentVersion(b.ref))||(new Date(a.updatedAt)-new Date(b.updatedAt))));
+  const nestedCoIds=new Set();Object.keys(cosByParent).forEach(k=>cosByParent[k].forEach(co=>nestedCoIds.add(co.id)));
   const ordered=[];
   parents.forEach(p=>{ordered.push(p);(cosByParent[p.id]||[]).forEach(co=>ordered.push(co));});
   orphanCOs.sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt)).forEach(co=>ordered.push(co));
@@ -2578,8 +2579,9 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete,onNewCO,onBumpVersion}){
     <div>{visible.map(item=>{
       const isExpanded=expandedId===item.id;
       const isCO=item.kind==='change_order';
+      const indent=isCO&&nestedCoIds.has(item.id);
       const totV=entryTotal(item);
-      return <div key={item.id} className="card" style={{padding:0,overflow:'hidden',marginLeft:isCO?24:0,borderLeft:isCO?'3px solid #6b4ea0':undefined}}>
+      return <div key={item.id} className="card" style={{padding:0,overflow:'hidden',marginLeft:indent?24:0,borderLeft:indent?'3px solid #6b4ea0':undefined}}>
         <div style={{padding:'16px 20px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between'}} onClick={()=>setExpandedId(isExpanded?null:item.id)}>
           <div style={{flex:1}}>
             <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -2756,6 +2758,7 @@ function ChangeOrderPreview({data:co}){
 function ChangeOrderFlow({data:co,set,onBack}){
   const[view,setView]=useState('edit');
   const NL=co.lang==='nl';
+  useEffect(()=>{const pr=(co.parentRef||'').trim();if(pr&&!String(co.ref||'').startsWith(pr+'-CO')){const num=(String(co.ref||'').match(/-CO(\d+)$/)||[])[1]||'1';set({...co,ref:pr+'-CO'+num});}},[]);
   return <div>
     <div className="between mb16" style={{flexWrap:'wrap',gap:8}}>
       <div style={{display:'flex',alignItems:'center',gap:10}}>
