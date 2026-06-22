@@ -2324,14 +2324,15 @@ function exportPDF(d,setData){
 function createChangeOrder(parent,lang){
   const L=lang||(parent&&parent.lang)||'nl';
   const today=new Date().toISOString().slice(0,10);
-  const baseRef=parent?parent.ref:('B-'+new Date().toISOString().slice(2,10).replace(/-/g,''));
+  const parentRef=parent?(parent.ref||''):'';
   let coN=1;
-  try{coN=loadArchive().filter(e=>e.kind==='change_order'&&e.parentRef===baseRef).length+1;}catch(e){}
+  try{if(parentRef)coN=loadArchive().filter(e=>e.kind==='change_order'&&e.parentRef===parentRef).length+1;}catch(e){}
+  const ref=parentRef?(parentRef+'-CO'+coN):('B-'+new Date().toISOString().slice(2,10).replace(/-/g,'')+'-CO1');
   const pc=(parent&&parent.data&&parent.data.client)||{};
   return {
     kind:'change_order',v:1,lang:L,
-    ref:baseRef+'-CO'+coN,
-    parentId:parent?parent.id:null,parentRef:baseRef,
+    ref:ref,
+    parentId:parent?parent.id:null,parentRef:parentRef,
     date:today,validity:14,
     project:{name:parent?(parent.projectName||''):'',preparedBy:'Erik Swaagstra',currentPhase:''},
     client:{name:pc.name||'',contact:pc.contact||'',email:pc.email||''},
@@ -2642,7 +2643,7 @@ function ChangeOrderEditor({data:co,set}){
   return <div>
     <div className="card"><div className="card-h">{NL?'Projectdetails':'Project details'}</div>
       <div className="row"><div className="fg"><label>{NL?'Projectnaam':'Project name'}</label><input value={co.project.name} onChange={e=>upProj({name:e.target.value})}/></div>
-        <div className="fg"><label>{NL?'Contractref.':'Contract ref.'}</label><input value={co.parentRef||''} onChange={e=>up({parentRef:e.target.value})}/></div></div>
+        <div className="fg"><label>{NL?'Contractref.':'Contract ref.'}</label><input value={co.parentRef||''} onChange={e=>{const pr=e.target.value;let num=(String(co.ref||'').match(/-CO(\d+)$/)||[])[1]||'1';if(pr.trim()){try{num=String(loadArchive().filter(x=>x.kind==='change_order'&&x.id!==co._archiveId&&x.parentRef===pr.trim()).length+1);}catch(_e){}}up({parentRef:pr,ref:pr.trim()?pr.trim()+'-CO'+num:co.ref});}}/></div></div>
       <div className="row"><div className="fg"><label>{NL?'Huidige fase':'Current phase'}</label><input value={co.project.currentPhase} onChange={e=>upProj({currentPhase:e.target.value})}/></div>
         <div className="fg"><label>{NL?'Datum':'Date'}</label><input type="date" value={co.date} onChange={e=>up({date:e.target.value})}/></div></div>
       <div className="row3"><div className="fg"><label>{NL?'Klant':'Client'}</label><input value={co.client.name} onChange={e=>upClient({name:e.target.value})}/></div>
