@@ -567,6 +567,9 @@ async function fetchShared(id){
 
 // ── Archive (all quotations) ──
 const loadArchive=()=>{try{const r=localStorage.getItem(AK);return r?JSON.parse(r):[];}catch(e){return[];}};
+// Live view: hide tombstoned (deleted) entries. loadArchive() stays raw so the
+// read-modify-write mutators and the sync merge keep tombstones intact.
+const loadArchiveLive=()=>loadArchive().filter(e=>e&&!e.deletedAt);
 const saveArchive=a=>{try{localStorage.setItem(AK,JSON.stringify(a))}catch(e){}schedulePush();};
 const genId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -575,15 +578,18 @@ function archiveSave(d,action='updated'){
   const id=d._archiveId||genId();
   const now=new Date().toISOString();
   const idx=all.findIndex(x=>x.id===id);
+  // A tombstone keeps its array slot (so we never duplicate the id) but its
+  // metadata is treated as fresh — saving over a deleted entry recreates it.
+  const prior=(idx>=0&&!all[idx].deletedAt)?all[idx]:null;
   const entry={
     id,ref:d.ref,type:d.type,lang:d.lang,
     kind:d.kind||'quote',parentRef:d.parentRef||null,parentId:d.parentId||null,
     projectName:(d.project&&d.project.name)||'',clientName:d.client?.name||'',
-    status:idx>=0?(all[idx].status||'concept'):'concept',
-    statusAt:idx>=0?(all[idx].statusAt||null):null,
-    createdAt:idx>=0?all[idx].createdAt:now,
+    status:prior?(prior.status||'concept'):'concept',
+    statusAt:prior?(prior.statusAt||null):null,
+    createdAt:prior?prior.createdAt:now,
     updatedAt:now,
-    changelog:idx>=0?[...all[idx].changelog,{action,date:now}]:[{action:'created',date:now}],
+    changelog:prior?[...prior.changelog,{action,date:now}]:[{action:'created',date:now}],
     data:{...d,_archiveId:id}
   };
   if(idx>=0)all[idx]=entry;else all.push(entry);
@@ -592,7 +598,14 @@ function archiveSave(d,action='updated'){
 }
 
 function archiveDelete(id){
-  const all=loadArchive().filter(x=>x.id!==id);
+  // Tombstone instead of physically removing, so the deletion propagates
+  // across devices via the sync merge (a hard delete would resurrect on pull).
+  const all=loadArchive();
+  const idx=all.findIndex(x=>x.id===id);
+  if(idx<0)return;
+  const now=new Date().toISOString();
+  // Keep only the identity + timestamps; drop the (large) data payload.
+  all[idx]={id,kind:all[idx].kind,parentRef:all[idx].parentRef||null,parentId:all[idx].parentId||null,deletedAt:now,updatedAt:now};
   saveArchive(all);
 }
 
@@ -637,19 +650,19 @@ async function pushArchive(){
   }catch(e){syncState.status='error';syncState.at=Date.now();}
 }
 async function pullArchive(){
-  const ws=getWorkspaceId();if(!ws)return loadArchive();
+  const ws=getWorkspaceId();if(!ws)return loadArchiveLive();
   try{
     const res=await fetch('/api/archive?ws='+encodeURIComponent(ws));
-    if(!res.ok)return loadArchive();
+    if(!res.ok)return loadArchiveLive();
     const remote=await res.json();
-    if(!Array.isArray(remote))return loadArchive();
+    if(!Array.isArray(remote))return loadArchiveLive();
     const byId={};
     loadArchive().forEach(e=>{byId[e.id]=e;});
     remote.forEach(e=>{if(!e||!e.id)return;const cur=byId[e.id];if(!cur||new Date(e.updatedAt||0)>new Date(cur.updatedAt||0))byId[e.id]=e;});
-    const merged=Object.keys(byId).map(k=>byId[k]);
+    const merged=Object.keys(byId).map(k=>byId[k]); // keeps tombstones so deletes propagate
     try{localStorage.setItem(AK,JSON.stringify(merged));}catch(e){}
-    return merged;
-  }catch(e){return loadArchive();}
+    return merged.filter(e=>e&&!e.deletedAt);
+  }catch(e){return loadArchiveLive();}
 }
 
 // ── Google API Integration ──
@@ -2616,7 +2629,7 @@ function createChangeOrder(parent,lang){
   const today=new Date().toISOString().slice(0,10);
   const parentRef=parent?(parent.ref||''):'';
   let coN=1;
-  try{if(parentRef)coN=loadArchive().filter(e=>e.kind==='change_order'&&e.parentRef===parentRef).length+1;}catch(e){}
+  try{if(parentRef)coN=loadArchiveLive().filter(e=>e.kind==='change_order'&&e.parentRef===parentRef).length+1;}catch(e){}
   const ref=parentRef?(parentRef+'-CO'+coN):('B-'+new Date().toISOString().slice(2,10).replace(/-/g,'')+'-CO1');
   const pc=(parent&&parent.data&&parent.data.client)||{};
   return {
@@ -2757,10 +2770,10 @@ async function pushToOdoo(entry){
 
 // ── Dashboard ──
 function Dashboard({onOpen,onNew,onDuplicate,onDelete,onNewCO,onBumpVersion}){
-  const[archive,setArchive]=useState(loadArchive());
+  const[archive,setArchive]=useState(loadArchiveLive());
   const[expandedId,setExpandedId]=useState(null);
   const[avRefresh,setAvRefresh]=useState(0);
-  const refresh=()=>setArchive(loadArchive());
+  const refresh=()=>setArchive(loadArchiveLive());
   const[filter,setFilter]=useState('alle');
   const[synced,setSynced]=useState(false);
   useEffect(()=>{pullArchive().then(a=>{setArchive(a);setSynced(true);});},[]);
@@ -2935,7 +2948,7 @@ function ChangeOrderEditor({data:co,set}){
   return <div>
     <div className="card"><div className="card-h">{NL?'Projectdetails':'Project details'}</div>
       <div className="row"><div className="fg"><label>{NL?'Projectnaam':'Project name'}</label><input value={co.project.name} onChange={e=>upProj({name:e.target.value})}/></div>
-        <div className="fg"><label>{NL?'Contractref.':'Contract ref.'}</label><input value={co.parentRef||''} onChange={e=>{const pr=e.target.value;let num=(String(co.ref||'').match(/-CO(\d+)$/)||[])[1]||'1';let pid=null;if(pr.trim()){try{const par=loadArchive().find(x=>x.kind!=='change_order'&&x.ref===pr.trim());pid=par?par.id:null;num=String(loadArchive().filter(x=>x.kind==='change_order'&&x.id!==co._archiveId&&x.parentRef===pr.trim()).length+1);}catch(_e){}}up({parentRef:pr,parentId:pid,ref:pr.trim()?pr.trim()+'-CO'+num:co.ref});}}/></div></div>
+        <div className="fg"><label>{NL?'Contractref.':'Contract ref.'}</label><input value={co.parentRef||''} onChange={e=>{const pr=e.target.value;let num=(String(co.ref||'').match(/-CO(\d+)$/)||[])[1]||'1';let pid=null;if(pr.trim()){try{const par=loadArchiveLive().find(x=>x.kind!=='change_order'&&x.ref===pr.trim());pid=par?par.id:null;num=String(loadArchiveLive().filter(x=>x.kind==='change_order'&&x.id!==co._archiveId&&x.parentRef===pr.trim()).length+1);}catch(_e){}}up({parentRef:pr,parentId:pid,ref:pr.trim()?pr.trim()+'-CO'+num:co.ref});}}/></div></div>
       <div className="row"><div className="fg"><label>{NL?'Huidige fase':'Current phase'}</label><input value={co.project.currentPhase} onChange={e=>upProj({currentPhase:e.target.value})}/></div>
         <div className="fg"><label>{NL?'Datum':'Date'}</label><input type="date" value={co.date} onChange={e=>up({date:e.target.value})}/></div></div>
       <div className="row3"><div className="fg"><label>{NL?'Klant':'Client'}</label><input value={co.client.name} onChange={e=>upClient({name:e.target.value})}/></div>
