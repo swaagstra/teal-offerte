@@ -119,6 +119,50 @@ function getHandlingPct(v){for(const b of HANDLING_BRACKETS)if(v<=b.max)return b
 
 const COORD_MARGIN=.12;
 
+// ── Installatie / reizen ──
+const INSTALL_RATES={lead:900,crew:600,travelIntl:550,halfNL:275,ot:130,kmPrice:.50,kmCost:.23,book:250,trans:250};
+const INSTALL_RESCOST={erik:640,L0:160,L1:200,L2:220,L3:240}; // dagkost (8u)
+const INST_RES={erik:'Erik (€80/u)',L0:'L0 €20',L1:'L1 €25',L2:'L2 €27,50',L3:'L3 €30',custom:'Eigen kost'};
+const INSTALL_DEFAULT={enabled:false,crew:[],coordOn:true,coordPct:10,
+  flight:0,visa:0,hotelN:0,hotelP:0,hotelR:1,pdRate:0,pdDays:0,kmNL:0,
+  bookOn:true,transMode:'flat',transCost:0,park:0,co2:0,co2bill:false,
+  sbDays:0,sbRate:600,conPct:10};
+function calcInstall(d){
+  const x=d.install||{};
+  const empty={client:0,cost:0,labourC:0,labourCost:0,coord:0,beClient:0,beCost:0,sb:0,cont:0,persons:0,maxWD:0,minWDfail:false};
+  if(!x.enabled)return empty;
+  const P=INSTALL_RATES, RC=INSTALL_RESCOST;
+  let labourC=0,labourCost=0,persons=0,maxWD=0,anyTI=false;
+  (x.crew||[]).forEach(r=>{
+    persons++;
+    const dp=r.role==='lead'?P.lead:P.crew;
+    const dc=r.res==='custom'?(+r.custom||0):(RC[r.res]||0);
+    const wd=+r.wd||0, td=+r.td||0, hn=+r.hn||0, ot=+r.ot||0;
+    labourC   += wd*dp + td*P.travelIntl + hn*P.halfNL + ot*P.ot;
+    labourCost+= (wd+td)*dc + hn*(dc/2) + ot*(dc/8);
+    if(wd>maxWD)maxWD=wd;
+    if(td>0)anyTI=true;
+  });
+  const coord=x.coordOn!==false?labourC*((+x.coordPct||0)/100):0;
+  const flight=+x.flight||0, visa=+x.visa||0;
+  const hotel=(+x.hotelN||0)*(+x.hotelP||0)*(+x.hotelR||0);
+  const perdiem=(+x.pdRate||0)*(+x.pdDays||0);
+  const kmP=(+x.kmNL||0)*P.kmPrice, kmC=(+x.kmNL||0)*P.kmCost;
+  const book=x.bookOn!==false?P.book:0;
+  const transP=x.transMode==='cost'?(+x.transCost||0):P.trans;
+  const transC=+x.transCost||0;
+  const park=+x.park||0;
+  const co2=+x.co2||0, co2P=x.co2bill?co2:0;
+  const beClient=flight+visa+hotel+perdiem+kmP+book+transP+park+co2P;
+  const beCost  =flight+visa+hotel+perdiem+kmC+transC+park+co2;
+  const sb=(+x.sbDays||0)*(+x.sbRate||0);
+  const cont=(flight+visa+hotel+park+co2)*((+x.conPct||0)/100);
+  const client=labourC+coord+beClient+sb+cont;
+  const cost=labourCost+beCost+sb;
+  return {client,cost,labourC,labourCost,coord,beClient,beCost,sb,cont,persons,maxWD,
+    minWDfail:(anyTI&&maxWD>0&&maxWD<2)};
+}
+
 const BUILD_PHASES=[
   {id:'b0',code:'B0',name:{nl:'Intake & Scope',en:'Intake & Scope'},
     desc:{nl:'Maakbaarheidscheck en risico-inventarisatie. Go/no-go rapport met technische haalbaarheid, kostenbandbreedte en projectrisico\'s.',en:'Feasibility check and risk inventory. Go/no-go report covering technical viability, cost range, and project risks.'},
@@ -393,6 +437,7 @@ function createProject(type){
       description:{...p.desc},
       effort:'',
       contingency:.10,
+      travel:{trips:0,km:0,rate:.50,hours:0,hourRate:0},
       items:p.items.map(it=>{
         const r=roleMap[it.role];
         return{id:uid(),role:it.role,desc:{...it.desc},qty:it.qty||0,extRate:r?.ext||0,intRate:r?.int||0,unit:r?.unit||'uur'};
@@ -409,6 +454,7 @@ function createProject(type){
     procOTS:[],
     procCustom:[],
     subs:[],
+    install:{...INSTALL_DEFAULT},
     travel:{rateNL:.50,note:{nl:'Reiskosten: \u20AC 0,50/km',en:'Travel: \u20AC 0.50/km'}},
     payment:{milestones:type==='build'
       ?[{name:{nl:'Opdrachtverstrekking',en:'Project start'},pct:30,date:''},{name:{nl:'Gereedmelding productie',en:'Production complete'},pct:40,date:''},{name:{nl:'Oplevering',en:'Delivery'},pct:30,date:''}]
@@ -438,14 +484,16 @@ function migrateConds(d){
 function calcTotals(d){
   // Block A: TEAL fees (skip disabled phases)
   const phaseData=(d.phases||[]).map(p=>{
-    if(p.enabled===false)return{client:0,cost:0,cont:0,total:0};
+    if(p.enabled===false)return{client:0,cost:0,cont:0,travel:0,total:0};
     const client=(p.items||[]).reduce((s,it)=>s+(it.qty||0)*(it.extRate||0),0);
     const cost=(p.items||[]).reduce((s,it)=>s+(it.qty||0)*(it.intRate||0),0);
     const cont=client*(p.contingency||0);
-    return{client,cost,cont,total:client+cont};
+    const tv=p.travel||{};
+    const travel=Math.max(0,((+tv.trips||0)*(+tv.km||0)*(+tv.rate||0))+((+tv.hours||0)*(+tv.hourRate||0)));
+    return{client,cost,cont,travel,total:client+cont+travel};
   });
   const blockAClient=phaseData.reduce((s,p)=>s+p.total,0);
-  const blockACost=phaseData.reduce((s,p)=>s+p.cost,0);
+  const blockACost=phaseData.reduce((s,p)=>s+p.cost+(p.travel||0),0);
 
   // Block B1: Off-the-shelf
   let b1Purchase=0,b1Handling=0;
@@ -476,12 +524,14 @@ function calcTotals(d){
   const procCost=b1Purchase+b2Purchase;
   const subClient=subFees+subCoord;
 
-  const grandClient=blockAClient+procClient+subClient;
-  const grandCost=blockACost+procCost+subFees;
+  const inst=calcInstall(d);
+
+  const grandClient=blockAClient+procClient+subClient+inst.client;
+  const grandCost=blockACost+procCost+subFees+inst.cost;
   const margin=grandClient>0?(grandClient-grandCost)/grandClient:0;
 
   return{phaseData,blockAClient,blockACost,b1Purchase,b1Handling,b2Purchase,b2Handling,b2Risk,
-    procClient,procCost,subFees,subCoord,subClient,grandClient,grandCost,margin};
+    procClient,procCost,subFees,subCoord,subClient,inst,grandClient,grandCost,margin};
 }
 
 // ── Persistence ──
@@ -1541,6 +1591,7 @@ function BudgetTab({data:d,set}){
   const addItem=pi=>{const p=[...d.phases];p[pi]={...p[pi],items:[...p[pi].items,{id:uid(),role:'design',desc:{nl:'',en:''},qty:0,extRate:120,intRate:75,unit:'uur'}]};set({...d,phases:p})};
   const rmItem=(pi,ii)=>{const p=[...d.phases];p[pi]={...p[pi],items:p[pi].items.filter((_,i)=>i!==ii)};set({...d,phases:p})};
   const upCont=(pi,v)=>{const p=[...d.phases];p[pi]={...p[pi],contingency:v};set({...d,phases:p})};
+  const upTravel=(pi,k,v)=>{const p=[...d.phases];p[pi]={...p[pi],travel:{trips:0,km:0,rate:.50,hours:0,hourRate:0,...(p[pi].travel||{}),[k]:v}};set({...d,phases:p})};
 
   const changeRole=(pi,ii,roleId)=>{
     const r=roleMap[roleId];
@@ -1563,6 +1614,20 @@ function BudgetTab({data:d,set}){
   const upSub=(i,k,v)=>{const a=[...(d.subs||[])];a[i]={...a[i],[k]:v};set({...d,subs:a})};
   const addSub=()=>set({...d,subs:[...(d.subs||[]),{id:uid(),desc:'',company:'',amount:0,coordPct:COORD_MARGIN}]});
   const rmSub=i=>set({...d,subs:(d.subs||[]).filter((_,idx)=>idx!==i)});
+
+  // Installatie / reizen helpers
+  const inst=totals.inst;
+  const upInst=(k,v)=>set({...d,install:{...INSTALL_DEFAULT,...(d.install||{}),[k]:v}});
+  const toggleInst=on=>{
+    const cur=d.install||INSTALL_DEFAULT;
+    const crew=(cur.crew&&cur.crew.length)?cur.crew:[
+      {id:uid(),role:'lead',res:'erik',custom:0,wd:0,td:0,hn:0,ot:0},
+      {id:uid(),role:'crew',res:'L1',custom:0,wd:0,td:0,hn:0,ot:0}];
+    set({...d,install:{...INSTALL_DEFAULT,...cur,crew,enabled:on}});
+  };
+  const upInstCrew=(i,k,v)=>{const c=[...((d.install||{}).crew||[])];c[i]={...c[i],[k]:v};upInst('crew',c)};
+  const addInstCrew=()=>upInst('crew',[...((d.install||{}).crew||[]),{id:uid(),role:'crew',res:'L1',custom:0,wd:0,td:0,hn:0,ot:0}]);
+  const rmInstCrew=i=>upInst('crew',((d.install||{}).crew||[]).filter((_,x)=>x!==i));
 
   const ll=L_(L);
   const phaseName=(ph)=>ph.customName||t(ph.name,L);
@@ -1599,6 +1664,22 @@ function BudgetTab({data:d,set}){
                 <td className="tr mono" style={{color:cp-ip>=0?'var(--green)':'var(--red)'}}>{fmt(cp-ip)}</td>
                 <td className="tr"><button className="btn btn-sm btn-g" onClick={()=>rmItem(pi,ii)}>&times;</button></td>
               </tr>})}
+            {ph.enabled!==false&&(()=>{const tv=ph.travel||{};return <tr style={{background:'rgba(212,236,230,.06)'}}>
+              <td colSpan={5} style={{whiteSpace:'nowrap'}}>
+                <span className="sm muted" style={{marginRight:6}}>{L==='nl'?'Reizen / mobilisatie':'Travel / mobilisation'}</span>
+                <input type="number" style={{width:42}} value={tv.trips||''} placeholder={L==='nl'?'rit':'trip'} onChange={e=>upTravel(pi,'trips',parseFloat(e.target.value)||0)}/>
+                <span className="sm muted"> × </span>
+                <input type="number" style={{width:52}} value={tv.km||''} placeholder="km" onChange={e=>upTravel(pi,'km',parseFloat(e.target.value)||0)}/>
+                <span className="sm muted"> km × € </span>
+                <input type="number" style={{width:52}} value={tv.rate!=null?tv.rate:.50} onChange={e=>upTravel(pi,'rate',parseFloat(e.target.value)||0)}/>
+                <span className="sm muted"> + </span>
+                <input type="number" style={{width:42}} value={tv.hours||''} placeholder={L==='nl'?'u':'h'} onChange={e=>upTravel(pi,'hours',parseFloat(e.target.value)||0)}/>
+                <span className="sm muted"> {L==='nl'?'u × €':'h × €'} </span>
+                <input type="number" style={{width:52}} value={tv.hourRate||''} onChange={e=>upTravel(pi,'hourRate',parseFloat(e.target.value)||0)}/>
+              </td>
+              <td className="tr mono">{fmt(totals.phaseData[pi]?.travel||0)}</td><td></td>
+              <td className="tr mono">{fmt(totals.phaseData[pi]?.travel||0)}</td>
+              <td className="tr mono sm muted">{L==='nl'?'in prijs':'in price'}</td><td></td></tr>;})()}
             {ph.enabled!==false&&<tr className="sub"><td colSpan={5}>{ll.subtotaal} {ph.code}</td>
               <td className="tr mono">{fmt(totals.phaseData[pi]?.client||0)}</td><td></td>
               <td className="tr mono">{fmt(totals.phaseData[pi]?.cost||0)}</td>
@@ -1688,6 +1769,118 @@ function BudgetTab({data:d,set}){
       <button className="btn btn-sm btn-g mt16" onClick={addSub}>{ll.plusOnderaannemer}</button>
     </div>
 
+    {/* Installatie / reizen */}
+    <div className="card">
+      <div className="card-h">{L==='nl'?'Installatie / reizen':'Installation / travel'}</div>
+      <label className="flex g8" style={{alignItems:'center',marginBottom:12,cursor:'pointer'}}>
+        <input type="checkbox" checked={!!(d.install&&d.install.enabled)} onChange={e=>toggleInst(e.target.checked)} style={{width:14,height:14,cursor:'pointer'}}/>
+        <span className="sm muted">{L==='nl'?'Installatie- en reisblok meenemen in deze offerte':'Include installation & travel block in this quote'}</span>
+      </label>
+      {d.install&&d.install.enabled&&<>
+        <table className="bt">
+          <thead><tr>
+            <th style={{width:'12%'}}>{L==='nl'?'Rol':'Role'}</th>
+            <th style={{width:'20%'}}>{L==='nl'?'Persoon':'Person'}</th>
+            <th style={{width:'9%'}}>{L==='nl'?'Werkdg':'Work d'}</th>
+            <th style={{width:'9%'}}>{L==='nl'?'Reisdg int.':'Travel d'}</th>
+            <th style={{width:'9%'}}>{L==='nl'?'½ reis NL':'½ NL'}</th>
+            <th style={{width:'8%'}}>{L==='nl'?'Overuren':'OT hrs'}</th>
+            <th style={{width:'11%'}}>{ll.klantprijs}</th>
+            <th style={{width:'11%'}}>{ll.kostprijs}</th>
+            <th style={{width:'4%'}}></th>
+          </tr></thead>
+          <tbody>
+            {((d.install||{}).crew||[]).map((r,i)=>{
+              const dp=r.role==='lead'?INSTALL_RATES.lead:INSTALL_RATES.crew;
+              const dc=r.res==='custom'?(+r.custom||0):(INSTALL_RESCOST[r.res]||0);
+              const rc=(+r.wd||0)*dp+(+r.td||0)*INSTALL_RATES.travelIntl+(+r.hn||0)*INSTALL_RATES.halfNL+(+r.ot||0)*INSTALL_RATES.ot;
+              const rk=((+r.wd||0)+(+r.td||0))*dc+(+r.hn||0)*(dc/2)+(+r.ot||0)*(dc/8);
+              return <tr key={r.id||i}>
+                <td><select value={r.role} onChange={e=>upInstCrew(i,'role',e.target.value)}>
+                  <option value="lead">Lead €900</option><option value="crew">Crew €600</option></select></td>
+                <td><select value={r.res} onChange={e=>upInstCrew(i,'res',e.target.value)}>
+                  {Object.keys(INST_RES).map(k=><option key={k} value={k}>{INST_RES[k]}</option>)}</select>
+                  {r.res==='custom'&&<input type="number" value={r.custom||''} placeholder={L==='nl'?'kost/dag':'cost/day'} onChange={e=>upInstCrew(i,'custom',parseFloat(e.target.value)||0)} style={{marginTop:4}}/>}</td>
+                <td><input type="number" value={r.wd||''} onChange={e=>upInstCrew(i,'wd',parseFloat(e.target.value)||0)}/></td>
+                <td><input type="number" value={r.td||''} onChange={e=>upInstCrew(i,'td',parseFloat(e.target.value)||0)}/></td>
+                <td><input type="number" value={r.hn||''} onChange={e=>upInstCrew(i,'hn',parseFloat(e.target.value)||0)}/></td>
+                <td><input type="number" value={r.ot||''} onChange={e=>upInstCrew(i,'ot',parseFloat(e.target.value)||0)}/></td>
+                <td className="tr mono">{fmt(rc)}</td>
+                <td className="tr mono" style={{color:rc-rk>=0?'var(--green)':'var(--red)'}}>{fmt(rk)}</td>
+                <td className="tr"><button className="btn btn-sm btn-g" onClick={()=>rmInstCrew(i)}>&times;</button></td>
+              </tr>;
+            })}
+          </tbody>
+        </table>
+        <button className="btn btn-sm btn-g mt16" onClick={addInstCrew}>{L==='nl'?'+ persoon':'+ person'}</button>
+
+        <div className="flex g8" style={{alignItems:'center',marginTop:14}}>
+          <input type="checkbox" checked={(d.install||{}).coordOn!==false} onChange={e=>upInst('coordOn',e.target.checked)} style={{width:14,height:14}}/>
+          <span className="sm">{L==='nl'?'Coördinatie- en prepfee':'Coordination & prep fee'}</span>
+          <input type="number" value={(d.install||{}).coordPct!=null?d.install.coordPct:10} onChange={e=>upInst('coordPct',parseFloat(e.target.value)||0)} style={{width:60}}/>
+          <span className="sm muted">% {L==='nl'?'van arbeid':'of labour'} = {fmtE(inst.coord)}</span>
+        </div>
+
+        <div className="card-h" style={{marginTop:20,fontSize:13}}>{L==='nl'?'Reis en verblijf':'Travel & expenses'}</div>
+        <div className="row">
+          <div className="fg"><label>{L==='nl'?'Vluchten totaal (kost)':'Flights total (cost)'} <a href="https://www.google.com/travel/flights" target="_blank" rel="noopener" style={{color:'var(--green)',fontSize:11}}>Google Flights ↗</a></label><input type="number" value={(d.install||{}).flight||''} onChange={e=>upInst('flight',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"><label>{L==='nl'?'Visum totaal (kost)':'Visa total (cost)'}</label><input type="number" value={(d.install||{}).visa||''} onChange={e=>upInst('visa',parseFloat(e.target.value)||0)}/></div>
+        </div>
+        <div className="row">
+          <div className="fg"><label>{L==='nl'?'Hotel, nachten':'Hotel, nights'}</label><input type="number" value={(d.install||{}).hotelN||''} onChange={e=>upInst('hotelN',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"><label>{L==='nl'?'Hotel, prijs/nacht':'Hotel, price/night'}</label><input type="number" value={(d.install||{}).hotelP||''} onChange={e=>upInst('hotelP',parseFloat(e.target.value)||0)}/></div>
+        </div>
+        <div className="row">
+          <div className="fg"><label>{L==='nl'?'Hotel, kamers':'Hotel, rooms'}</label><input type="number" value={(d.install||{}).hotelR!=null?d.install.hotelR:1} onChange={e=>upInst('hotelR',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"><label>{L==='nl'?'Reis NL, km retour':'Travel NL, km return'}</label><input type="number" value={(d.install||{}).kmNL||''} onChange={e=>upInst('kmNL',parseFloat(e.target.value)||0)}/></div>
+        </div>
+        <div className="row">
+          <div className="fg"><label>{L==='nl'?'Per diem, tarief p.p./dag':'Per diem, rate pp/day'}</label><input type="number" value={(d.install||{}).pdRate||''} onChange={e=>upInst('pdRate',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"><label>{L==='nl'?'Per diem, persoon-dagen':'Per diem, person-days'}</label><input type="number" value={(d.install||{}).pdDays||''} onChange={e=>upInst('pdDays',parseFloat(e.target.value)||0)}/></div>
+        </div>
+        <div className="row">
+          <div className="fg"><label>{L==='nl'?'Parkeren / city access (kost)':'Parking / city access (cost)'}</label><input type="number" value={(d.install||{}).park||''} onChange={e=>upInst('park',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"><label>{L==='nl'?'Transfers':'Transfers'}</label>
+            <select value={(d.install||{}).transMode||'flat'} onChange={e=>upInst('transMode',e.target.value)}>
+              <option value="flat">{L==='nl'?'Vast €250 / reis':'Flat €250 / trip'}</option>
+              <option value="cost">{L==='nl'?'Werkelijke kost':'At cost'}</option></select></div>
+        </div>
+        <div className="row">
+          <div className="fg"><label>{L==='nl'?'Transfers, werkelijke kost':'Transfers, actual cost'}</label><input type="number" value={(d.install||{}).transCost||''} onChange={e=>upInst('transCost',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"><label>{L==='nl'?'CO2-compensatie (kost)':'CO2 offset (cost)'}</label><input type="number" value={(d.install||{}).co2||''} onChange={e=>upInst('co2',parseFloat(e.target.value)||0)}/></div>
+        </div>
+        <div className="flex g8" style={{alignItems:'center',flexWrap:'wrap'}}>
+          <input type="checkbox" checked={(d.install||{}).bookOn!==false} onChange={e=>upInst('bookOn',e.target.checked)} style={{width:14,height:14}}/>
+          <span className="sm">{L==='nl'?'Booking fee €250 (eenmalig per reis)':'Booking fee €250 (once per trip)'}</span>
+          <span style={{display:'inline-block',width:24}}/>
+          <input type="checkbox" checked={!!(d.install||{}).co2bill} onChange={e=>upInst('co2bill',e.target.checked)} style={{width:14,height:14}}/>
+          <span className="sm">{L==='nl'?'CO2 doorbelasten':'Bill CO2 to client'}</span>
+        </div>
+
+        <div className="card-h" style={{marginTop:20,fontSize:13}}>{L==='nl'?'Standby en risico':'Standby & risk'}</div>
+        <div className="row">
+          <div className="fg"><label>{L==='nl'?'Standby-dagen (klantvertraging)':'Standby days (client delay)'}</label><input type="number" value={(d.install||{}).sbDays||''} onChange={e=>upInst('sbDays',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"><label>{L==='nl'?'Standby-tarief/dag':'Standby rate/day'}</label><input type="number" value={(d.install||{}).sbRate!=null?d.install.sbRate:600} onChange={e=>upInst('sbRate',parseFloat(e.target.value)||0)}/></div>
+        </div>
+        <div className="row">
+          <div className="fg"><label>{L==='nl'?'Contingency % op nacalculatie':'Contingency % on pass-through'}</label><input type="number" value={(d.install||{}).conPct!=null?d.install.conPct:10} onChange={e=>upInst('conPct',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"></div>
+        </div>
+        <p className="sm muted" style={{marginTop:8}}>{L==='nl'?'Liften, hoogwerker, gereedschap, vergunningen, vracht en verzekering horen in Blok B (inkoop) of Blok C (onderaannemers); daar loopt de degressieve handling al.':'Lifts, equipment, permits, freight and insurance belong in Block B (procurement) or Block C (subcontractors), which already apply degressive handling.'}</p>
+
+        <table className="bt" style={{marginTop:12}}>
+          <tbody>
+            <tr className="sub"><td>{L==='nl'?'Arbeid + coördinatie':'Labour + coordination'}</td><td className="tr mono">{fmt(inst.labourC+inst.coord)}</td><td className="tr mono muted">({ll.kost}: {fmt(inst.labourCost)})</td></tr>
+            <tr className="sub"><td>{L==='nl'?'Reis en verblijf':'Travel & expenses'}</td><td className="tr mono">{fmt(inst.beClient)}</td><td className="tr mono muted">({ll.kost}: {fmt(inst.beCost)})</td></tr>
+            <tr className="sub"><td>{L==='nl'?'Standby':'Standby'}</td><td className="tr mono">{fmt(inst.sb)}</td><td></td></tr>
+            <tr className="sub"><td>{L==='nl'?'Contingency':'Contingency'}</td><td className="tr mono">{fmt(inst.cont)}</td><td></td></tr>
+            <tr className="tot"><td>{L==='nl'?'Totaal installatie':'Installation total'}</td><td className="tr mono">{fmtE(inst.client)}</td><td className="tr mono" style={{color:'var(--teal-mint)'}}>({ll.margeLabel}: {fmtE(inst.client-inst.cost)})</td></tr>
+          </tbody>
+        </table>
+        {inst.minWDfail&&<div className="sm" style={{color:'var(--yellow)',marginTop:8}}>{L==='nl'?'Let op: internationaal minimaal 2 werkdagen.':'Note: international minimum is 2 working days.'}</div>}
+      </>}
+    </div>
+
     {/* Totals + Margin */}
     <div className="card">
       <div className="card-h">{ll.totaalOverzicht}</div>
@@ -1696,6 +1889,7 @@ function BudgetTab({data:d,set}){
           <tr><td>{ll.tealFees}</td><td className="tr mono">{fmtE(totals.blockAClient)}</td><td className="tr mono muted">({ll.kost}: {fmtE(totals.blockACost)})</td></tr>
           <tr><td>{ll.inkoopTotal}</td><td className="tr mono">{fmtE(totals.procClient)}</td><td className="tr mono muted">({ll.kost}: {fmtE(totals.procCost)})</td></tr>
           <tr><td>{ll.subTotal}</td><td className="tr mono">{fmtE(totals.subClient)}</td><td className="tr mono muted">({ll.kost}: {fmtE(totals.subFees)})</td></tr>
+          {totals.inst&&totals.inst.client>0&&<tr><td>{L==='nl'?'Installatie / reizen':'Installation / travel'}</td><td className="tr mono">{fmtE(totals.inst.client)}</td><td className="tr mono muted">({ll.kost}: {fmtE(totals.inst.cost)})</td></tr>}
           <tr className="tot"><td>{ll.totaalExcl}</td><td className="tr mono">{fmtE(totals.grandClient)}</td><td className="tr mono" style={{color:'var(--teal-mint)'}}>({ll.margeLabel}: {fmtE(totals.grandClient-totals.grandCost)})</td></tr>
         </tbody>
       </table>
@@ -1928,6 +2122,10 @@ function buildFinancialLines(d,totals,L){
     const c=(it.amount||0)*(it.coordPct||COORD_MARGIN);
     lines.push({desc:it.desc||'Subcontractor',total:it.amount+c});
   });
+
+  // Installation & travel (lump sum)
+  const inst=(totals&&totals.inst)?totals.inst:calcInstall(d);
+  if(inst&&inst.client>0)lines.push({desc:L==='nl'?'Installatie en reizen':'Installation & travel',total:inst.client});
 
   return lines;
 }
