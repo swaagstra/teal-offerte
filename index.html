@@ -235,7 +235,7 @@ const I={
     buildDesc:'Eenmalig technisch project (B0-B4)',assembleDesc:'Serieproductie (A0-A3)',
     nieuweOfferteBtn:'Nieuwe offerte starten? Huidige data blijft in localStorage.',
     // Tabs
-    tabProject:'Project',tabScope:'Scope',tabBudget:'Budget',tabPlanning:'Planning',tabPayment:'Betaling',tabAnnexes:'Bijlagen',tabPreview:'Preview',
+    tabProject:'Project',tabScope:'Scope',tabBudget:'Budget',tabPlanning:'Planning',tabPayment:'Betaling',tabAnnexes:'Bijlagen',tabDeliverables:'Deliverables',tabPreview:'Preview',
     // Project tab
     projectGegevens:'Projectgegevens',projectnaam:'Projectnaam',referentie:'Referentienummer',datum:'Datum',
     locatie:'Locatie',batchgrootte:'Batchgrootte (stuks)',klantGegevens:'Klantgegevens',bedrijfsnaam:'Bedrijfsnaam',
@@ -301,7 +301,7 @@ const I={
     kiesType:'Choose the project type. The tool loads the right phases, rates and payment schedule.',
     buildDesc:'One-off technical project (B0-B4)',assembleDesc:'Serial production (A0-A3)',
     nieuweOfferteBtn:'Start a new quotation? Current data remains in localStorage.',
-    tabProject:'Project',tabScope:'Scope',tabBudget:'Budget',tabPlanning:'Planning',tabPayment:'Payment',tabAnnexes:'Annexes',tabPreview:'Preview',
+    tabProject:'Project',tabScope:'Scope',tabBudget:'Budget',tabPlanning:'Planning',tabPayment:'Payment',tabAnnexes:'Annexes',tabDeliverables:'Deliverables',tabPreview:'Preview',
     projectGegevens:'Project Details',projectnaam:'Project name',referentie:'Reference number',datum:'Date',
     locatie:'Location',batchgrootte:'Batch size (units)',klantGegevens:'Client Details',bedrijfsnaam:'Company name',
     contactpersoon:'Contact person',email:'E-mail',adres:'Address',postcode:'Postal code',plaats:'City',
@@ -469,12 +469,22 @@ function createProject(type){
     },
     batchSize:type==='assemble'?100:0,
     annexes:defaultAnnexes(),
+    deliverables:[],
+    delivery:defaultDelivery(),
   };
+}
+function defaultDelivery(){
+  return {date:'',note:{
+    nl:'Hierbij leveren we het onderstaande, afgeronde werk op. Elk item verwijst naar de betreffende deliverable — tekeningen, documentatie, media of bestanden. Vervang deze tekst door een korte samenvatting van wat er wordt opgeleverd en wat de opdrachtgever bij ontvangst moet weten.',
+    en:'This package hands over the completed work described below. Each item links to its deliverable — drawings, documentation, media, or files. Replace this note with a short summary of what is being delivered and anything the client needs to know on receipt.'
+  }};
 }
 function migrateConds(d){
   if(!d||!d.conditions)return d;
   const c={...d.conditions};let ch=false;
   if(!d.annexes){d={...d,annexes:defaultAnnexes()};ch=true;}
+  if(!d.deliverables){d={...d,deliverables:[]};ch=true;}
+  if(!d.delivery){d={...d,delivery:defaultDelivery()};ch=true;}
   if(c.meerwerk===undefined){c.meerwerk={nl:I.nl.meerwerkTekst,en:I.en.meerwerkTekst,_ensrc:I.nl.meerwerkTekst};if(c.meerwerkEnabled===undefined)c.meerwerkEnabled=true;ch=true;}
   if(c.akkoord===undefined){c.akkoord={nl:I.nl.akkoordTekst,en:I.en.akkoordTekst,_ensrc:I.nl.akkoordTekst};if(c.akkoordEnabled===undefined)c.akkoordEnabled=true;ch=true;}
   return ch?{...d,conditions:c}:d;
@@ -2102,6 +2112,67 @@ function AnnexesTab({data:d,set}){
   </div>;
 }
 
+// ── Deliverables (linked screenshots for handover) ──
+function DeliverablesTab({data:d,set}){
+  const L=d.lang,NL=L==='nl';
+  const list=d.deliverables||[];
+  const [busy,setBusy]=useState({});
+  const [err,setErr]=useState({});
+  const save=(arr)=>set({...d,deliverables:arr});
+  const add=()=>save([...list,{id:uid(),label:{nl:'',en:''},url:'',shot:''}]);
+  const del=(i)=>save(list.filter((_,j)=>j!==i));
+  const upd=(i,patch)=>{const a=list.slice();a[i]={...a[i],...patch};save(a);};
+  const setLabel=(i,val)=>{const a=list.slice();a[i]={...a[i],label:{...(a[i].label||{nl:'',en:''}),[L]:val}};save(a);};
+  const normUrl=(u)=>{u=(u||'').trim();if(!u)return'';return /^https?:\/\//i.test(u)?u:'https://'+u;};
+  const shoot=async(i)=>{
+    const it=list[i];const url=normUrl(it.url);
+    if(!url){setErr(e=>({...e,[it.id]:NL?'Vul eerst een link in.':'Enter a link first.'}));return;}
+    setErr(e=>({...e,[it.id]:''}));setBusy(b=>({...b,[it.id]:true}));
+    try{
+      const r=await fetch('/api/screenshot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok||!j.dataUrl)throw new Error(j.error||('HTTP '+r.status));
+      const a=list.slice();a[i]={...a[i],url,shot:j.dataUrl};save(a);
+    }catch(e){setErr(er=>({...er,[it.id]:(NL?'Screenshot mislukt: ':'Screenshot failed: ')+String((e&&e.message)||e)}));}
+    finally{setBusy(b=>({...b,[it.id]:false}));}
+  };
+  const dv=d.delivery||defaultDelivery();
+  const upDelivery=(patch)=>set({...d,delivery:{...dv,...patch}});
+  const setNote=(val)=>upDelivery({note:{...(dv.note||{nl:'',en:''}),[L]:val}});
+  const hasDel=list.some(x=>x.url&&x.url.trim());
+  return <div>
+    <div className="between mb16" style={{alignItems:'flex-start',gap:12}}>
+      <p className="sm muted" style={{margin:0,flex:1}}>{NL?'Deliverables voor de oplevering. Vul per deliverable een titel en een link in en haal automatisch een screenshot op. Genereer daarna het opleverdocument — een aparte A4-PDF waarin titel en screenshot klikbaar de link openen.':'Deliverables for handover. Add a title and link per item and fetch a screenshot. Then generate the delivery document — a separate A4 PDF where the title and screenshot link to the item.'}</p>
+      <button className="btn btn-s" disabled={!hasDel} onClick={()=>exportDeliveryPDF(d)}>{NL?'Download opleverdocument':'Download delivery PDF'}</button>
+    </div>
+    <div className="card">
+      <div className="card-h" style={{border:0,padding:0,margin:'0 0 12px'}}>{NL?'Opleverdocument':'Delivery document'}</div>
+      <div className="flex g8" style={{marginBottom:12,alignItems:'center',flexWrap:'wrap'}}>
+        <label className="sm muted" style={{width:120}}>{NL?'Opleverdatum':'Delivered date'}</label>
+        <input type="date" style={{flex:'0 0 200px'}} value={dv.date||''} onChange={e=>upDelivery({date:e.target.value})}/>
+      </div>
+      <label className="sm muted" style={{display:'block',marginBottom:6}}>{NL?'Toelichting (handover note)':'Handover note'}</label>
+      <textarea style={{width:'100%',minHeight:96}} value={t(dv.note,L)} onChange={e=>setNote(e.target.value)}/>
+    </div>
+    {list.length===0&&<p className="sm muted" style={{marginBottom:16}}>{NL?'Nog geen deliverables toegevoegd.':'No deliverables yet.'}</p>}
+    {list.map((it,i)=><div key={it.id} className="card">
+      <div className="between mb16"><div className="card-h" style={{border:0,padding:0,margin:0}}>{(NL?'Deliverable ':'Deliverable ')+(i+1)}</div>
+        <button className="btn btn-sm btn-g" onClick={()=>del(i)}>×</button></div>
+      <div className="flex g8" style={{marginBottom:8,alignItems:'flex-start',flexWrap:'wrap'}}>
+        <input style={{flex:'1 1 240px'}} placeholder={NL?'Titel (bijv. Live demo)':'Title (e.g. Live demo)'} value={t(it.label,L)} onChange={e=>setLabel(i,e.target.value)}/>
+        <input style={{flex:'2 1 320px'}} placeholder="https://…" value={it.url||''} onChange={e=>upd(i,{url:e.target.value})}/>
+        <button className="btn btn-sm btn-s" disabled={!!busy[it.id]} onClick={()=>shoot(i)}>{busy[it.id]?(NL?'Bezig…':'Working…'):(it.shot?(NL?'Vernieuw screenshot':'Refresh screenshot'):(NL?'Haal screenshot':'Get screenshot'))}</button>
+      </div>
+      {err[it.id]&&<p className="sm" style={{color:'#b00',marginBottom:8}}>{err[it.id]}</p>}
+      {it.shot&&<div style={{marginTop:4}}>
+        <img src={it.shot} alt="" style={{maxWidth:'100%',maxHeight:280,border:'1px solid #e5e4e0',borderRadius:4,display:'block'}}/>
+        <button className="btn btn-sm btn-g" style={{marginTop:6}} onClick={()=>upd(i,{shot:''})}>{NL?'Verwijder screenshot':'Remove screenshot'}</button>
+      </div>}
+    </div>)}
+    <button className="btn btn-s" style={{marginTop:8}} onClick={add}>+ {NL?'Deliverable':'Deliverable'}</button>
+  </div>;
+}
+
 // ── Preview (Whispers format) ──
 function buildFinancialLines(d,totals,L){
   // Build client-friendly lump-sum line items (no hourly rates visible)
@@ -2623,6 +2694,103 @@ function exportPDF(d,setData){
   });
 }
 
+// ── Delivery (oplevering) document — separate PDF, matches Claude Design "Delivery Cover" ──
+function buildDeliveryDocDef(D, logoImg){
+  var ink='#05100e',paper='#f6f5f1',body='#2b302f',sec='#4a4f4e',muted='#7a807e',faint='#9aa09e',hair='#e5e4e0',track='#ecebe6',green='#2a7a4f';
+  var PW=595.28,PH=841.89,k=0.75,ML=42.5,MT=48.2,MB=48.2,CW=PW-2*ML;
+  var lsf=function(em,fs){return em*fs;};
+  var gap=22*k, cardW=(CW-gap)/2, shotH=112*k;
+  function shortUrl(u){var s=String(u==null?'':u).replace(/^https?:\/\//i,'').replace(/^www\./i,'').replace(/\/+$/,'');if(s.length>42)s=s.slice(0,41)+'…';return s;}
+  function secHead(no,title,extra){return {columns:[{width:'auto',text:no,font:'M4',fontSize:13*k,color:muted,margin:[0,0,9,0]},{width:'*',text:[{text:String(title).toUpperCase()}].concat(extra?[{text:'  '+extra,color:faint}]:[]),font:'I6',fontSize:13*k,color:ink,characterSpacing:lsf(0.12,13*k)}],margin:[0,0,0,8]};}
+  function card(x){
+    var s=[];
+    if(x.shot)s.push({image:x.shot,link:x.url,fit:[cardW,shotH],width:cardW,margin:[0,0,0,10*k]});
+    else s.push({canvas:[{type:'rect',x:0,y:0,w:cardW,h:shotH,r:8*k,color:track}],margin:[0,0,0,10*k]});
+    s.push({columns:[{width:'auto',text:x.num,font:'M4',fontSize:11*k,color:faint},{width:'*',text:x.title,font:'I5',fontSize:14*k,color:ink}],columnGap:8*k});
+    s.push({text:shortUrl(x.url),link:x.url,font:'M4',fontSize:11*k,color:green,margin:[0,4*k,0,0]});
+    return {stack:s,width:cardW};
+  }
+  function gridRows(items){
+    var rows=[];
+    for(var i=0;i<items.length;i+=2){
+      var cols=[card(items[i])];
+      cols.push(items[i+1]?card(items[i+1]):{text:'',width:cardW});
+      rows.push({columns:cols,columnGap:gap,margin:[0,i?20*k:0,0,0],unbreakable:true});
+    }
+    return rows;
+  }
+  var det=[];
+  if(D.location)det.push({text:[{text:(D.nl?'Locatie':'Location')+'  ',color:muted},{text:D.location,color:body}],fontSize:13*k,lineHeight:1.7});
+  det.push({text:[{text:(D.nl?'Fase':'Phase')+'  ',color:muted},{text:D.phase||(D.nl?'Definitieve oplevering':'Final delivery'),color:body}],fontSize:13*k,lineHeight:1.7});
+  det.push({text:[{text:(D.nl?'Opgeleverd':'Delivered')+'  ',color:muted},{text:D.delivered,color:body}],fontSize:13*k,lineHeight:1.7});
+  var c=[];
+  c.push({columns:[{width:'auto',image:logoImg,fit:[240,34*k]},{width:'*',text:(D.nl?'Oplevering':'Delivery').toUpperCase(),font:'I7d',fontSize:26*k,color:'#000',characterSpacing:lsf(0.04,26*k),alignment:'right'}]});
+  c.push({columns:[
+    {width:'*',text:[{text:(D.nl?'Opgeleverd door ':'Delivered by ')+D.prepared_by+'\n'},{text:D.address+'\n'},{text:D.registration}],fontSize:12*k,color:sec,lineHeight:1.7},
+    {width:'auto',stack:[
+      {text:[{text:'No. ',color:faint},{text:D.dlNo}],fontSize:12*k,color:sec,alignment:'right',lineHeight:1.7},
+      {text:[{text:'Date ',color:faint},{text:D.date}],fontSize:12*k,color:sec,alignment:'right',lineHeight:1.7},
+      {text:[{text:'Ref. ',color:faint},{text:D.refNo}],fontSize:12*k,color:sec,alignment:'right',lineHeight:1.7}
+    ]}
+  ],margin:[0,11,0,0]});
+  c.push({canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,15,0,15]});
+  c.push({text:(D.nl?'Project':'Project').toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.14,11*k)});
+  c.push({text:D.title,font:'I5d',fontSize:36*k,color:ink,characterSpacing:lsf(-0.02,36*k),margin:[0,10*k,0,0]});
+  c.push({text:D.subtitle,font:'I4d',fontSize:18*k,color:sec,margin:[0,5,0,0]});
+  c.push({columns:[
+    {width:'*',stack:[secHead('01',D.nl?'Opdrachtgever':'Client'),{text:[D.client_name,D.client_contact,D.client_email].filter(Boolean).join('\n'),fontSize:13*k,color:body,lineHeight:1.6}]},
+    {width:'*',stack:[secHead('02',D.nl?'Details':'Details'),{stack:det}]}
+  ],columnGap:36,margin:[0,30,0,0]});
+  if(D.note)c.push({stack:[secHead('03',D.nl?'Toelichting':'Handover note'),{text:D.note,fontSize:14*k,color:body,lineHeight:1.6}],margin:[0,26,0,0],unbreakable:true});
+  var first=D.deliverables.slice(0,4), rest=D.deliverables.slice(4);
+  c.push({stack:[secHead('04','Deliverables')].concat(gridRows(first)),margin:[0,26,0,0]});
+  if(rest.length){
+    c.push({columns:[{width:'auto',image:logoImg,fit:[240,20*k]},{width:'*',text:D.title+' — '+(D.nl?'Oplevering':'Delivery'),font:'M4',fontSize:11*k,color:sec,alignment:'right',margin:[0,3,0,0]}],pageBreak:'before'});
+    c.push({canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,13.5,0,18]});
+    c.push({stack:[secHead('04','Deliverables',D.nl?'(vervolg)':'(continued)')].concat(gridRows(rest))});
+  }
+  return {pageSize:'A4',pageMargins:[ML,MT,ML,MB],
+    background:function(cp,ps){return {canvas:[{type:'rect',x:0,y:0,w:ps.width,h:ps.height,color:paper}]};},
+    footer:function(cp,pc){return {margin:[ML,10*k,ML,0],stack:[
+      {canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}]},
+      {text:(D.nl?'Oplevering ':'Delivery ')+D.dlNo+' · '+cp+' / '+pc,font:'M4',fontSize:10*k,color:muted,characterSpacing:lsf(0.03,10*k),alignment:'right',margin:[0,10*k,0,0]}
+    ]};},
+    content:c, defaultStyle:{font:'I4',color:body}};
+}
+
+function mapDeliveryToTokens(d){
+  const L=d.lang,NL=L==='nl';
+  const fmtLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'—';
+  const dv=d.delivery||{};
+  const dels=(d.deliverables||[]).filter(x=>x.url).map((x,i)=>({num:String(i+1).padStart(2,'0'),title:t(x.label,L)||((NL?'Deliverable ':'Deliverable ')+(i+1)),url:x.url,shot:x.shot||''}));
+  const delivered=dv.date?fmtLong(dv.date):(d.project.deliveryDate?fmtLong(d.project.deliveryDate):'—');
+  return {
+    prepared_by:d.project.preparedBy||'Erik Swaagstra',
+    address:TEAL.addr+', '+TEAL.zip,
+    registration:'KvK '+TEAL.kvk+' · BTW '+TEAL.btw,
+    dlNo:'DL-'+(d.ref||'000000-0'),
+    date:delivered,
+    refNo:d.ref||'—',
+    title:d.project.name||(NL?'Project':'Project'),
+    subtitle:NL?'Oplevering / handover':'Delivery / handover',
+    client_name:d.client.name||'',client_contact:d.client.contact||'',client_email:d.client.email||'',
+    location:d.project.location||'',phase:d.project.phaseLabel||'',delivered:delivered,
+    note:t(dv.note,L)||'',
+    deliverables:dels, nl:NL
+  };
+}
+
+function exportDeliveryPDF(d){
+  const pdfFilename=`Oplevering ${d.ref||'Draft'} - TEAL.pdf`;
+  if(window.pdfMake){
+    pdfMake.vfs=Object.assign({},pdfMake.vfs||{},window._PDF_VFS||{});
+    pdfMake.fonts={I4:{normal:'I4.ttf',bold:'I7.ttf'},I5:{normal:'I5.ttf',bold:'I7.ttf'},I6:{normal:'I6.ttf',bold:'I7.ttf'},I7:{normal:'I7.ttf',bold:'I7.ttf'},M4:{normal:'M4.ttf',bold:'M5.ttf'},I5d:{normal:'I5d.ttf',bold:'I7d.ttf'},I7d:{normal:'I7d.ttf',bold:'I7d.ttf'},I4d:{normal:'I4d.ttf',bold:'I7d.ttf'}};
+  }
+  const D=mapDeliveryToTokens(d);
+  const docDef=buildDeliveryDocDef(D,window._TEAL_LOGO_PNG);
+  pdfMake.createPdf(docDef).getBuffer(function(buf){const blob=new Blob([buf],{type:'application/pdf'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=pdfFilename;a.click();URL.revokeObjectURL(url);});
+}
+
 // ── Change order: factory, tokens, PDF ──
 function createChangeOrder(parent,lang){
   const L=lang||(parent&&parent.lang)||'nl';
@@ -3138,7 +3306,8 @@ function App(){
   const tabs=[
     {id:'project',label:ll.tabProject},{id:'scope',label:ll.tabScope},
     {id:'budget',label:ll.tabBudget},{id:'planning',label:ll.tabPlanning},
-    {id:'payment',label:ll.tabPayment},{id:'annexes',label:ll.tabAnnexes},{id:'preview',label:ll.tabPreview},
+    {id:'payment',label:ll.tabPayment},{id:'annexes',label:ll.tabAnnexes},
+    {id:'deliverables',label:ll.tabDeliverables},{id:'preview',label:ll.tabPreview},
   ];
 
   const isCO=d&&d.kind==='change_order';
@@ -3163,6 +3332,7 @@ function App(){
         {tab==='planning'&&<PlanningTab data={d} set={setDWithArchive}/>}
         {tab==='payment'&&<PaymentTab data={d} set={setDWithArchive}/>}
         {tab==='annexes'&&<AnnexesTab data={d} set={setDWithArchive}/>}
+        {tab==='deliverables'&&<DeliverablesTab data={d} set={setDWithArchive}/>}
         {tab==='preview'&&<PreviewTab data={d}/>}
         <div className="between mt24">
           {(()=>{const order=tabs.map(x=>x.id);const i=order.indexOf(tab);return i>0?<button className="btn btn-g" onClick={()=>setTab(order[i-1])}>{d.lang==='nl'?'‹ Vorige sectie':'‹ Previous section'}</button>:<span/>;})()}

@@ -1,4 +1,5 @@
 .vercel
+node_modules
 _*.png
 _logo_check.png
 _pdfcheck*.png
