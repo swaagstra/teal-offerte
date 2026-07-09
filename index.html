@@ -469,8 +469,6 @@ function createProject(type){
     },
     batchSize:type==='assemble'?100:0,
     annexes:defaultAnnexes(),
-    deliverables:[],
-    delivery:defaultDelivery(),
   };
 }
 function defaultDelivery(){
@@ -483,8 +481,6 @@ function migrateConds(d){
   if(!d||!d.conditions)return d;
   const c={...d.conditions};let ch=false;
   if(!d.annexes){d={...d,annexes:defaultAnnexes()};ch=true;}
-  if(!d.deliverables){d={...d,deliverables:[]};ch=true;}
-  if(!d.delivery){d={...d,delivery:defaultDelivery()};ch=true;}
   if(c.meerwerk===undefined){c.meerwerk={nl:I.nl.meerwerkTekst,en:I.en.meerwerkTekst,_ensrc:I.nl.meerwerkTekst};if(c.meerwerkEnabled===undefined)c.meerwerkEnabled=true;ch=true;}
   if(c.akkoord===undefined){c.akkoord={nl:I.nl.akkoordTekst,en:I.en.akkoordTekst,_ensrc:I.nl.akkoordTekst};if(c.akkoordEnabled===undefined)c.akkoordEnabled=true;ch=true;}
   return ch?{...d,conditions:c}:d;
@@ -630,7 +626,7 @@ function archiveLogExport(d){archiveLogAction(d,'pdf_exported');bumpSent(d&&d._a
 // ── Status lifecycle ──
 const STATUS_ORDER=['concept','verstuurd','geaccepteerd','afgewezen'];
 function quoteExpiry(data){try{const base=(data&&data.project&&data.project.date)||(data&&data.date);const days=parseInt((data&&data.conditions&&data.conditions.validity)||(data&&data.validity))||0;if(!base||!days)return null;const dt=new Date(base);dt.setDate(dt.getDate()+days);return dt;}catch(e){return null;}}
-function entryTotal(e){try{const dt=e.data||{};if((e.kind==='change_order')||dt.kind==='change_order'){return (dt.costItems||[]).reduce((s,it)=>s+(+it.amount||0),0);}return calcTotals(dt).grandClient;}catch(_e){return 0;}}
+function entryTotal(e){try{const dt=e.data||{};if((e.kind==='delivery')||dt.kind==='delivery')return 0;if((e.kind==='change_order')||dt.kind==='change_order'){return (dt.costItems||[]).reduce((s,it)=>s+(+it.amount||0),0);}return calcTotals(dt).grandClient;}catch(_e){return 0;}}
 function effectiveStatus(entry){const s=(entry&&entry.status)||'concept';if(s==='verstuurd'){const ex=quoteExpiry(entry.data);if(ex&&ex<new Date())return 'verlopen';}return s;}
 function archiveSetStatus(id,status){if(!id)return;const all=loadArchive();const idx=all.findIndex(x=>x.id===id);if(idx>=0){const now=new Date().toISOString();all[idx].status=status;all[idx].statusAt=now;all[idx].updatedAt=now;all[idx].changelog.push({action:'status_'+status,date:now});saveArchive(all);}}
 function bumpSent(id){if(!id)return;const all=loadArchive();const i=all.findIndex(x=>x.id===id);if(i>=0&&((all[i].status||'concept')==='concept'))archiveSetStatus(id,'verstuurd');}
@@ -2770,7 +2766,7 @@ function mapDeliveryToTokens(d){
     registration:'KvK '+TEAL.kvk+' · BTW '+TEAL.btw,
     dlNo:'DL-'+(d.ref||'000000-0'),
     date:delivered,
-    refNo:d.ref||'—',
+    refNo:d.parentRef||d.ref||'—',
     title:d.project.name||(NL?'Project':'Project'),
     subtitle:NL?'Oplevering / handover':'Delivery / handover',
     client_name:d.client.name||'',client_contact:d.client.contact||'',client_email:d.client.email||'',
@@ -2789,6 +2785,25 @@ function exportDeliveryPDF(d){
   const D=mapDeliveryToTokens(d);
   const docDef=buildDeliveryDocDef(D,window._TEAL_LOGO_PNG);
   pdfMake.createPdf(docDef).getBuffer(function(buf){const blob=new Blob([buf],{type:'application/pdf'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=pdfFilename;a.click();URL.revokeObjectURL(url);});
+}
+
+// Delivery document factory — hangs under a parent quotation, like a change order
+function createDelivery(parent,lang){
+  const L=lang||(parent&&parent.lang)||'nl';
+  const parentRef=parent?(parent.ref||''):'';
+  let n=1;
+  try{if(parentRef)n=loadArchiveLive().filter(e=>e.kind==='delivery'&&e.parentRef===parentRef).length+1;}catch(e){}
+  const ref=parentRef?(parentRef+'-OPL'+n):('OPL-'+new Date().toISOString().slice(2,10).replace(/-/g,'')+'-1');
+  const pp=(parent&&parent.data&&parent.data.project)||{};
+  const pc=(parent&&parent.data&&parent.data.client)||{};
+  return {
+    kind:'delivery',v:1,lang:L,ref:ref,
+    parentId:parent?parent.id:null,parentRef:parentRef,
+    project:{name:parent?(parent.projectName||pp.name||''):'',preparedBy:'Erik Swaagstra',location:pp.location||'',phaseLabel:pp.phaseLabel||''},
+    client:{name:pc.name||'',contact:pc.contact||'',email:pc.email||''},
+    deliverables:[],
+    delivery:defaultDelivery(),
+  };
 }
 
 // ── Change order: factory, tokens, PDF ──
@@ -2937,12 +2952,13 @@ async function pushToOdoo(entry){
 }
 
 // ── Dashboard ──
-function Dashboard({onOpen,onNew,onDuplicate,onDelete,onNewCO,onBumpVersion}){
+function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate,onDelete,onNewCO,onNewDelivery,onNewCOForProject,onNewDeliveryForProject,onBumpVersion}){
   const[archive,setArchive]=useState(loadArchiveLive());
   const[expandedId,setExpandedId]=useState(null);
   const[avRefresh,setAvRefresh]=useState(0);
   const refresh=()=>setArchive(loadArchiveLive());
   const[filter,setFilter]=useState('alle');
+  const[typeFilter,setTypeFilter]=useState('alle');
   const[synced,setSynced]=useState(false);
   useEffect(()=>{pullArchive().then(a=>{setArchive(a);setSynced(true);});},[]);
   const statusMeta={
@@ -2952,26 +2968,88 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete,onNewCO,onBumpVersion}){
     afgewezen:{label:'Afgewezen',color:'#b3261e',bg:'#fce8e6'},
     verlopen:{label:'Verlopen',color:'#8a6d00',bg:'#fff6e0'},
   };
-  // Nest change orders directly under their parent quote
-  const isCOf=e=>e.kind==='change_order'||(e.data&&e.data.kind==='change_order');
-  const parents=archive.filter(e=>!isCOf(e)).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
-  const cosByParent={};const orphanCOs=[];
-  archive.filter(isCOf).forEach(co=>{const pid=co.parentId||(co.data&&co.data.parentId);const pref=co.parentRef||(co.data&&co.data.parentRef);const parent=parents.find(p=>p.ref===pref)||parents.find(p=>p.id===pid);if(parent){(cosByParent[parent.id]=cosByParent[parent.id]||[]).push(co);}else{orphanCOs.push(co);}});
-  Object.keys(cosByParent).forEach(k=>cosByParent[k].sort((a,b)=>(currentVersion(a.ref)-currentVersion(b.ref))||(new Date(a.updatedAt)-new Date(b.updatedAt))));
-  const nestedCoIds=new Set();Object.keys(cosByParent).forEach(k=>cosByParent[k].forEach(co=>nestedCoIds.add(co.id)));
-  const ordered=[];
-  parents.forEach(p=>{ordered.push(p);(cosByParent[p.id]||[]).forEach(co=>ordered.push(co));});
-  orphanCOs.sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt)).forEach(co=>ordered.push(co));
-  // KPI's
+  // Classify: quotations (parents) vs standalone children (change orders + deliveries)
+  const kindOf=e=>e.kind||(e.data&&e.data.kind)||'quote';
+  const isChild=e=>{const k=kindOf(e);return k==='change_order'||k==='delivery';};
+  const parents=archive.filter(e=>!isChild(e)).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
+  const childrenByParent={};const orphanChildren=[];
+  archive.filter(isChild).forEach(c=>{const pid=c.parentId||(c.data&&c.data.parentId);const pref=c.parentRef||(c.data&&c.data.parentRef);const parent=parents.find(p=>p.ref===pref)||parents.find(p=>p.id===pid);if(parent){(childrenByParent[parent.id]=childrenByParent[parent.id]||[]).push(c);}else{orphanChildren.push(c);}});
+  Object.keys(childrenByParent).forEach(k=>childrenByParent[k].sort((a,b)=>{const ka=kindOf(a),kb=kindOf(b);if(ka!==kb)return ka==='change_order'?-1:1;return (currentVersion(a.ref)-currentVersion(b.ref))||(new Date(a.updatedAt)-new Date(b.updatedAt));}));
+  // Group parent quotations by project name
+  const projOrder=[];const projMap={};
+  parents.forEach(p=>{const key=((p.projectName||'').trim())||(' '+p.id);if(!projMap[key]){projMap[key]={key,name:((p.projectName||'').trim())||'Naamloos',first:p,offertes:[],loose:[]};projOrder.push(key);}projMap[key].offertes.push(p);});
+  const namelessOrphans=[];
+  orphanChildren.forEach(c=>{const nm=(c.projectName||(c.data&&c.data.project&&c.data.project.name)||'').trim();if(!nm){namelessOrphans.push(c);return;}if(!projMap[nm]){projMap[nm]={key:nm,name:nm,first:null,offertes:[],loose:[]};projOrder.push(nm);}projMap[nm].loose.push(c);});
+  Object.keys(projMap).forEach(k=>(projMap[k].loose||[]).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt)));
+  // Filters (doc-type + status)
+  const matchType=e=>{if(typeFilter==='alle')return true;const k=kindOf(e);if(typeFilter==='offertes')return k!=='change_order'&&k!=='delivery';if(typeFilter==='change_orders')return k==='change_order';if(typeFilter==='deliveries')return k==='delivery';return true;};
+  const matchStatus=e=>filter==='alle'?true:effectiveStatus(e)===filter;
+  const docVisible=e=>matchType(e)&&matchStatus(e);
+  // KPI's (deliveries carry no money)
   const _now=new Date();const _q0=new Date(_now.getFullYear(),Math.floor(_now.getMonth()/3)*3,1);
   let openVal=0,wonQ=0,acc=0,rej=0;
-  archive.forEach(e=>{const st=effectiveStatus(e);const tot=entryTotal(e);
+  archive.forEach(e=>{if(kindOf(e)==='delivery')return;const st=effectiveStatus(e);const tot=entryTotal(e);
     if(st==='concept'||st==='verstuurd')openVal+=tot;
     if(st==='geaccepteerd'){acc++;const at=new Date(e.statusAt||e.updatedAt);if(at>=_q0)wonQ+=tot;}
     if(st==='afgewezen')rej++;});
   const winRate=(acc+rej)>0?Math.round(acc/(acc+rej)*100):null;
   const counts={alle:archive.length};STATUS_ORDER.concat('verlopen').forEach(s=>{counts[s]=archive.filter(e=>effectiveStatus(e)===s).length;});
-  const visible=ordered.filter(e=>filter==='alle'?true:effectiveStatus(e)===filter);
+  const typeCounts={alle:archive.length,offertes:archive.filter(e=>kindOf(e)!=='change_order'&&kindOf(e)!=='delivery').length,change_orders:archive.filter(e=>kindOf(e)==='change_order').length,deliveries:archive.filter(e=>kindOf(e)==='delivery').length};
+  // Build visible project groups (an offerte shows if it or any of its children matches the filters)
+  const groups=projOrder.map(key=>{const g=projMap[key];const rows=[];g.offertes.forEach(off=>{const kids=childrenByParent[off.id]||[];const visKids=kids.filter(docVisible);if(docVisible(off)||visKids.length){rows.push({e:off,child:false});visKids.forEach(c=>rows.push({e:c,child:true}));}});(g.loose||[]).filter(docVisible).forEach(c=>rows.push({e:c,child:false}));const src=g.first||{projectName:g.name,type:'build',data:{client:((g.loose&&g.loose[0]&&g.loose[0].data&&g.loose[0].data.client)||{})}};return {name:g.name,src,external:!g.first,rows};}).filter(g=>g.rows.length);
+  const orphanRows=namelessOrphans.filter(docVisible).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
+  const anyVisible=groups.length>0||orphanRows.length>0;
+  const renderItem=(item,indent)=>{
+    const isExpanded=expandedId===item.id;
+    const k=kindOf(item);const isCO=k==='change_order';const isDel=k==='delivery';
+    const badge=isCO?{t:'change order',c:'#6b4ea0'}:isDel?{t:'oplevering',c:'#0f766e'}:{t:item.type||'offerte',c:item.type==='build'?'#071412':'#2D8659'};
+    const meta=statusMeta[effectiveStatus(item)]||statusMeta.concept;
+    const phase=item.data&&item.data.project&&item.data.project.phaseLabel;
+    const sub=isDel?(((item.data&&item.data.deliverables)?item.data.deliverables.length:0)+' deliverables'):fmtE(entryTotal(item));
+    return <div key={item.id} className="card" style={{padding:0,overflow:'hidden',marginLeft:indent?24:0,borderLeft:indent?'3px solid '+badge.c:undefined}}>
+      <div style={{padding:'16px 20px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between'}} onClick={()=>setExpandedId(isExpanded?null:item.id)}>
+        <div style={{flex:1}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+            <span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#fff',background:badge.c,padding:'2px 8px',borderRadius:3}}>{badge.t}</span>
+            <span style={{fontWeight:600,fontSize:15}}>{!indent&&phase?phase:(item.projectName||'Naamloos')}</span>
+            <span style={{color:'#999',fontSize:12}}>{item.ref}</span>
+            <span style={{fontSize:11,fontWeight:600,color:meta.color,background:meta.bg,padding:'2px 8px',borderRadius:3}}>{meta.label}</span>
+          </div>
+          <div style={{marginTop:4,fontSize:12,color:'#999'}}>
+            {item.clientName||'Geen klant'} · {sub} · {fmtDt(item.updatedAt)}{indent&&item.parentRef?' · bij '+item.parentRef:''}
+          </div>
+        </div>
+        <div style={{fontSize:18,color:'#999',transform:isExpanded?'rotate(180deg)':'',transition:'.15s'}}>▾</div>
+      </div>
+      {isExpanded&&<div style={{borderTop:'1px solid #eee',padding:'16px 20px'}}>
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:6}}>Status</div>
+          <div className="flex g8" style={{flexWrap:'wrap'}}>
+            {STATUS_ORDER.map(st=>{const on=(item.status||'concept')===st;const m=statusMeta[st];return <button key={st} className="btn btn-sm" onClick={()=>{archiveSetStatus(item.id,st);refresh();}} style={{border:'1px solid '+(on?m.color:'#d0d0ce'),background:on?m.bg:'#fff',color:on?m.color:'#555',fontWeight:on?700:600}}>{m.label}</button>;})}
+          </div>
+        </div>
+        <div className="flex g8" style={{marginBottom:16,flexWrap:'wrap'}}>
+          <button className="btn btn-sm btn-p" onClick={()=>onOpen(item.data)}>Openen</button>
+          <button className="btn btn-sm btn-s" onClick={()=>{onDuplicate(item.data);refresh();}}>Dupliceren</button>
+          {!isCO&&!isDel&&<button className="btn btn-sm btn-g" onClick={()=>{onBumpVersion(item.id);refresh();}}>Nieuwe versie</button>}
+          <button className="btn btn-sm btn-g" onClick={()=>{navigator.clipboard.writeText(shareUrl(item.data));bumpSent(item.id);refresh();alert('Link gekopieerd');}}>Deel link</button>
+          {!isCO&&!isDel&&<button className="btn btn-sm btn-g" onClick={()=>{onNewCO(item);refresh();}}>+ Change order</button>}
+          {!isCO&&!isDel&&<button className="btn btn-sm btn-g" onClick={()=>{onNewDelivery(item);refresh();}}>+ Oplevering</button>}
+          {!isDel&&<button className="btn btn-sm btn-g" title="Maak een concept-factuur in TEAL Odoo" onClick={()=>{pushToOdoo(item).then(refresh);}}>Naar Odoo</button>}
+          <button className="btn btn-sm btn-g" style={{color:'var(--red)'}} onClick={()=>{if(confirm(`"${item.projectName||'Naamloos'}" verwijderen?`)){onDelete(item.id);refresh();}}}>Verwijderen</button>
+        </div>
+        {!isCO&&!isDel&&<div style={{fontSize:12,color:'#555'}}>
+          <strong style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999'}}>Versies</strong>
+          <div style={{marginTop:6,maxHeight:220,overflowY:'auto'}}>
+            {(()=>{const vs=item.changelog.filter(l=>l.action==='version');if(!vs.length)return <div style={{color:'#999'}}>Versie {currentVersion(item.ref)}. Nog geen wijzigingen vastgelegd. Klik op Nieuwe versie om bij een aanpassing te noteren wat er anders is.</div>;return [...vs].reverse().map((log,i)=><div key={i} style={{display:'flex',gap:8,marginBottom:8}}>
+              <span style={{color:'#999',flexShrink:0,width:130}}>{fmtDt(log.date)}</span>
+              <span><strong>Versie {log.version}</strong>{log.note?' — '+log.note:''}</span>
+            </div>);})()}
+          </div>
+        </div>}
+      </div>}
+    </div>;
+  };
   const copyWsUrl=()=>{navigator.clipboard.writeText(workspaceUrl());alert('Werkruimte-link gekopieerd. Open deze op een ander apparaat om je offertes daar te zien. Houd de link prive.');};
   const fmtDt=iso=>{if(!iso)return'-';const d=new Date(iso);return d.toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});};
   const actionLabel={
@@ -3000,7 +3078,7 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete,onNewCO,onBumpVersion}){
         <button className="btn btn-g btn-sm" onClick={copyWsUrl} title="Kopieer een prive-link om je offertes op een ander apparaat te openen">Apparaten</button>
         <button className="btn btn-p" onClick={()=>onNew('build')}>+ Build</button>
         <button className="btn btn-p" onClick={()=>onNew('assemble')}>+ Assemble</button>
-        <button className="btn btn-g" onClick={()=>onNewCO(null)}>+ Change order</button>
+        <button className="btn btn-g" onClick={()=>onNewExternalProject()} title="Voeg een project toe waarvan de offerte buiten de tool is gemaakt, en maak er meteen een change order in aan">+ Project (extern)</button>
       </div>
     </div>
 
@@ -3021,6 +3099,14 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete,onNewCO,onBumpVersion}){
         <div style={{fontSize:24,fontWeight:700,color:'#071412'}}>{winRate==null?'–':winRate+'%'}</div>
         <div className="sm muted">{acc} gewonnen / {rej} verloren</div>
       </div>
+    </div>
+
+    {/* Doc-type filter */}
+    <div className="flex g8" style={{marginBottom:8,flexWrap:'wrap'}}>
+      {[['alle','Alle'],['offertes','Offertes'],['change_orders','Change orders'],['deliveries','Opleveringen']].map(([id,lab])=>{
+        const on=typeFilter===id;const c=id==='change_orders'?'#6b4ea0':id==='deliveries'?'#0f766e':'#071412';
+        return <button key={id} className="btn btn-sm" onClick={()=>setTypeFilter(id)} style={{border:'1px solid '+(on?c:'#d0d0ce'),background:on?c:'#fff',color:on?'#fff':'#555',fontWeight:on?700:600}}>{lab} <span style={{opacity:.7}}>({typeCounts[id]||0})</span></button>;
+      })}
     </div>
 
     {/* Status filter */}
@@ -3044,58 +3130,30 @@ function Dashboard({onOpen,onNew,onDuplicate,onDelete,onNewCO,onBumpVersion}){
       </div>;})}
     </div>
 
-    {visible.length===0?<div className="card" style={{textAlign:'center',padding:48}}>
-      <p style={{color:'#999',marginBottom:16}}>{archive.length===0?'Nog geen offertes. Begin met een nieuwe offerte.':'Geen offertes in dit filter.'}</p>
+    {!anyVisible?<div className="card" style={{textAlign:'center',padding:48}}>
+      <p style={{color:'#999',marginBottom:16}}>{archive.length===0?'Nog geen documenten. Begin met een nieuwe offerte.':'Geen documenten in dit filter.'}</p>
     </div>:
-    <div>{visible.map(item=>{
-      const isExpanded=expandedId===item.id;
-      const isCO=item.kind==='change_order';
-      const indent=isCO&&nestedCoIds.has(item.id);
-      const totV=entryTotal(item);
-      return <div key={item.id} className="card" style={{padding:0,overflow:'hidden',marginLeft:indent?24:0,borderLeft:indent?'3px solid #6b4ea0':undefined}}>
-        <div style={{padding:'16px 20px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between'}} onClick={()=>setExpandedId(isExpanded?null:item.id)}>
-          <div style={{flex:1}}>
-            <div style={{display:'flex',alignItems:'center',gap:10}}>
-              <span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#fff',background:isCO?'#6b4ea0':(item.type==='build'?'#071412':'#2D8659'),padding:'2px 8px',borderRadius:3}}>{isCO?'change order':item.type}</span>
-              <span style={{fontWeight:600,fontSize:15}}>{item.projectName||'Naamloos'}</span>
-              <span style={{color:'#999',fontSize:12}}>{item.ref}</span>
-              {(()=>{const m=statusMeta[effectiveStatus(item)]||statusMeta.concept;return <span style={{fontSize:11,fontWeight:600,color:m.color,background:m.bg,padding:'2px 8px',borderRadius:3}}>{m.label}</span>;})()}
-            </div>
-            <div style={{marginTop:4,fontSize:12,color:'#999'}}>
-              {item.clientName||'Geen klant'} · {fmtE(totV)} · {fmtDt(item.updatedAt)}{isCO&&item.parentRef?' · bij '+item.parentRef:''}
-            </div>
+    <div>
+      {groups.map((g,gi)=><div key={gi} style={{marginBottom:8}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',margin:'22px 0 8px',flexWrap:'wrap',gap:8}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap'}}>
+            <span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#071412'}}>Project</span>
+            <span style={{fontSize:15,fontWeight:700}}>{g.name}</span>
+            {(()=>{const nOff=g.rows.filter(r=>!r.child&&kindOf(r.e)!=='change_order'&&kindOf(r.e)!=='delivery').length;return <span style={{fontSize:12,color:'#999'}}>{nOff>0?nOff+'× offerte':'offerte buiten de tool'}</span>;})()}
           </div>
-          <div style={{fontSize:18,color:'#999',transform:isExpanded?'rotate(180deg)':'',transition:'.15s'}}>▾</div>
+          <div className="flex g8" style={{flexWrap:'wrap'}}>
+            <button className="btn btn-sm btn-g" onClick={()=>onNewInProject(g.src)}>+ Offerte</button>
+            <button className="btn btn-sm btn-g" onClick={()=>onNewCOForProject(g.name)}>+ Change order</button>
+            <button className="btn btn-sm btn-g" onClick={()=>onNewDeliveryForProject(g.name)}>+ Oplevering</button>
+          </div>
         </div>
-
-        {isExpanded&&<div style={{borderTop:'1px solid #eee',padding:'16px 20px'}}>
-          <div style={{marginBottom:14}}>
-            <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:6}}>Status</div>
-            <div className="flex g8" style={{flexWrap:'wrap'}}>
-              {STATUS_ORDER.map(st=>{const on=(item.status||'concept')===st;const m=statusMeta[st];return <button key={st} className="btn btn-sm" onClick={()=>{archiveSetStatus(item.id,st);refresh();}} style={{border:'1px solid '+(on?m.color:'#d0d0ce'),background:on?m.bg:'#fff',color:on?m.color:'#555',fontWeight:on?700:600}}>{m.label}</button>;})}
-            </div>
-          </div>
-          <div className="flex g8" style={{marginBottom:16}}>
-            <button className="btn btn-sm btn-p" onClick={()=>onOpen(item.data)}>Openen</button>
-            <button className="btn btn-sm btn-s" onClick={()=>{onDuplicate(item.data);refresh();}}>Dupliceren</button>
-            {!isCO&&<button className="btn btn-sm btn-g" onClick={()=>{onBumpVersion(item.id);refresh();}}>Nieuwe versie</button>}
-            <button className="btn btn-sm btn-g" onClick={()=>{navigator.clipboard.writeText(shareUrl(item.data));bumpSent(item.id);refresh();alert('Link gekopieerd');}}>Deel link</button>
-            {!isCO&&<button className="btn btn-sm btn-g" onClick={()=>onNewCO(item)}>+ Change order</button>}
-            <button className="btn btn-sm btn-g" title="Maak een concept-factuur in TEAL Odoo" onClick={()=>{pushToOdoo(item).then(refresh);}}>Naar Odoo</button>
-            <button className="btn btn-sm btn-g" style={{color:'var(--red)'}} onClick={()=>{if(confirm(`"${item.projectName||'Naamloos'}" verwijderen?`)){onDelete(item.id);refresh();}}}>Verwijderen</button>
-          </div>
-          <div style={{fontSize:12,color:'#555'}}>
-            <strong style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999'}}>Versies</strong>
-            <div style={{marginTop:6,maxHeight:220,overflowY:'auto'}}>
-              {(()=>{const vs=item.changelog.filter(l=>l.action==='version');if(!vs.length)return <div style={{color:'#999'}}>Versie {currentVersion(item.ref)}. Nog geen wijzigingen vastgelegd. Klik op Nieuwe versie om bij een aanpassing te noteren wat er anders is.</div>;return [...vs].reverse().map((log,i)=><div key={i} style={{display:'flex',gap:8,marginBottom:8}}>
-                <span style={{color:'#999',flexShrink:0,width:130}}>{fmtDt(log.date)}</span>
-                <span><strong>Versie {log.version}</strong>{log.note?' — '+log.note:''}</span>
-              </div>);})()}
-            </div>
-          </div>
-        </div>}
-      </div>;
-    })}</div>}
+        {g.rows.map(r=>renderItem(r.e,r.child))}
+      </div>)}
+      {orphanRows.length>0&&<div>
+        <div style={{margin:'22px 0 8px'}}><span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#999'}}>Losse documenten (geen gekoppelde offerte)</span></div>
+        {orphanRows.map(e=>renderItem(e,false))}
+      </div>}
+    </div>}
   </div>;
 }
 
@@ -3250,6 +3308,37 @@ function ChangeOrderFlow({data:co,set,onBack}){
   </div>;
 }
 
+// ── Delivery (oplevering) flow: standalone document, hangs under a quotation ──
+function DeliveryFlow({data:dv,set,onBack}){
+  const NL=dv.lang==='nl';
+  const upProj=(patch)=>set({...dv,project:{...dv.project,...patch}});
+  const upClient=(patch)=>set({...dv,client:{...dv.client,...patch}});
+  return <div>
+    <div className="between mb16" style={{flexWrap:'wrap',gap:8}}>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <button className="btn btn-g btn-sm" onClick={onBack}>‹ Dashboard</button>
+        <span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#0f766e'}}>{NL?'oplevering':'delivery'}</span>
+        <span style={{fontSize:12,color:'#999'}}>{dv.ref}{dv.parentRef?' · '+(NL?'bij ':'for ')+dv.parentRef:''}</span>
+      </div>
+      <div className="flex g8" style={{alignItems:'center'}}>
+        <div className="flex" style={{border:'1px solid #d0d0ce',borderRadius:4,overflow:'hidden'}}>
+          {['nl','en'].map(lng=><button key={lng} className="btn btn-sm" onClick={()=>set({...dv,lang:lng})} style={{borderRadius:0,border:0,background:dv.lang===lng?'#071412':'#fff',color:dv.lang===lng?'#fff':'#555',fontWeight:dv.lang===lng?700:600}}>{lng.toUpperCase()}</button>)}
+        </div>
+      </div>
+    </div>
+    <div className="card"><div className="card-h">{NL?'Projectgegevens':'Project details'}</div>
+      <div className="row"><div className="fg"><label>{NL?'Projectnaam':'Project name'}</label><input value={dv.project.name} onChange={e=>upProj({name:e.target.value})}/></div>
+        <div className="fg"><label>{NL?'Gekoppelde offerte (ref.)':'Linked quotation (ref.)'}</label><input value={dv.parentRef||''} onChange={e=>{const pr=e.target.value;let pid=null;if(pr.trim()){try{const par=loadArchiveLive().find(x=>x.kind!=='change_order'&&x.kind!=='delivery'&&x.ref===pr.trim());pid=par?par.id:null;}catch(_e){}}set({...dv,parentRef:pr,parentId:pid});}}/></div></div>
+      <div className="row3"><div className="fg"><label>{NL?'Klant':'Client'}</label><input value={dv.client.name} onChange={e=>upClient({name:e.target.value})}/></div>
+        <div className="fg"><label>Contact</label><input value={dv.client.contact} onChange={e=>upClient({contact:e.target.value})}/></div>
+        <div className="fg"><label>E-mail</label><input value={dv.client.email} onChange={e=>upClient({email:e.target.value})}/></div></div>
+      <div className="row"><div className="fg"><label>{NL?'Locatie':'Location'}</label><input value={dv.project.location||''} onChange={e=>upProj({location:e.target.value})}/></div>
+        <div className="fg"><label>{NL?'Fase':'Phase'}</label><input value={dv.project.phaseLabel||''} onChange={e=>upProj({phaseLabel:e.target.value})}/></div></div>
+    </div>
+    <DeliverablesTab data={dv} set={set}/>
+  </div>;
+}
+
 // ── App ──
 function App(){
   const[d,setD]=useState(null);
@@ -3258,9 +3347,10 @@ function App(){
 
   useEffect(()=>{
     const sid=loadShortId();
-    if(sid){fetchShared(sid).then(sd=>{if(sd){const saved=archiveSave(sd&&sd.kind==='change_order'?sd:migrateConds(sd),'created');setD(saved);setShowDash(false);}history.replaceState(null,'','/');});return;}
+    const _std=x=>x&&(x.kind==='change_order'||x.kind==='delivery');
+    if(sid){fetchShared(sid).then(sd=>{if(sd){const saved=archiveSave(_std(sd)?sd:migrateConds(sd),'created');setD(saved);setShowDash(false);}history.replaceState(null,'','/');});return;}
     const h=loadHash();
-    if(h){const saved=archiveSave(h&&h.kind==='change_order'?h:migrateConds(h),'created');setD(saved);setShowDash(false);history.replaceState(null,'',location.pathname);return;}
+    if(h){const saved=archiveSave(_std(h)?h:migrateConds(h),'created');setD(saved);setShowDash(false);history.replaceState(null,'',location.pathname);return;}
     // If there's an active quotation in old storage, keep it available but show dashboard
     const existing=load();
     if(existing&&!existing._archiveId){const saved=archiveSave(existing,'created');save(saved);}
@@ -3272,9 +3362,15 @@ function App(){
     else{setD(null);}
   },[]);
 
-  const openQuote=(data)=>{const md=data&&data.kind==='change_order'?data:migrateConds(data);const saved=archiveSave(md,'updated');save(saved);setD(saved);setTab('project');setShowDash(false);};
+  const isStandalone=(x)=>x&&(x.kind==='change_order'||x.kind==='delivery');
+  const openQuote=(data)=>{const md=isStandalone(data)?data:migrateConds(data);const saved=archiveSave(md,'updated');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const newQuote=(type)=>{const proj=createProject(type);const saved=archiveSave(proj,'created');save(saved);setD(saved);setTab('project');setShowDash(false);};
+  const newQuoteInProject=(fromEntry)=>{const type=fromEntry.type||(fromEntry.data&&fromEntry.data.type)||'build';const proj=createProject(type);proj.project.name=fromEntry.projectName||(fromEntry.data&&fromEntry.data.project&&fromEntry.data.project.name)||'';const pc=(fromEntry.data&&fromEntry.data.client)||{};proj.client={...proj.client,name:pc.name||'',contact:pc.contact||'',email:pc.email||'',addr:pc.addr||'',zip:pc.zip||'',city:pc.city||''};proj.project.location=(fromEntry.data&&fromEntry.data.project&&fromEntry.data.project.location)||'';const saved=archiveSave(proj,'created');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const newCO=(parentEntry)=>{const lang=parentEntry?parentEntry.lang:((d&&d.lang)||'nl');const co=createChangeOrder(parentEntry,lang);const saved=archiveSave(co,'created');save(saved);setD(saved);setShowDash(false);};
+  const newDelivery=(parentEntry)=>{const lang=parentEntry?parentEntry.lang:((d&&d.lang)||'nl');const dvd=createDelivery(parentEntry,lang);const saved=archiveSave(dvd,'created');save(saved);setD(saved);setShowDash(false);};
+  const newCOForProject=(name)=>{const co=createChangeOrder(null,(d&&d.lang)||'nl');if(name)co.project.name=name;const saved=archiveSave(co,'created');save(saved);setD(saved);setShowDash(false);};
+  const newDeliveryForProject=(name)=>{const dvd=createDelivery(null,(d&&d.lang)||'nl');if(name)dvd.project.name=name;const saved=archiveSave(dvd,'created');save(saved);setD(saved);setShowDash(false);};
+  const newExternalProject=()=>{const name=window.prompt('Projectnaam (offerte buiten de tool):');if(name===null)return;const co=createChangeOrder(null,'nl');co.project.name=(name||'').trim();const saved=archiveSave(co,'created');save(saved);setD(saved);setShowDash(false);};
   const bumpVersion=(id)=>{const note=window.prompt('Wat is er anders in deze nieuwe versie? (kort)');if(note===null)return;const e=archiveBumpVersion(id,note);if(e&&d&&d._archiveId===id){setD(e.data);save(e.data);}};
   const duplicateQuote=(data)=>{const copy={...JSON.parse(JSON.stringify(data)),_archiveId:undefined};delete copy._archiveId;const ref=data.ref.split('-');ref[ref.length-1]='1';copy.ref=ref.join('-')+'-copy';archiveSave(copy,'created');archiveLogAction(data,'duplicated');};
   const deleteQuote=(id)=>{archiveDelete(id);if(d&&d._archiveId===id){setD(null);save(null);}};
@@ -3306,17 +3402,18 @@ function App(){
   const tabs=[
     {id:'project',label:ll.tabProject},{id:'scope',label:ll.tabScope},
     {id:'budget',label:ll.tabBudget},{id:'planning',label:ll.tabPlanning},
-    {id:'payment',label:ll.tabPayment},{id:'annexes',label:ll.tabAnnexes},
-    {id:'deliverables',label:ll.tabDeliverables},{id:'preview',label:ll.tabPreview},
+    {id:'payment',label:ll.tabPayment},{id:'annexes',label:ll.tabAnnexes},{id:'preview',label:ll.tabPreview},
   ];
 
   const isCO=d&&d.kind==='change_order';
+  const isDelivery=d&&d.kind==='delivery';
   return <div className="app">
-    <Header data={showDash||isCO?null:d} onPdf={handlePdf} onExport={handleExport} setData={setDWithArchive} onBack={goToDash}/>
-    {!showDash&&d&&!isCO&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
+    <Header data={showDash||isCO||isDelivery?null:d} onPdf={handlePdf} onExport={handleExport} setData={setDWithArchive} onBack={goToDash}/>
+    {!showDash&&d&&!isCO&&!isDelivery&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
     <div className="main">
-      {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onDuplicate={duplicateQuote} onDelete={deleteQuote} onNewCO={newCO} onBumpVersion={bumpVersion}/>:
+      {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onNewInProject={newQuoteInProject} onNewExternalProject={newExternalProject} onDuplicate={duplicateQuote} onDelete={deleteQuote} onNewCO={newCO} onNewDelivery={newDelivery} onNewCOForProject={newCOForProject} onNewDeliveryForProject={newDeliveryForProject} onBumpVersion={bumpVersion}/>:
       isCO?<ChangeOrderFlow data={d} set={setDWithArchive} onBack={goToDash}/>:
+      isDelivery?<DeliveryFlow data={d} set={setDWithArchive} onBack={goToDash}/>:
       !d?<Start onSelect={type=>{if(type==='load'){const r=load();if(r)openQuote(r);}else newQuote(type);}}/>:<>
         <div className="between mb16">
           <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -3332,7 +3429,6 @@ function App(){
         {tab==='planning'&&<PlanningTab data={d} set={setDWithArchive}/>}
         {tab==='payment'&&<PaymentTab data={d} set={setDWithArchive}/>}
         {tab==='annexes'&&<AnnexesTab data={d} set={setDWithArchive}/>}
-        {tab==='deliverables'&&<DeliverablesTab data={d} set={setDWithArchive}/>}
         {tab==='preview'&&<PreviewTab data={d}/>}
         <div className="between mt24">
           {(()=>{const order=tabs.map(x=>x.id);const i=order.indexOf(tab);return i>0?<button className="btn btn-g" onClick={()=>setTab(order[i-1])}>{d.lang==='nl'?'‹ Vorige sectie':'‹ Previous section'}</button>:<span/>;})()}
