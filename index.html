@@ -2710,7 +2710,7 @@ function buildDeliveryDocDef(D, logoImg){
   var PW=595.28,PH=841.89,k=0.75,ML=42.5,MT=48.2,MB=48.2,CW=PW-2*ML;
   var lsf=function(em,fs){return em*fs;};
   var gap=22*k, cardW=(CW-gap)/2, shotH=cardW/DELIV_THUMB_RATIO;
-  function shortUrl(u){var s=String(u==null?'':u).replace(/^https?:\/\//i,'').replace(/^www\./i,'').replace(/\/+$/,'');if(s.length>42)s=s.slice(0,41)+'…';return s;}
+  function shortUrl(u){var s=String(u==null?'':u).replace(/^https?:\/\//i,'').replace(/^www\./i,'').replace(/\/+$/,'');if(s.length<=26)return s;var sl=s.indexOf('/');var host=sl<0?s:s.slice(0,sl);return (sl<0?host:host+'/…');}
   function secHead(no,title,extra){return {columns:[{width:'auto',text:no,font:'M4',fontSize:13*k,color:muted,margin:[0,0,9,0]},{width:'*',text:[{text:String(title).toUpperCase()}].concat(extra?[{text:'  '+extra,color:faint}]:[]),font:'I6',fontSize:13*k,color:ink,characterSpacing:lsf(0.12,13*k)}],margin:[0,0,0,8]};}
   function card(x){
     var s=[];
@@ -2779,7 +2779,7 @@ function mapDeliveryToTokens(d){
     prepared_by:d.project.preparedBy||'Erik Swaagstra',
     address:TEAL.addr+', '+TEAL.zip,
     registration:'KvK '+TEAL.kvk+' · BTW '+TEAL.btw,
-    dlNo:'DL-'+(d.ref||'000000-0'),
+    dlNo:d.ref||'-',
     date:delivered,
     refNo:S.linkedRef||d.parentRef||d.ref||'-',
     title:S.projectName||d.project.name||(NL?'Project':'Project'),
