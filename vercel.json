@@ -1,9 +1,6 @@
 {
   "cleanUrls": true,
   "trailingSlash": false,
-  "functions": {
-    "api/screenshot.js": { "memory": 1024, "maxDuration": 30 }
-  },
   "rewrites": [
     { "source": "/s/(.*)", "destination": "/" }
   ],

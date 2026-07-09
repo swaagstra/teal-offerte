@@ -2109,36 +2109,36 @@ function AnnexesTab({data:d,set}){
 }
 
 // ── Deliverables (linked screenshots for handover) ──
+// Downscale a pasted/dropped image to a reasonable size (keeps localStorage/share light)
+function imgToDataUrl(blob){
+  return new Promise(function(res,rej){
+    var r=new FileReader();
+    r.onload=function(){var img=new Image();img.onload=function(){
+      var maxW=1400,w=img.width,h=img.height;if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}
+      try{var cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);res(cv.toDataURL('image/jpeg',0.82));}
+      catch(e){res(String(r.result));}
+    };img.onerror=function(){rej(new Error('bad image'));};img.src=String(r.result);};
+    r.onerror=function(){rej(new Error('read fail'));};r.readAsDataURL(blob);
+  });
+}
 function DeliverablesTab({data:d,set}){
   const L=d.lang,NL=L==='nl';
   const list=d.deliverables||[];
-  const [busy,setBusy]=useState({});
-  const [err,setErr]=useState({});
   const save=(arr)=>set({...d,deliverables:arr});
   const add=()=>save([...list,{id:uid(),label:{nl:'',en:''},url:'',shot:''}]);
   const del=(i)=>save(list.filter((_,j)=>j!==i));
   const upd=(i,patch)=>{const a=list.slice();a[i]={...a[i],...patch};save(a);};
   const setLabel=(i,val)=>{const a=list.slice();a[i]={...a[i],label:{...(a[i].label||{nl:'',en:''}),[L]:val}};save(a);};
-  const normUrl=(u)=>{u=(u||'').trim();if(!u)return'';return /^https?:\/\//i.test(u)?u:'https://'+u;};
-  const shoot=async(i)=>{
-    const it=list[i];const url=normUrl(it.url);
-    if(!url){setErr(e=>({...e,[it.id]:NL?'Vul eerst een link in.':'Enter a link first.'}));return;}
-    setErr(e=>({...e,[it.id]:''}));setBusy(b=>({...b,[it.id]:true}));
-    try{
-      const r=await fetch('/api/screenshot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
-      const j=await r.json().catch(()=>({}));
-      if(!r.ok||!j.dataUrl)throw new Error(j.error||('HTTP '+r.status));
-      const a=list.slice();a[i]={...a[i],url,shot:j.dataUrl};save(a);
-    }catch(e){setErr(er=>({...er,[it.id]:(NL?'Screenshot mislukt: ':'Screenshot failed: ')+String((e&&e.message)||e)}));}
-    finally{setBusy(b=>({...b,[it.id]:false}));}
-  };
+  const onDropImg=(i,e)=>{e.preventDefault();const f=[...((e.dataTransfer&&e.dataTransfer.files)||[])].find(x=>/^image\//.test(x.type));if(f)imgToDataUrl(f).then(u=>upd(i,{shot:u}));};
+  const onPasteImg=(i,e)=>{const items=(e.clipboardData&&e.clipboardData.items)||[];for(const it of items){if(/^image\//.test(it.type)){const f=it.getAsFile();if(f){e.preventDefault();imgToDataUrl(f).then(u=>upd(i,{shot:u}));break;}}}};
+  const onPickImg=(i,e)=>{const f=e.target.files&&e.target.files[0];if(f)imgToDataUrl(f).then(u=>upd(i,{shot:u}));e.target.value='';};
   const dv=d.delivery||defaultDelivery();
   const upDelivery=(patch)=>set({...d,delivery:{...dv,...patch}});
   const setNote=(val)=>upDelivery({note:{...(dv.note||{nl:'',en:''}),[L]:val}});
   const hasDel=list.some(x=>x.url&&x.url.trim());
   return <div>
     <div className="between mb16" style={{alignItems:'flex-start',gap:12}}>
-      <p className="sm muted" style={{margin:0,flex:1}}>{NL?'Deliverables voor de oplevering. Vul per deliverable een titel en een link in en haal automatisch een screenshot op. Genereer daarna het opleverdocument — een aparte A4-PDF waarin titel en screenshot klikbaar de link openen.':'Deliverables for handover. Add a title and link per item and fetch a screenshot. Then generate the delivery document — a separate A4 PDF where the title and screenshot link to the item.'}</p>
+      <p className="sm muted" style={{margin:0,flex:1}}>{NL?'Deliverables voor de oplevering. Vul per deliverable een titel en een link in, en sleep of plak (⌘V) een screenshot. Genereer daarna het opleverdocument — een aparte A4-PDF waarin titel en screenshot klikbaar de link openen.':'Deliverables for handover. Add a title and link per item, then drop or paste (⌘V) a screenshot. Then generate the delivery document — a separate A4 PDF where the title and screenshot link to the item.'}</p>
       <button className="btn btn-s" disabled={!hasDel} onClick={()=>exportDeliveryPDF(d)}>{NL?'Download opleverdocument':'Download delivery PDF'}</button>
     </div>
     <div className="card">
@@ -2157,12 +2157,18 @@ function DeliverablesTab({data:d,set}){
       <div className="flex g8" style={{marginBottom:8,alignItems:'flex-start',flexWrap:'wrap'}}>
         <input style={{flex:'1 1 240px'}} placeholder={NL?'Titel (bijv. Live demo)':'Title (e.g. Live demo)'} value={t(it.label,L)} onChange={e=>setLabel(i,e.target.value)}/>
         <input style={{flex:'2 1 320px'}} placeholder="https://…" value={it.url||''} onChange={e=>upd(i,{url:e.target.value})}/>
-        <button className="btn btn-sm btn-s" disabled={!!busy[it.id]} onClick={()=>shoot(i)}>{busy[it.id]?(NL?'Bezig…':'Working…'):(it.shot?(NL?'Vernieuw screenshot':'Refresh screenshot'):(NL?'Haal screenshot':'Get screenshot'))}</button>
       </div>
-      {err[it.id]&&<p className="sm" style={{color:'#b00',marginBottom:8}}>{err[it.id]}</p>}
-      {it.shot&&<div style={{marginTop:4}}>
+      {it.shot?<div style={{marginTop:4}}>
         <img src={it.shot} alt="" style={{maxWidth:'100%',maxHeight:280,border:'1px solid #e5e4e0',borderRadius:4,display:'block'}}/>
-        <button className="btn btn-sm btn-g" style={{marginTop:6}} onClick={()=>upd(i,{shot:''})}>{NL?'Verwijder screenshot':'Remove screenshot'}</button>
+        <div className="flex g8" style={{marginTop:6}}>
+          <label className="btn btn-sm btn-g" style={{cursor:'pointer',margin:0}}>{NL?'Vervang afbeelding':'Replace image'}<input type="file" accept="image/*" style={{display:'none'}} onChange={e=>onPickImg(i,e)}/></label>
+          <button className="btn btn-sm btn-g" onClick={()=>upd(i,{shot:''})}>{NL?'Verwijder':'Remove'}</button>
+        </div>
+      </div>:
+      <div tabIndex={0} onPaste={e=>onPasteImg(i,e)} onDragOver={e=>e.preventDefault()} onDrop={e=>onDropImg(i,e)}
+        style={{marginTop:4,border:'1.5px dashed #cfcfca',borderRadius:6,padding:'20px 14px',textAlign:'center',color:'#7a807e',fontSize:13,background:'#faf9f6',outline:'none'}}>
+        {NL?'Klik hier en plak met ⌘V, of sleep een screenshot hierheen':'Click here and paste with ⌘V, or drop a screenshot here'}
+        <div style={{marginTop:8}}><label className="btn btn-sm btn-g" style={{cursor:'pointer',margin:0}}>{NL?'of kies een bestand':'or choose a file'}<input type="file" accept="image/*" style={{display:'none'}} onChange={e=>onPickImg(i,e)}/></label></div>
       </div>}
     </div>)}
     <button className="btn btn-s" style={{marginTop:8}} onClick={add}>+ {NL?'Deliverable':'Deliverable'}</button>
