@@ -473,8 +473,8 @@ function createProject(type){
 }
 function defaultDelivery(){
   return {date:'',note:{
-    nl:'Hierbij leveren we het onderstaande, afgeronde werk op. Elk item verwijst naar de betreffende deliverable — tekeningen, documentatie, media of bestanden. Vervang deze tekst door een korte samenvatting van wat er wordt opgeleverd en wat de opdrachtgever bij ontvangst moet weten.',
-    en:'This package hands over the completed work described below. Each item links to its deliverable — drawings, documentation, media, or files. Replace this note with a short summary of what is being delivered and anything the client needs to know on receipt.'
+    nl:'Hierbij leveren we het onderstaande, afgeronde werk op. Elk item hieronder verwijst naar de bijbehorende deliverable, zoals tekeningen, documentatie, media of bestanden. Neem bij vragen over deze oplevering gerust contact met ons op.',
+    en:'This document hands over the completed work described below. Each item below links to its deliverable, such as drawings, documentation, media or files. If you have any questions about this delivery, please get in touch.'
   }};
 }
 function migrateConds(d){
@@ -2109,14 +2109,22 @@ function AnnexesTab({data:d,set}){
 }
 
 // ── Deliverables (linked screenshots for handover) ──
-// Downscale a pasted/dropped image to a reasonable size (keeps localStorage/share light)
+// Deliverable thumbnails share one aspect ratio (width/height) so the grid lines up neatly.
+const DELIV_THUMB_RATIO=2.8;
+// Crop a pasted/dropped image to the thumbnail ratio (cover, anchored top) and downscale.
 function imgToDataUrl(blob){
   return new Promise(function(res,rej){
     var r=new FileReader();
     r.onload=function(){var img=new Image();img.onload=function(){
-      var maxW=1400,w=img.width,h=img.height;if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}
-      try{var cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);res(cv.toDataURL('image/jpeg',0.82));}
-      catch(e){res(String(r.result));}
+      try{
+        var R=DELIV_THUMB_RATIO,w=img.width,h=img.height,sr=w/h,sw,sh,sx,sy;
+        if(sr>R){sh=h;sw=Math.round(h*R);sx=Math.round((w-sw)/2);sy=0;}   // wider than target: trim the sides
+        else{sw=w;sh=Math.round(w/R);sx=0;sy=0;}                          // taller than target: keep the top
+        var outW=Math.min(1400,sw),outH=Math.round(outW/R);
+        var cv=document.createElement('canvas');cv.width=outW;cv.height=outH;
+        cv.getContext('2d').drawImage(img,sx,sy,sw,sh,0,0,outW,outH);
+        res(cv.toDataURL('image/jpeg',0.82));
+      }catch(e){res(String(r.result));}
     };img.onerror=function(){rej(new Error('bad image'));};img.src=String(r.result);};
     r.onerror=function(){rej(new Error('read fail'));};r.readAsDataURL(blob);
   });
@@ -2701,12 +2709,12 @@ function buildDeliveryDocDef(D, logoImg){
   var ink='#05100e',paper='#f6f5f1',body='#2b302f',sec='#4a4f4e',muted='#7a807e',faint='#9aa09e',hair='#e5e4e0',track='#ecebe6',green='#2a7a4f';
   var PW=595.28,PH=841.89,k=0.75,ML=42.5,MT=48.2,MB=48.2,CW=PW-2*ML;
   var lsf=function(em,fs){return em*fs;};
-  var gap=22*k, cardW=(CW-gap)/2, shotH=112*k;
+  var gap=22*k, cardW=(CW-gap)/2, shotH=cardW/DELIV_THUMB_RATIO;
   function shortUrl(u){var s=String(u==null?'':u).replace(/^https?:\/\//i,'').replace(/^www\./i,'').replace(/\/+$/,'');if(s.length>42)s=s.slice(0,41)+'…';return s;}
   function secHead(no,title,extra){return {columns:[{width:'auto',text:no,font:'M4',fontSize:13*k,color:muted,margin:[0,0,9,0]},{width:'*',text:[{text:String(title).toUpperCase()}].concat(extra?[{text:'  '+extra,color:faint}]:[]),font:'I6',fontSize:13*k,color:ink,characterSpacing:lsf(0.12,13*k)}],margin:[0,0,0,8]};}
   function card(x){
     var s=[];
-    if(x.shot)s.push({image:x.shot,link:x.url,fit:[cardW,shotH],width:cardW,margin:[0,0,0,10*k]});
+    if(x.shot)s.push({image:x.shot,link:x.url,width:cardW,height:shotH,margin:[0,0,0,10*k]});
     else s.push({canvas:[{type:'rect',x:0,y:0,w:cardW,h:shotH,r:8*k,color:track}],margin:[0,0,0,10*k]});
     s.push({columns:[{width:'auto',text:x.num,font:'M4',fontSize:11*k,color:faint},{width:'*',text:x.title,font:'I5',fontSize:14*k,color:ink}],columnGap:8*k});
     s.push({text:shortUrl(x.url),link:x.url,font:'M4',fontSize:11*k,color:green,margin:[0,4*k,0,0]});
@@ -2762,10 +2770,10 @@ function buildDeliveryDocDef(D, logoImg){
 
 function mapDeliveryToTokens(d){
   const L=d.lang,NL=L==='nl';
-  const fmtLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'—';
+  const fmtLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'-';
   const dv=d.delivery||{};
   const dels=(d.deliverables||[]).filter(x=>x.url).map((x,i)=>({num:String(i+1).padStart(2,'0'),title:t(x.label,L)||((NL?'Deliverable ':'Deliverable ')+(i+1)),url:x.url,shot:x.shot||''}));
-  const delivered=dv.date?fmtLong(dv.date):(d.project.deliveryDate?fmtLong(d.project.deliveryDate):'—');
+  const delivered=dv.date?fmtLong(dv.date):(d.project.deliveryDate?fmtLong(d.project.deliveryDate):'-');
   const S=resolveSharedInfo(d);
   return {
     prepared_by:d.project.preparedBy||'Erik Swaagstra',
@@ -2773,7 +2781,7 @@ function mapDeliveryToTokens(d){
     registration:'KvK '+TEAL.kvk+' · BTW '+TEAL.btw,
     dlNo:'DL-'+(d.ref||'000000-0'),
     date:delivered,
-    refNo:S.linkedRef||d.parentRef||d.ref||'—',
+    refNo:S.linkedRef||d.parentRef||d.ref||'-',
     title:S.projectName||d.project.name||(NL?'Project':'Project'),
     subtitle:NL?'Oplevering / handover':'Delivery / handover',
     client_name:S.client.name||d.client.name||'',client_contact:S.client.contact||d.client.contact||'',client_email:S.client.email||d.client.email||'',
@@ -3214,9 +3222,9 @@ function ChangeOrderEditor({data:co,set}){
           <div className="between" style={{alignItems:'baseline'}}><div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Projectdetails':'Project details'}</div>
             <span className="sm muted">{S.source==='offerte'?(NL?'overgenomen van de offerte':'inherited from the quotation'):(NL?'overgenomen van het project':'inherited from the project')}</span></div>
           <div className="sm" style={{margin:'10px 0 14px',lineHeight:1.8,color:'#2b302f'}}>
-            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Project':'Project'}</span>{S.projectName||'—'}</div>
-            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Klant':'Client'}</span>{[S.client.name,S.client.contact,S.client.email].filter(Boolean).join(' · ')||'—'}</div>
-            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Gekoppelde offerte':'Linked quotation'}</span>{S.linkedRef||'—'}</div>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Project':'Project'}</span>{S.projectName||'-'}</div>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Klant':'Client'}</span>{[S.client.name,S.client.contact,S.client.email].filter(Boolean).join(' · ')||'-'}</div>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Gekoppelde offerte':'Linked quotation'}</span>{S.linkedRef||'-'}</div>
           </div>
           <div className="row"><div className="fg"><label>{NL?'Huidige fase':'Current phase'}</label><input value={co.project.currentPhase} onChange={e=>upProj({currentPhase:e.target.value})}/></div>
             <div className="fg"><label>{NL?'Datum':'Date'}</label><input type="date" value={co.date} onChange={e=>up({date:e.target.value})}/></div></div>
@@ -3381,9 +3389,9 @@ function DeliveryFlow({data:dv,set,onBack}){
           <div className="between" style={{alignItems:'baseline'}}><div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Projectgegevens':'Project details'}</div>
             <span className="sm muted">{S.source==='offerte'?(NL?'overgenomen van de offerte':'inherited from the quotation'):(NL?'overgenomen van het project':'inherited from the project')}</span></div>
           <div className="sm" style={{marginTop:10,lineHeight:1.8,color:'#2b302f'}}>
-            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Project':'Project'}</span>{S.projectName||'—'}{S.phase?' · '+S.phase:''}</div>
-            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Klant':'Client'}</span>{[S.client.name,S.client.contact,S.client.email].filter(Boolean).join(' · ')||'—'}</div>
-            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Gekoppelde offerte':'Linked quotation'}</span>{S.linkedRef||'—'}</div>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Project':'Project'}</span>{S.projectName||'-'}{S.phase?' · '+S.phase:''}</div>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Klant':'Client'}</span>{[S.client.name,S.client.contact,S.client.email].filter(Boolean).join(' · ')||'-'}</div>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Gekoppelde offerte':'Linked quotation'}</span>{S.linkedRef||'-'}</div>
             {S.location&&<div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Locatie':'Location'}</span>{S.location}</div>}
           </div>
           <p className="sm muted" style={{marginTop:10,marginBottom:0}}>{S.source==='offerte'?(NL?'Deze gegevens beheer je op de offerte.':'Manage these on the quotation.'):(NL?'Deze gegevens beheer je op de eerste change order van dit project.':'Manage these on the first change order of this project.')}</p>
