@@ -2760,17 +2760,18 @@ function mapDeliveryToTokens(d){
   const dv=d.delivery||{};
   const dels=(d.deliverables||[]).filter(x=>x.url).map((x,i)=>({num:String(i+1).padStart(2,'0'),title:t(x.label,L)||((NL?'Deliverable ':'Deliverable ')+(i+1)),url:x.url,shot:x.shot||''}));
   const delivered=dv.date?fmtLong(dv.date):(d.project.deliveryDate?fmtLong(d.project.deliveryDate):'—');
+  const S=resolveSharedInfo(d);
   return {
     prepared_by:d.project.preparedBy||'Erik Swaagstra',
     address:TEAL.addr+', '+TEAL.zip,
     registration:'KvK '+TEAL.kvk+' · BTW '+TEAL.btw,
     dlNo:'DL-'+(d.ref||'000000-0'),
     date:delivered,
-    refNo:d.parentRef||d.ref||'—',
-    title:d.project.name||(NL?'Project':'Project'),
+    refNo:S.linkedRef||d.parentRef||d.ref||'—',
+    title:S.projectName||d.project.name||(NL?'Project':'Project'),
     subtitle:NL?'Oplevering / handover':'Delivery / handover',
-    client_name:d.client.name||'',client_contact:d.client.contact||'',client_email:d.client.email||'',
-    location:d.project.location||'',phase:d.project.phaseLabel||'',delivered:delivered,
+    client_name:S.client.name||d.client.name||'',client_contact:S.client.contact||d.client.contact||'',client_email:S.client.email||d.client.email||'',
+    location:S.location||d.project.location||'',phase:S.phase||d.project.phaseLabel||'',delivered:delivered,
     note:t(dv.note,L)||'',
     deliverables:dels, nl:NL
   };
@@ -2831,21 +2832,41 @@ function createChangeOrder(parent,lang){
     sign:{nl:'Door ondertekening bevestigt de klant deze change order en geeft TEAL opdracht door te gaan. Werk start pas nadat dit document is ondertekend en geretourneerd.',en:'By signing below, the client confirms this change order and authorizes TEAL to proceed. Work does not start until this document is signed and returned.'}
   };
 }
+// Shared project info: project name, client and the linked quotation reference belong to the
+// project — resolved from the parent quotation (or, for external projects, the oldest doc
+// sharing the project name). Change orders and deliveries inherit it instead of re-entering.
+function resolveSharedInfo(doc){
+  if(!doc)return {projectName:'',client:{},location:'',phase:'',linkedRef:'',source:'self',editable:true};
+  var arch=[];try{arch=loadArchiveLive();}catch(e){}
+  var isQuote=function(x){return x.kind!=='change_order'&&x.kind!=='delivery';};
+  var pref=(doc.parentRef||'').trim(),pid=doc.parentId||null,par=null;
+  if(pref)par=arch.find(function(x){return isQuote(x)&&x.ref===pref;});
+  if(!par&&pid)par=arch.find(function(x){return isQuote(x)&&x.id===pid;});
+  if(par){var D=par.data||{};return {projectName:(D.project&&D.project.name)||par.projectName||'',client:D.client||{},location:(D.project&&D.project.location)||'',phase:(D.project&&D.project.phaseLabel)||'',linkedRef:par.ref||'',source:'offerte',editable:false};}
+  var nm=((doc.project&&doc.project.name)||'').trim();
+  if(nm){
+    var peers=arch.filter(function(x){return ((x.projectName||(x.data&&x.data.project&&x.data.project.name)||'').trim())===nm;}).sort(function(a,b){return new Date(a.createdAt||0)-new Date(b.createdAt||0);});
+    var head=peers[0];
+    if(head&&head.id!==doc._archiveId){var H=head.data||{};return {projectName:nm,client:H.client||{},location:(H.project&&H.project.location)||'',phase:'',linkedRef:H.parentRef||'',source:'head',editable:false};}
+  }
+  return {projectName:nm,client:doc.client||{},location:(doc.project&&doc.project.location)||'',phase:(doc.project&&doc.project.phaseLabel)||'',linkedRef:doc.parentRef||'',source:'self',editable:true};
+}
 function mapChangeOrderTokens(co){
   const L=co.lang,NL=L==='nl';
+  const S=resolveSharedInfo(co);
   const fmtLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
   const items=(co.costItems||[]).filter(it=>t(it.desc,L)||(+it.amount)).map(it=>({d:t(it.desc,L)||'',a:fmtE(+it.amount||0)}));
   const subtotal=(co.costItems||[]).reduce((s,it)=>s+(+it.amount||0),0);
   const vat=co.showVat?subtotal*(co.vatPct||0)/100:0;
-  return {nl:NL,number:co.ref,parentRef:co.parentRef||'',date:fmtLong(co.date),valid:(co.validity||14)+' '+(NL?'dagen':'days'),
+  return {nl:NL,number:co.ref,parentRef:S.linkedRef||co.parentRef||'',date:fmtLong(co.date),valid:(co.validity||14)+' '+(NL?'dagen':'days'),
     prepared_by:co.project.preparedBy||'Erik Swaagstra',address:TEAL.addr+', '+TEAL.zip,registration:'KvK '+TEAL.kvk+' · BTW '+TEAL.btw,
-    project_name:co.project.name||'',current_phase:co.project.currentPhase||'',
-    client_name:co.client.name||'',client_contact:co.client.contact||'',client_email:co.client.email||'',
+    project_name:S.projectName||co.project.name||'',current_phase:co.project.currentPhase||'',
+    client_name:S.client.name||co.client.name||'',client_contact:S.client.contact||co.client.contact||'',client_email:S.client.email||co.client.email||'',
     requested_by:co.requestedBy||'',description:t(co.description,L),reason:t(co.reason,L),
     scope:t(co.impact.scope,L),planning:t(co.impact.planning,L),risks:t(co.impact.risks,L),
     items,subtotal:fmtE(subtotal),vat:fmtE(vat),vatPct:co.vatPct||0,showVat:!!co.showVat&&subtotal>0,total:fmtE(subtotal+vat),
     timing:co.invoiceTiming==='on_signing'?(NL?'Kosten worden gefactureerd bij ondertekening van dit document.':'Costs are invoiced upon signing of this document.'):(NL?'Kosten worden toegevoegd aan de volgende factuur.':'Costs are added to the next invoice.'),
-    sign_line:t(co.sign,L),accepted_by:co.client.name||'',title:co.project.name||'',subtitle:(NL?'Change order bij ':'Change order to ')+(co.parentRef||'')};
+    sign_line:t(co.sign,L),accepted_by:S.client.name||co.client.name||'',title:S.projectName||co.project.name||'',subtitle:(NL?'Change order bij ':'Change order to ')+(S.linkedRef||co.parentRef||'')};
 }
 function buildChangeOrderDocDef(D,logoImg){
   var ink='#05100e',body='#2b302f',sec='#4a4f4e',muted='#7a807e',faint='#9aa09e',hair='#e5e4e0';
@@ -3171,16 +3192,29 @@ function ChangeOrderEditor({data:co,set}){
   const addItem=()=>set({...co,costItems:[...(co.costItems||[]),{desc:{nl:'',en:''},amount:0}]});
   const delItem=(i)=>set({...co,costItems:co.costItems.filter((_,j)=>j!==i)});
   const subtotal=(co.costItems||[]).reduce((s,it)=>s+(+it.amount||0),0);
+  const S=resolveSharedInfo(co);
   return <div>
-    <div className="card"><div className="card-h">{NL?'Projectdetails':'Project details'}</div>
-      <div className="row"><div className="fg"><label>{NL?'Projectnaam':'Project name'}</label><input value={co.project.name} onChange={e=>upProj({name:e.target.value})}/></div>
-        <div className="fg"><label>{NL?'Contractref.':'Contract ref.'}</label><input value={co.parentRef||''} onChange={e=>{const pr=e.target.value;let num=(String(co.ref||'').match(/-CO(\d+)$/)||[])[1]||'1';let pid=null;if(pr.trim()){try{const par=loadArchiveLive().find(x=>x.kind!=='change_order'&&x.ref===pr.trim());pid=par?par.id:null;num=String(loadArchiveLive().filter(x=>x.kind==='change_order'&&x.id!==co._archiveId&&x.parentRef===pr.trim()).length+1);}catch(_e){}}up({parentRef:pr,parentId:pid,ref:pr.trim()?pr.trim()+'-CO'+num:co.ref});}}/></div></div>
-      <div className="row"><div className="fg"><label>{NL?'Huidige fase':'Current phase'}</label><input value={co.project.currentPhase} onChange={e=>upProj({currentPhase:e.target.value})}/></div>
-        <div className="fg"><label>{NL?'Datum':'Date'}</label><input type="date" value={co.date} onChange={e=>up({date:e.target.value})}/></div></div>
-      <div className="row3"><div className="fg"><label>{NL?'Klant':'Client'}</label><input value={co.client.name} onChange={e=>upClient({name:e.target.value})}/></div>
-        <div className="fg"><label>Contact</label><input value={co.client.contact} onChange={e=>upClient({contact:e.target.value})}/></div>
-        <div className="fg"><label>E-mail</label><input value={co.client.email} onChange={e=>upClient({email:e.target.value})}/></div></div>
-    </div>
+    {S.editable
+      ? <div className="card"><div className="card-h">{NL?'Projectdetails':'Project details'}</div>
+          <div className="row"><div className="fg"><label>{NL?'Projectnaam':'Project name'}</label><input value={co.project.name} onChange={e=>upProj({name:e.target.value})}/></div>
+            <div className="fg"><label>{NL?'Gekoppelde offerte (ref.)':'Linked quotation (ref.)'}</label><input value={co.parentRef||''} onChange={e=>{const pr=e.target.value;let num=(String(co.ref||'').match(/-CO(\d+)$/)||[])[1]||'1';let pid=null;if(pr.trim()){try{const par=loadArchiveLive().find(x=>x.kind!=='change_order'&&x.ref===pr.trim());pid=par?par.id:null;num=String(loadArchiveLive().filter(x=>x.kind==='change_order'&&x.id!==co._archiveId&&x.parentRef===pr.trim()).length+1);}catch(_e){}}up({parentRef:pr,parentId:pid,ref:pr.trim()?pr.trim()+'-CO'+num:co.ref});}}/></div></div>
+          <div className="row"><div className="fg"><label>{NL?'Huidige fase':'Current phase'}</label><input value={co.project.currentPhase} onChange={e=>upProj({currentPhase:e.target.value})}/></div>
+            <div className="fg"><label>{NL?'Datum':'Date'}</label><input type="date" value={co.date} onChange={e=>up({date:e.target.value})}/></div></div>
+          <div className="row3"><div className="fg"><label>{NL?'Klant':'Client'}</label><input value={co.client.name} onChange={e=>upClient({name:e.target.value})}/></div>
+            <div className="fg"><label>Contact</label><input value={co.client.contact} onChange={e=>upClient({contact:e.target.value})}/></div>
+            <div className="fg"><label>E-mail</label><input value={co.client.email} onChange={e=>upClient({email:e.target.value})}/></div></div>
+        </div>
+      : <div className="card">
+          <div className="between" style={{alignItems:'baseline'}}><div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Projectdetails':'Project details'}</div>
+            <span className="sm muted">{S.source==='offerte'?(NL?'overgenomen van de offerte':'inherited from the quotation'):(NL?'overgenomen van het project':'inherited from the project')}</span></div>
+          <div className="sm" style={{margin:'10px 0 14px',lineHeight:1.8,color:'#2b302f'}}>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Project':'Project'}</span>{S.projectName||'—'}</div>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Klant':'Client'}</span>{[S.client.name,S.client.contact,S.client.email].filter(Boolean).join(' · ')||'—'}</div>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Gekoppelde offerte':'Linked quotation'}</span>{S.linkedRef||'—'}</div>
+          </div>
+          <div className="row"><div className="fg"><label>{NL?'Huidige fase':'Current phase'}</label><input value={co.project.currentPhase} onChange={e=>upProj({currentPhase:e.target.value})}/></div>
+            <div className="fg"><label>{NL?'Datum':'Date'}</label><input type="date" value={co.date} onChange={e=>up({date:e.target.value})}/></div></div>
+        </div>}
     <div className="card"><div className="card-h">{NL?'Omschrijving wijziging':'Description of change'}</div>
       <div className="fg" style={{marginBottom:12}}><label>{NL?'Aangevraagd door':'Requested by'}</label><input value={co.requestedBy} onChange={e=>up({requestedBy:e.target.value})}/></div>
       <div className="fg" style={{marginBottom:12}}><label>{NL?'Omschrijving':'Description'}</label><textarea value={tval(co.description)} onChange={e=>setTL('description',e.target.value)}/></div>
@@ -3313,6 +3347,7 @@ function DeliveryFlow({data:dv,set,onBack}){
   const NL=dv.lang==='nl';
   const upProj=(patch)=>set({...dv,project:{...dv.project,...patch}});
   const upClient=(patch)=>set({...dv,client:{...dv.client,...patch}});
+  const S=resolveSharedInfo(dv);
   return <div>
     <div className="between mb16" style={{flexWrap:'wrap',gap:8}}>
       <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -3326,15 +3361,27 @@ function DeliveryFlow({data:dv,set,onBack}){
         </div>
       </div>
     </div>
-    <div className="card"><div className="card-h">{NL?'Projectgegevens':'Project details'}</div>
-      <div className="row"><div className="fg"><label>{NL?'Projectnaam':'Project name'}</label><input value={dv.project.name} onChange={e=>upProj({name:e.target.value})}/></div>
-        <div className="fg"><label>{NL?'Gekoppelde offerte (ref.)':'Linked quotation (ref.)'}</label><input value={dv.parentRef||''} onChange={e=>{const pr=e.target.value;let pid=null;if(pr.trim()){try{const par=loadArchiveLive().find(x=>x.kind!=='change_order'&&x.kind!=='delivery'&&x.ref===pr.trim());pid=par?par.id:null;}catch(_e){}}set({...dv,parentRef:pr,parentId:pid});}}/></div></div>
-      <div className="row3"><div className="fg"><label>{NL?'Klant':'Client'}</label><input value={dv.client.name} onChange={e=>upClient({name:e.target.value})}/></div>
-        <div className="fg"><label>Contact</label><input value={dv.client.contact} onChange={e=>upClient({contact:e.target.value})}/></div>
-        <div className="fg"><label>E-mail</label><input value={dv.client.email} onChange={e=>upClient({email:e.target.value})}/></div></div>
-      <div className="row"><div className="fg"><label>{NL?'Locatie':'Location'}</label><input value={dv.project.location||''} onChange={e=>upProj({location:e.target.value})}/></div>
-        <div className="fg"><label>{NL?'Fase':'Phase'}</label><input value={dv.project.phaseLabel||''} onChange={e=>upProj({phaseLabel:e.target.value})}/></div></div>
-    </div>
+    {S.editable
+      ? <div className="card"><div className="card-h">{NL?'Projectgegevens':'Project details'}</div>
+          <div className="row"><div className="fg"><label>{NL?'Projectnaam':'Project name'}</label><input value={dv.project.name} onChange={e=>upProj({name:e.target.value})}/></div>
+            <div className="fg"><label>{NL?'Gekoppelde offerte (ref.)':'Linked quotation (ref.)'}</label><input value={dv.parentRef||''} onChange={e=>{const pr=e.target.value;let pid=null;if(pr.trim()){try{const par=loadArchiveLive().find(x=>x.kind!=='change_order'&&x.kind!=='delivery'&&x.ref===pr.trim());pid=par?par.id:null;}catch(_e){}}set({...dv,parentRef:pr,parentId:pid});}}/></div></div>
+          <div className="row3"><div className="fg"><label>{NL?'Klant':'Client'}</label><input value={dv.client.name} onChange={e=>upClient({name:e.target.value})}/></div>
+            <div className="fg"><label>Contact</label><input value={dv.client.contact} onChange={e=>upClient({contact:e.target.value})}/></div>
+            <div className="fg"><label>E-mail</label><input value={dv.client.email} onChange={e=>upClient({email:e.target.value})}/></div></div>
+          <div className="row"><div className="fg"><label>{NL?'Locatie':'Location'}</label><input value={dv.project.location||''} onChange={e=>upProj({location:e.target.value})}/></div>
+            <div className="fg"><label>{NL?'Fase':'Phase'}</label><input value={dv.project.phaseLabel||''} onChange={e=>upProj({phaseLabel:e.target.value})}/></div></div>
+        </div>
+      : <div className="card">
+          <div className="between" style={{alignItems:'baseline'}}><div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Projectgegevens':'Project details'}</div>
+            <span className="sm muted">{S.source==='offerte'?(NL?'overgenomen van de offerte':'inherited from the quotation'):(NL?'overgenomen van het project':'inherited from the project')}</span></div>
+          <div className="sm" style={{marginTop:10,lineHeight:1.8,color:'#2b302f'}}>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Project':'Project'}</span>{S.projectName||'—'}{S.phase?' · '+S.phase:''}</div>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Klant':'Client'}</span>{[S.client.name,S.client.contact,S.client.email].filter(Boolean).join(' · ')||'—'}</div>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Gekoppelde offerte':'Linked quotation'}</span>{S.linkedRef||'—'}</div>
+            {S.location&&<div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Locatie':'Location'}</span>{S.location}</div>}
+          </div>
+          <p className="sm muted" style={{marginTop:10,marginBottom:0}}>{S.source==='offerte'?(NL?'Deze gegevens beheer je op de offerte.':'Manage these on the quotation.'):(NL?'Deze gegevens beheer je op de eerste change order van dit project.':'Manage these on the first change order of this project.')}</p>
+        </div>}
     <DeliverablesTab data={dv} set={set}/>
   </div>;
 }
