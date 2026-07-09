@@ -2781,7 +2781,7 @@ function mapDeliveryToTokens(d){
 }
 
 function exportDeliveryPDF(d){
-  const pdfFilename=`Oplevering ${d.ref||'Draft'} - TEAL.pdf`;
+  const pdfFilename=`${d.lang==='en'?'Delivery':'Oplevering'} ${d.ref||'Draft'} - TEAL.pdf`;
   if(window.pdfMake){
     pdfMake.vfs=Object.assign({},pdfMake.vfs||{},window._PDF_VFS||{});
     pdfMake.fonts={I4:{normal:'I4.ttf',bold:'I7.ttf'},I5:{normal:'I5.ttf',bold:'I7.ttf'},I6:{normal:'I6.ttf',bold:'I7.ttf'},I7:{normal:'I7.ttf',bold:'I7.ttf'},M4:{normal:'M4.ttf',bold:'M5.ttf'},I5d:{normal:'I5d.ttf',bold:'I7d.ttf'},I7d:{normal:'I7d.ttf',bold:'I7d.ttf'},I4d:{normal:'I4d.ttf',bold:'I7d.ttf'}};
