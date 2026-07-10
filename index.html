@@ -1551,7 +1551,7 @@ function ProjectTab({data:d,set}){
         <div className="fg"><label>{ll.locatie||'Locatie'}</label><input value={d.project.location||''} onChange={e=>up('location',e.target.value)} placeholder={d.lang==='nl'?'bijv. Den Haag':'e.g. The Hague'}/></div>
       </div>
       <div className="row">
-        <div className="fg"><label>{L==='nl'?'Subtitel':'Subtitle'}</label><input value={d.project.subtitle||''} onChange={e=>up('subtitle',e.target.value)} placeholder={L==='nl'?'bijv. Ontwerpfase':'e.g. Design phase'}/></div>
+        <div className="fg"><label>{L==='nl'?'Fase':'Phase'}</label><input value={d.project.subtitle||''} onChange={e=>up('subtitle',e.target.value)} placeholder={L==='nl'?'bijv. Ontwerpfase':'e.g. Design phase'}/></div>
         <div className="fg"><label>{L==='nl'?'Fase-label (details)':'Phase label (details)'}</label><input value={d.project.phaseLabel||''} onChange={e=>up('phaseLabel',e.target.value)} placeholder={L==='nl'?'bijv. Ontwerpfase (betaald)':'e.g. Design phase (paid de-risk)'}/></div>
       </div>
       <div className="row">
@@ -2746,7 +2746,7 @@ function buildDeliveryDocDef(D, logoImg){
   }
   var det=[];
   if(D.location)det.push({text:[{text:(D.nl?'Locatie':'Location')+'  ',color:muted},{text:D.location,color:body}],fontSize:13*k,lineHeight:1.7});
-  det.push({text:[{text:(D.nl?'Fase':'Phase')+'  ',color:muted},{text:D.phase||(D.nl?'Definitieve oplevering':'Final delivery'),color:body}],fontSize:13*k,lineHeight:1.7});
+  if(D.phase)det.push({text:[{text:(D.nl?'Fase':'Phase')+'  ',color:muted},{text:D.phase,color:body}],fontSize:13*k,lineHeight:1.7});
   det.push({text:[{text:(D.nl?'Opgeleverd':'Delivered')+'  ',color:muted},{text:D.delivered,color:body}],fontSize:13*k,lineHeight:1.7});
   var c=[];
   c.push({columns:[{width:'auto',image:logoImg,fit:[240,34*k]},{width:'*',text:(D.nl?'Oplevering':'Delivery').toUpperCase(),font:'I7d',fontSize:26*k,color:'#000',characterSpacing:lsf(0.04,26*k),alignment:'right'}]});
@@ -2800,7 +2800,7 @@ function mapDeliveryToTokens(d){
     title:S.projectName||d.project.name||(NL?'Project':'Project'),
     subtitle:NL?'Oplevering / handover':'Delivery / handover',
     client_name:S.client.name||d.client.name||'',client_contact:S.client.contact||d.client.contact||'',client_email:S.client.email||d.client.email||'',
-    location:S.location||d.project.location||'',phase:S.phase||d.project.phaseLabel||'',delivered:delivered,
+    location:S.location||d.project.location||'',phase:S.phase||d.project.subtitle||d.project.phaseLabel||'',delivered:delivered,
     note:t(dv.note,L)||'',
     deliverables:dels, nl:NL
   };
@@ -2871,7 +2871,7 @@ function resolveSharedInfo(doc){
   var pref=(doc.parentRef||'').trim(),pid=doc.parentId||null,par=null;
   if(pref)par=arch.find(function(x){return isQuote(x)&&x.ref===pref;});
   if(!par&&pid)par=arch.find(function(x){return isQuote(x)&&x.id===pid;});
-  if(par){var D=par.data||{};return {projectName:(D.project&&D.project.name)||par.projectName||'',client:D.client||{},location:(D.project&&D.project.location)||'',phase:(D.project&&D.project.phaseLabel)||'',linkedRef:par.ref||'',source:'offerte',editable:false};}
+  if(par){var D=par.data||{};return {projectName:(D.project&&D.project.name)||par.projectName||'',client:D.client||{},location:(D.project&&D.project.location)||'',phase:(D.project&&(D.project.subtitle||D.project.phaseLabel))||'',linkedRef:par.ref||'',source:'offerte',editable:false};}
   var nm=((doc.project&&doc.project.name)||'').trim();
   if(nm){
     var peers=arch.filter(function(x){return ((x.projectName||(x.data&&x.data.project&&x.data.project.name)||'').trim())===nm;}).sort(function(a,b){return new Date(a.createdAt||0)-new Date(b.createdAt||0);});
@@ -3054,7 +3054,7 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
     const k=kindOf(item);const isCO=k==='change_order';const isDel=k==='delivery';
     const badge=isCO?{t:'change order',c:'#6b4ea0'}:isDel?{t:'oplevering',c:'#0f766e'}:{t:item.type||'offerte',c:item.type==='build'?'#071412':'#2D8659'};
     const meta=statusMeta[effectiveStatus(item)]||statusMeta.concept;
-    const phase=item.data&&item.data.project&&item.data.project.phaseLabel;
+    const phase=item.data&&item.data.project&&(item.data.project.subtitle||item.data.project.phaseLabel);
     const sub=isDel?(((item.data&&item.data.deliverables)?item.data.deliverables.length:0)+' deliverables'):fmtE(entryTotal(item));
     return <div key={item.id} className="card" style={{padding:0,overflow:'hidden',marginLeft:indent?24:0,borderLeft:indent?'3px solid '+badge.c:undefined}}>
       <div style={{padding:'16px 20px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between'}} onClick={()=>setExpandedId(isExpanded?null:item.id)}>
