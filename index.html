@@ -633,6 +633,21 @@ function bumpSent(id){if(!id)return;const all=loadArchive();const i=all.findInde
 function currentVersion(ref){const parts=String(ref||'').split('-');const v=parseInt(parts[parts.length-1]);return isNaN(v)?1:v;}
 function archiveBumpVersion(id,note){const all=loadArchive();const idx=all.findIndex(x=>x.id===id);if(idx<0)return null;const e=all[idx];const parts=String(e.ref||(e.data&&e.data.ref)||'').split('-');let v=parseInt(parts[parts.length-1]);if(isNaN(v)){parts.push('2');v=2;}else{v=v+1;parts[parts.length-1]=String(v);}const newRef=parts.join('-');const now=new Date().toISOString();e.ref=newRef;e.data={...e.data,ref:newRef};e.updatedAt=now;e.changelog.push({action:'version',version:v,note:note||'',date:now});all[idx]=e;saveArchive(all);return e;}
 
+// One-off: renumber existing deliveries from the old "<ref>-OPL<n>" / "OPL-<date>-<n>"
+// format to the new "DL<n>-<ref>" format. Idempotent (new refs don't match).
+function migrateDeliveryRefs(){
+  var all=loadArchive();var ch=false;
+  all.forEach(function(e){
+    if(!e||e.deletedAt||(e.kind!=='delivery'&&!(e.data&&e.data.kind==='delivery')))return;
+    var ref=e.ref||(e.data&&e.data.ref)||'';var nr=null;
+    var m=ref.match(/^(.*)-OPL(\d+)$/);
+    if(m)nr='DL'+m[2]+'-'+m[1];
+    else{var m2=ref.match(/^OPL-(\d+)-(\d+)$/);if(m2)nr='DL'+m2[2]+'-'+m2[1];}
+    if(nr&&nr!==ref){e.ref=nr;if(e.data)e.data={...e.data,ref:nr};e.updatedAt=new Date().toISOString();ch=true;}
+  });
+  if(ch)saveArchive(all);
+}
+
 // ── Archive cloud backup (Upstash via /api/archive) ──
 const WSK='teal.offerte.ws';
 function getWorkspaceId(){
@@ -2995,7 +3010,7 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
   const[filter,setFilter]=useState('alle');
   const[typeFilter,setTypeFilter]=useState('alle');
   const[synced,setSynced]=useState(false);
-  useEffect(()=>{pullArchive().then(a=>{setArchive(a);setSynced(true);});},[]);
+  useEffect(()=>{pullArchive().then(a=>{migrateDeliveryRefs();setArchive(loadArchiveLive());setSynced(true);});},[]);
   const statusMeta={
     concept:{label:'Concept',color:'#7a807e',bg:'#f0f0ee'},
     verstuurd:{label:'Verstuurd',color:'#1d6fb8',bg:'#e7f0fb'},
@@ -3407,6 +3422,7 @@ function App(){
   const[showDash,setShowDash]=useState(true);
 
   useEffect(()=>{
+    migrateDeliveryRefs();
     const sid=loadShortId();
     const _std=x=>x&&(x.kind==='change_order'||x.kind==='delivery');
     if(sid){fetchShared(sid).then(sd=>{if(sd){const saved=archiveSave(_std(sd)?sd:migrateConds(sd),'created');setD(saved);setShowDash(false);}history.replaceState(null,'','/');});return;}
