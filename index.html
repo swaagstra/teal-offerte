@@ -2808,7 +2808,7 @@ function createDelivery(parent,lang){
   const parentRef=parent?(parent.ref||''):'';
   let n=1;
   try{if(parentRef)n=loadArchiveLive().filter(e=>e.kind==='delivery'&&e.parentRef===parentRef).length+1;}catch(e){}
-  const ref=parentRef?(parentRef+'-OPL'+n):('OPL-'+new Date().toISOString().slice(2,10).replace(/-/g,'')+'-1');
+  const ref=parentRef?('DL'+n+'-'+parentRef):('DL'+n+'-'+new Date().toISOString().slice(2,10).replace(/-/g,''));
   const pp=(parent&&parent.data&&parent.data.project)||{};
   const pc=(parent&&parent.data&&parent.data.client)||{};
   return {
