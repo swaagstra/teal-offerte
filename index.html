@@ -2155,6 +2155,11 @@ function DeliverablesTab({data:d,set}){
   const onDropImg=(i,e)=>{e.preventDefault();const f=[...((e.dataTransfer&&e.dataTransfer.files)||[])].find(x=>/^image\//.test(x.type));if(f)imgToDataUrl(f).then(u=>upd(i,{shot:u}));};
   const onPasteImg=(i,e)=>{const items=(e.clipboardData&&e.clipboardData.items)||[];for(const it of items){if(/^image\//.test(it.type)){const f=it.getAsFile();if(f){e.preventDefault();imgToDataUrl(f).then(u=>upd(i,{shot:u}));break;}}}};
   const onPickImg=(i,e)=>{const f=e.target.files&&e.target.files[0];if(f)imgToDataUrl(f).then(u=>upd(i,{shot:u}));e.target.value='';};
+  const dragRef=React.useRef(null);
+  const [dragI,setDragI]=useState(null);
+  const startDrag=(i)=>{dragRef.current=i;setDragI(i);};
+  const endDrag=()=>{dragRef.current=null;setDragI(null);};
+  const dropOn=(i,e)=>{if(dragRef.current!=null&&dragRef.current!==i){e.preventDefault();const from=dragRef.current;const a=list.slice();const [x]=a.splice(from,1);a.splice(i,0,x);save(a);}endDrag();};
   const dv=d.delivery||defaultDelivery();
   const upDelivery=(patch)=>set({...d,delivery:{...dv,...patch}});
   const setNote=(val)=>upDelivery({note:{...(dv.note||{nl:'',en:''}),[L]:val}});
@@ -2174,8 +2179,13 @@ function DeliverablesTab({data:d,set}){
       <textarea style={{width:'100%',minHeight:96}} value={t(dv.note,L)} onChange={e=>setNote(e.target.value)}/>
     </div>
     {list.length===0&&<p className="sm muted" style={{marginBottom:16}}>{NL?'Nog geen deliverables toegevoegd.':'No deliverables yet.'}</p>}
-    {list.map((it,i)=><div key={it.id} className="card">
-      <div className="between mb16"><div className="card-h" style={{border:0,padding:0,margin:0}}>{(NL?'Deliverable ':'Deliverable ')+(i+1)}</div>
+    {list.map((it,i)=><div key={it.id} className="card" style={{opacity:dragI===i?0.45:1,transition:'opacity .12s'}}
+      onDragOver={e=>{if(dragRef.current!=null)e.preventDefault();}} onDrop={e=>dropOn(i,e)}>
+      <div className="between mb16">
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span draggable onDragStart={()=>startDrag(i)} onDragEnd={endDrag} title={NL?'Sleep om te herordenen':'Drag to reorder'} style={{cursor:'grab',color:'#b8bcba',fontSize:17,lineHeight:1,userSelect:'none',padding:'0 2px'}}>⠿</span>
+          <div className="card-h" style={{border:0,padding:0,margin:0}}>{(NL?'Deliverable ':'Deliverable ')+(i+1)}</div>
+        </div>
         <button className="btn btn-sm btn-g" onClick={()=>del(i)}>×</button></div>
       <div className="flex g8" style={{marginBottom:8,alignItems:'flex-start',flexWrap:'wrap'}}>
         <input style={{flex:'1 1 240px'}} placeholder={NL?'Titel (bijv. Live demo)':'Title (e.g. Live demo)'} value={t(it.label,L)} onChange={e=>setLabel(i,e.target.value)}/>
