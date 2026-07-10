@@ -3082,7 +3082,6 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
           <button className="btn btn-sm btn-p" onClick={()=>onOpen(item.data)}>Openen</button>
           <button className="btn btn-sm btn-s" onClick={()=>{onDuplicate(item.data);refresh();}}>Dupliceren</button>
           {!isCO&&!isDel&&<button className="btn btn-sm btn-g" onClick={()=>{onBumpVersion(item.id);refresh();}}>Nieuwe versie</button>}
-          <button className="btn btn-sm btn-g" onClick={()=>{navigator.clipboard.writeText(shareUrl(item.data));bumpSent(item.id);refresh();alert('Link gekopieerd');}}>Deel link</button>
           {!isCO&&!isDel&&<button className="btn btn-sm btn-g" onClick={()=>{onNewCO(item);refresh();}}>+ Change order</button>}
           {!isCO&&!isDel&&<button className="btn btn-sm btn-g" onClick={()=>{onNewDelivery(item);refresh();}}>+ Oplevering</button>}
           {!isDel&&<button className="btn btn-sm btn-g" title="Maak een concept-factuur in TEAL Odoo" onClick={()=>{pushToOdoo(item).then(refresh);}}>Naar Odoo</button>}
