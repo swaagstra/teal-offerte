@@ -1511,6 +1511,7 @@ function Header({data:d,onPdf,onExport,setData,onBack}){
       }}>{d.lang==='nl'?'EN':'NL'}</button>}
       {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={async()=>{let url;try{url=await createShareLink(d);}catch(e){url=shareUrl(d);}try{await navigator.clipboard.writeText(url);}catch(e){}archiveLogAction(d,'shared');alert(ll.linkKopie+'\n'+url);}}>{ll.deelLink}</button>}
       {d&&<ExportDropdown data={d} onExport={onExport}/>}
+      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>emailQuote(d)} title={d.lang==='nl'?'Stel een e-mail op met de offerte-PDF als bijlage':'Compose an email with the quotation PDF attached'}>{d.lang==='nl'?'Mail':'Email'}</button>}
       {d&&<button className="btn btn-s" onClick={onPdf}>PDF</button>}
     </div>
   </div>;
@@ -2703,16 +2704,15 @@ function mapQuoteToTokens(d){
 }
 
 // ── PDF ──
-function exportPDF(d,setData){
+// Produce the final quotation PDF bytes (with the general-terms PDF appended when enabled)
+function quotePdfBytes(d,cb){
   const NL=d.lang==='nl';
-  const pdfFilename=`Offerte ${d.ref||'Draft'} - TEAL.pdf`;
   if(window.pdfMake){
     pdfMake.vfs=Object.assign({},pdfMake.vfs||{},window._PDF_VFS||{});
     pdfMake.fonts={I4:{normal:'I4.ttf',bold:'I7.ttf'},I5:{normal:'I5.ttf',bold:'I7.ttf'},I6:{normal:'I6.ttf',bold:'I7.ttf'},I7:{normal:'I7.ttf',bold:'I7.ttf'},M4:{normal:'M4.ttf',bold:'M5.ttf'},I5d:{normal:'I5d.ttf',bold:'I7d.ttf'},I7d:{normal:'I7d.ttf',bold:'I7d.ttf'},I4d:{normal:'I4d.ttf',bold:'I7d.ttf'}};
   }
   const D=mapQuoteToTokens(d);
   const docDef=buildQuoteDocDef(D,window._TEAL_LOGO_PNG);
-  const dl=(bytes)=>{const blob=new Blob([bytes],{type:'application/pdf'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=pdfFilename;a.click();URL.revokeObjectURL(url);};
   pdfMake.createPdf(docDef).getBuffer(function(buf){
     const shouldAppendAV=d.conditions.avNL||d.conditions.avEN;
     const avB64=getAVB64(NL?'nl':'en')||(NL?window._AV_NL_B64:window._AV_EN_B64);
@@ -2723,9 +2723,45 @@ function exportPDF(d,setData){
         const avPdf=await PDFLib.PDFDocument.load(Uint8Array.from(atob(avB64),c=>c.charCodeAt(0)));
         (await mergedPdf.copyPages(quotePdf,quotePdf.getPageIndices())).forEach(p=>mergedPdf.addPage(p));
         (await mergedPdf.copyPages(avPdf,avPdf.getPageIndices())).forEach(p=>mergedPdf.addPage(p));
-        dl(await mergedPdf.save());
-      }catch(e){console.error('AV merge failed',e);dl(buf);}})();
-    } else { dl(buf); }
+        cb(await mergedPdf.save());
+      }catch(e){console.error('AV merge failed',e);cb(buf);}})();
+    } else { cb(buf); }
+  });
+}
+function exportPDF(d,setData){
+  const pdfFilename=`Offerte ${d.ref||'Draft'} - TEAL.pdf`;
+  quotePdfBytes(d,function(bytes){const blob=new Blob([bytes],{type:'application/pdf'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=pdfFilename;a.click();URL.revokeObjectURL(url);});
+}
+// Compose an email with the quotation PDF attached: native share (macOS/iOS → Mail) with a
+// Gmail-compose + download fallback. Sender is the user's own account (erik@teamteal.nl).
+function emailQuote(d){
+  const NL=d.lang==='nl';
+  const ref=d.ref||'';
+  const proj=(d.project&&d.project.name)||(NL?'ons project':'our project');
+  const to=(d.client&&d.client.email)||'';
+  const contact=(d.client&&d.client.contact)||(d.client&&d.client.name)||'';
+  const filename=`Offerte ${ref||'Draft'} - TEAL.pdf`;
+  const subject=(NL?'Offerte':'Quotation')+(ref?' '+ref:'')+(proj?' – '+proj:'');
+  const greet=contact?(NL?'Beste '+contact+',':'Dear '+contact+','):(NL?'Beste,':'Hello,');
+  const body=NL
+    ? greet+'\n\nBij deze onze offerte voor '+proj+'. Je vindt de PDF in de bijlage.\n\nWe denken graag met je mee, dus laat het vooral weten als je vragen hebt of iets wilt aanpassen.\n\nMet vriendelijke groet,\nErik Swaagstra\nTEAL · teamteal.nl\nerik@teamteal.nl'
+    : greet+'\n\nPlease find our quotation for '+proj+' attached as a PDF.\n\nHappy to talk it through, so just let me know if you have any questions or would like to adjust anything.\n\nKind regards,\nErik Swaagstra\nTEAL · teamteal.nl\nerik@teamteal.nl';
+  quotePdfBytes(d,function(bytes){
+    const blob=new Blob([bytes],{type:'application/pdf'});
+    const file=new File([blob],filename,{type:'application/pdf'});
+    const gmailFallback=function(){
+      const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(function(){URL.revokeObjectURL(url);},5000);
+      const gmail='https://mail.google.com/mail/?authuser=erik@teamteal.nl&view=cm&fs=1'+(to?'&to='+encodeURIComponent(to):'')+'&su='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
+      window.open(gmail,'_blank');
+      alert(NL?'De offerte-PDF is gedownload en er opent een nieuw e-mailbericht (vanuit je eigen account). Sleep de PDF uit je downloads in de mail als bijlage.':'The quotation PDF was downloaded and a new email opened (from your own account). Drag the PDF from your downloads into the email to attach it.');
+    };
+    try{
+      if(navigator.canShare&&navigator.canShare({files:[file]})){
+        navigator.share({files:[file],title:subject,text:body}).catch(function(err){if(err&&err.name!=='AbortError')gmailFallback();});
+        return;
+      }
+    }catch(e){}
+    gmailFallback();
   });
 }
 
