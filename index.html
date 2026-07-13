@@ -3081,8 +3081,8 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
   const[expandedId,setExpandedId]=useState(null);
   const[avRefresh,setAvRefresh]=useState(0);
   const refresh=()=>setArchive(loadArchiveLive());
-  const[collapsedProj,setCollapsedProj]=useState({});
-  const toggleProj=(k)=>setCollapsedProj(c=>({...c,[k]:!c[k]}));
+  const[collapsedProj,setCollapsedProj]=useState(()=>{try{return JSON.parse(localStorage.getItem('teal.offerte.collapsed')||'{}')||{};}catch(e){return {};}});
+  const toggleProj=(k)=>setCollapsedProj(c=>{const n={...c,[k]:!c[k]};if(!n[k])delete n[k];try{localStorage.setItem('teal.offerte.collapsed',JSON.stringify(n));}catch(e){}return n;});
   const projDragRef=React.useRef(null);
   const[projDragName,setProjDragName]=useState(null);
   const startProjDrag=(g)=>{projDragRef.current={name:g.name,ids:g.rows.map(r=>r.e.id)};setProjDragName(g.name);};
