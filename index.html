@@ -572,6 +572,18 @@ async function fetchShared(id){
     return JSON.parse(LZString.decompressFromEncodedURIComponent(txt));
   }catch(e){return null;}
 }
+// Copy a share link to the clipboard: always tries the short /s/<id> link first;
+// only falls back to the long self-contained #data= link (with a clear warning).
+async function copyShareLink(doc,nl){
+  let url,short=false;
+  try{url=await createShareLink(doc);short=true;}catch(e){url=shareUrl(doc);}
+  try{await navigator.clipboard.writeText(url);}catch(e){}
+  if(short){alert((nl?'Link gekopieerd:':'Link copied:')+'\n'+url);}
+  else{alert((nl
+      ?'Korte link niet beschikbaar (de opslag voor korte links is niet ingesteld). Er is een lange, zelfstandige link gekopieerd — die werkt, maar is erg lang. Koppel een Vercel KV / Upstash-store om korte links te krijgen.'
+      :'Short link unavailable (short-link storage is not configured). A long, self-contained link was copied — it works but is very long. Connect a Vercel KV / Upstash store to get short links.')+'\n\n'+url);}
+  return url;
+}
 
 // ── Archive (all quotations) ──
 const loadArchive=()=>{try{const r=localStorage.getItem(AK);return r?JSON.parse(r):[];}catch(e){return[];}};
@@ -1510,7 +1522,7 @@ function Header({data:d,onPdf,onExport,setData,onBack}){
         }
         setData(nd);
       }}>{d.lang==='nl'?'EN':'NL'}</button>}
-      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={async()=>{let url;try{url=await createShareLink(d);}catch(e){url=shareUrl(d);}try{await navigator.clipboard.writeText(url);}catch(e){}archiveLogAction(d,'shared');alert(ll.linkKopie+'\n'+url);}}>{ll.deelLink}</button>}
+      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={async()=>{await copyShareLink(d,d.lang==='nl');archiveLogAction(d,'shared');}}>{ll.deelLink}</button>}
       {d&&<ExportDropdown data={d} onExport={onExport}/>}
       {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>emailQuote(d)} title={d.lang==='nl'?'Stel een e-mail op met de offerte-PDF als bijlage':'Compose an email with the quotation PDF attached'}>{d.lang==='nl'?'Mail':'Email'}</button>}
       {d&&<button className="btn btn-s" onClick={onPdf}>PDF</button>}
@@ -3413,7 +3425,7 @@ function ChangeOrderFlow({data:co,set,onBack}){
           {['nl','en'].map(lng=><button key={lng} className="btn btn-sm" onClick={()=>set({...co,lang:lng})} style={{borderRadius:0,border:0,background:co.lang===lng?'#071412':'#fff',color:co.lang===lng?'#fff':'#555',fontWeight:co.lang===lng?700:600}}>{lng.toUpperCase()}</button>)}
         </div>
         <button className="btn btn-sm btn-g" onClick={()=>setView(view==='edit'?'preview':'edit')}>{view==='edit'?(NL?'Voorbeeld':'Preview'):(NL?'Bewerken':'Edit')}</button>
-        <button className="btn btn-sm btn-g" onClick={()=>{navigator.clipboard.writeText(shareUrl(co));alert(NL?'Link gekopieerd':'Link copied');}}>{NL?'Deel link':'Share'}</button>
+        <button className="btn btn-sm btn-g" onClick={()=>copyShareLink(co,NL)}>{NL?'Deel link':'Share'}</button>
         <button className="btn btn-sm btn-p" onClick={()=>exportChangeOrderPDF(co)}>{NL?'Exporteer PDF':'Export PDF'}</button>
       </div>
     </div>
