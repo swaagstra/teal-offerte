@@ -2287,6 +2287,7 @@ function PreviewTab({data:d}){
   const Para=({text})=>{const ps=String(text||'').split(/\n\s*\n+/).map(s=>s.trim()).filter(Boolean);return <React.Fragment>{ps.map((p,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0,whiteSpace:'pre-wrap'}}>{p}</div>)}</React.Fragment>;};
   const runHdr=T.title+(T.subtitle?' — '+T.subtitle:'');
   const word=(ll.offerte||'Quotation');
+  let _pn=2;const pn=()=>String(++_pn).padStart(2,'0');let _pa=0;const pa=()=>String.fromCharCode(65+_pa++);
 
   return <div style={{background:'#d8d6cf',padding:28,display:'flex',flexDirection:'column',alignItems:'center',gap:28,borderRadius:8}} id="offerte-preview">
     {/* ===== PAGE 1 ===== */}
@@ -2318,12 +2319,12 @@ function PreviewTab({data:d}){
         </div>
       </div>
       {(T.description||T.teal_role)&&<div style={{marginTop:48}}>
-        <SecHead n="03" title={NL?'Projectomschrijving':'Project description'}/>
+        <SecHead n={pn()} title={NL?'Projectomschrijving':'Project description'}/>
         {T.description&&<Para text={T.description}/>}
         {T.teal_role&&<div style={{marginTop:16}}><Eyebrow mb={6}>{NL?"TEAL's rol":"TEAL's role"}</Eyebrow><Para text={T.teal_role}/></div>}
       </div>}
       <div style={{marginTop:48}}>
-        <SecHead n="04" title={NL?'Werkzaamheden & planning':'Scope of work & timeline'}/>
+        <SecHead n={pn()} title={NL?'Werkzaamheden & planning':'Scope of work & timeline'}/>
         {T.scope.map((s,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0}}><strong style={{fontWeight:600}}>{s.lead} </strong>{s.body}</div>)}
         {(T.delivery||T.effort)&&<div style={{fontSize:13,color:sec,marginTop:10}}>{(NL?'Oplevering: ':'Expected delivery: ')+(T.delivery||'')+(T.effort?' — '+T.effort:'')}</div>}
         {T.weeks.length>0&&<div style={{marginTop:26}}>
@@ -2353,7 +2354,7 @@ function PreviewTab({data:d}){
         <div style={{fontFamily:mono,fontSize:11,color:sec}}>{runHdr}</div>
       </div>
       <div style={{marginTop:48}}>
-        <SecHead n="05" title={NL?'Kosten':'Costs'}/>
+        <SecHead n={pn()} title={NL?'Kosten':'Costs'}/>
         <div style={{display:'flex',alignItems:'baseline',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
           <div style={{flex:1}}>{NL?'Omschrijving':'Description'}</div><div style={{width:140,textAlign:'right'}}>{NL?'Bedrag':'Amount'}</div>
         </div>
@@ -2367,11 +2368,11 @@ function PreviewTab({data:d}){
         </div>
       </div>
       {T.payment.length>0&&<div style={{marginTop:48}}>
-        <SecHead n="06" title={NL?'Betaling':'Payment'}/>
+        <SecHead n={pn()} title={NL?'Betaling':'Payment'}/>
         {T.payment.map((p,i)=><div key={i} style={{display:'flex',gap:10,fontSize:14,lineHeight:1.6,color:body,marginBottom:9}}><span style={{color:muted}}>·</span><span>{p}</span></div>)}
       </div>}
       {T.conditions.length>0&&<div style={{marginTop:48}}>
-        <SecHead n="07" title={NL?'Voorwaarden':'Terms & conditions'}/>
+        <SecHead n={pn()} title={NL?'Voorwaarden':'Terms & conditions'}/>
         {T.conditions.map((c,i)=><div key={i} style={{display:'flex',gap:10,fontSize:14,lineHeight:1.6,color:body,marginBottom:9}}><span style={{color:muted}}>·</span><span>{c}</span></div>)}
       </div>}
       <div style={{flex:1}}/>
@@ -2386,16 +2387,16 @@ function PreviewTab({data:d}){
         </div>
       </div>
       {T.assumptions&&T.assumptions.length>0&&<div style={{marginTop:48}}>
-        <SecHead n="A" title={NL?'Uitgangspunten':'Assumptions'}/>
+        <SecHead n={pa()} title={NL?'Uitgangspunten':'Assumptions'}/>
         <div style={{fontSize:13,color:sec,lineHeight:1.6,marginBottom:12}}>{NL?'Deze offerte is gebaseerd op onderstaande uitgangspunten. Wijkt de praktijk hiervan af, dan is het resulterende werk meerwerk.':'This quotation is based on the assumptions below. Where the actual situation deviates, the resulting work is additional work.'}</div>
         {T.assumptions.map((a,i)=><div key={i} style={{display:'flex',gap:10,fontSize:14,lineHeight:1.6,color:body,marginBottom:9}}><span style={{color:muted}}>·</span><span>{a}</span></div>)}
       </div>}
       {T.meerwerkClause&&<div style={{marginTop:48}}>
-        <SecHead n="B" title={NL?'Meerwerk':'Additional work'}/>
+        <SecHead n={pa()} title={NL?'Meerwerk':'Additional work'}/>
         <Para text={T.meerwerkClause}/>
       </div>}
       {T.rateCard&&T.rateCard.length>0&&<div style={{marginTop:48}}>
-        <SecHead n="C" title={NL?'Tarievenkaart':'Rate card'}/>
+        <SecHead n={pa()} title={NL?'Tarievenkaart':'Rate card'}/>
         <div style={{display:'flex',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
           <div style={{flex:1}}>{NL?'Activiteit':'Activity'}</div><div style={{textAlign:'right'}}>{NL?'Tarief (excl. btw)':'Rate (ex VAT)'}</div></div>
         {T.rateCard.map((r,i)=><div key={i} style={{display:'flex',alignItems:'baseline',padding:'11px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
@@ -2611,6 +2612,7 @@ function buildQuoteDocDef(D, logoImg){
   }
   var lsf=function(em,fs){return em*fs;};
   function secHead(no,title){return {columns:[{width:'auto',text:no,font:'M4',fontSize:13*k,color:muted,margin:[0,0,9,0]},{width:'*',text:String(title).toUpperCase(),font:'I6',fontSize:13*k,color:ink,characterSpacing:lsf(0.12,13*k)}],margin:[0,0,0,8]};}
+  var _sn=2,_an=0;var nx=function(){return String(++_sn).padStart(2,'0');};var nxA=function(){return String.fromCharCode(65+_an++);};
   function eyebrow(t,mb){return {text:String(t).toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.14,11*k),margin:[0,0,0,mb||0]};}
   function paras(txt,fs){var parts=String(txt||'').split(/\n\s*\n+/).map(function(p){return p.trim();}).filter(Boolean);if(parts.length<=1)return {text:String(txt||''),fontSize:fs,color:body,lineHeight:1.65};return {stack:parts.map(function(p,i){return {text:p,fontSize:fs,color:body,lineHeight:1.65,margin:[0,i?10:0,0,0]};})};}
   var c=[];
@@ -2627,12 +2629,12 @@ function buildQuoteDocDef(D, logoImg){
   if(D.delivery)det.push({text:[{text:'Expected delivery  ',color:muted},{text:D.delivery,color:body}],fontSize:13*k,lineHeight:1.45});
   c.push({columns:[{width:'*',stack:[secHead('01','Client'),{text:[D.client_name,D.client_contact,D.client_email].filter(Boolean).join('\n'),fontSize:13*k,color:body,lineHeight:1.45}]},{width:'*',stack:[secHead('02','Project details'),{stack:det}]}],columnGap:36,margin:[0,30,0,0]});
   if(D.description||D.teal_role){
-    var ds=[secHead('03','Project description')];
+    var ds=[secHead(nx(),'Project description')];
     if(D.description)ds.push(paras(D.description,14*k));
     if(D.teal_role)ds.push({stack:[eyebrow("TEAL's role",4.5),paras(D.teal_role,14*k)],margin:[0,14,0,0]});
     c.push({stack:ds,margin:[0,26,0,0],unbreakable:true});
   }
-  var sc=[secHead('04','Scope of work & timeline')];
+  var sc=[secHead(nx(),'Scope of work & timeline')];
   (D.scope||[]).forEach(function(s,i){sc.push({text:[{text:(s.lead?s.lead+' ':''),font:'I6',color:body},{text:s.body||'',color:body}],fontSize:14*k,lineHeight:1.65,margin:[0,i?6:0,0,0]});});
   if(D.delivery||D.effort)sc.push({text:'Expected delivery: '+(D.delivery||'')+(D.effort?' — '+D.effort:''),fontSize:13*k,color:sec,margin:[0,6,0,0]});
   if(D.tasks&&D.tasks.length)sc.push({stack:[eyebrow('Indicative timeline',9),{svg:timelineSVG(),width:CW}],margin:[0,14,0,0]});
@@ -2642,18 +2644,18 @@ function buildQuoteDocDef(D, logoImg){
   c.push({canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,13.5,0,18]});
   var cr=[[{text:'DESCRIPTION',font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:'AMOUNT',font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];
   (D.cost_items||[]).forEach(function(it){cr.push([{text:it.d,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:it.a,font:'I5',fontSize:13*k,color:ink,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});
-  c.push({stack:[secHead('05','Costs'),{table:{widths:['*',105],body:cr},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}},
+  c.push({stack:[secHead(nx(),'Costs'),{table:{widths:['*',105],body:cr},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}},
     {columns:[{width:'*',text:''},{width:225,table:{widths:['*','auto'],body:[[{text:[{text:'Total ',font:'I5'},{text:'(excl. VAT)',fontSize:11*k,color:muted}],fontSize:16*k,color:ink,border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]},{text:D.total,font:'I5',fontSize:16*k,color:ink,alignment:'right',border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]}]]},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}]}],margin:[0,36,0,0],unbreakable:true});
   function bullets(arr){return (arr||[]).map(function(t){return {columns:[{width:'auto',text:'·',color:muted,fontSize:14*k},{width:'*',text:t,fontSize:14*k,color:body,lineHeight:1.6}],columnGap:7.5,margin:[0,0,0,6.75]};});}
-  if(D.payment&&D.payment.length)c.push({stack:[secHead('06','Payment')].concat(bullets(D.payment)),margin:[0,36,0,0],unbreakable:true});
-  if(D.conditions&&D.conditions.length)c.push({stack:[secHead('07','Terms & conditions')].concat(bullets(D.conditions)),margin:[0,36,0,0],unbreakable:true});
+  if(D.payment&&D.payment.length)c.push({stack:[secHead(nx(),'Payment')].concat(bullets(D.payment)),margin:[0,36,0,0],unbreakable:true});
+  if(D.conditions&&D.conditions.length)c.push({stack:[secHead(nx(),'Terms & conditions')].concat(bullets(D.conditions)),margin:[0,36,0,0],unbreakable:true});
   c.push({stack:[{text:D.sign_line||'By signing below, you agree to the information outlined in this document.',fontSize:13*k,color:body,margin:[0,0,0,16.5]},eyebrow('Accepted by',4.5),{text:D.accepted_by||'',font:'I5',fontSize:15*k,color:ink},
     {columns:[{width:'*',stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:140,y2:0,lineWidth:0.5,lineColor:ink}]},{text:'NAME',font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]},
       {width:'*',stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:140,y2:0,lineWidth:0.5,lineColor:ink}]},{text:'SIGNATURE',font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]},
       {width:130,stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:97,y2:0,lineWidth:0.5,lineColor:ink}]},{text:'DATE',font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]}],columnGap:24,margin:[0,48,0,0]}],margin:[0,40,0,0],unbreakable:true});
-  if(D.assumptions&&D.assumptions.length)c.push({stack:[secHead('A',D.nl?'Uitgangspunten':'Assumptions'),{text:D.nl?'Deze offerte is gebaseerd op onderstaande uitgangspunten. Wijkt de praktijk hiervan af, dan is het resulterende werk meerwerk.':'This quotation is based on the assumptions below. Where the actual situation deviates, the resulting work is additional work.',fontSize:13*k,color:sec,margin:[0,0,0,12]}].concat(bullets(D.assumptions)),margin:[0,36,0,0],unbreakable:true});
-  if(D.meerwerkClause)c.push({stack:[secHead('B',D.nl?'Meerwerk':'Additional work'),paras(D.meerwerkClause,14*k)],margin:[0,36,0,0],unbreakable:true});
-  if(D.rateCard&&D.rateCard.length){var rcb=[[{text:(D.nl?'Activiteit':'Activity').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:(D.nl?'Tarief (excl. btw)':'Rate (ex VAT)').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];D.rateCard.forEach(function(r){rcb.push([{text:r.label,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:[{text:(r.rate||'—'),font:'I5',color:ink},{text:(r.unit?'  '+r.unit:''),color:muted,fontSize:11*k}],fontSize:13*k,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});c.push({stack:[secHead('C',D.nl?'Tarievenkaart':'Rate card'),{table:{widths:['*','auto'],body:rcb},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,36,0,0],unbreakable:true});}
+  if(D.assumptions&&D.assumptions.length)c.push({stack:[secHead(nxA(),D.nl?'Uitgangspunten':'Assumptions'),{text:D.nl?'Deze offerte is gebaseerd op onderstaande uitgangspunten. Wijkt de praktijk hiervan af, dan is het resulterende werk meerwerk.':'This quotation is based on the assumptions below. Where the actual situation deviates, the resulting work is additional work.',fontSize:13*k,color:sec,margin:[0,0,0,12]}].concat(bullets(D.assumptions)),margin:[0,36,0,0],unbreakable:true});
+  if(D.meerwerkClause)c.push({stack:[secHead(nxA(),D.nl?'Meerwerk':'Additional work'),paras(D.meerwerkClause,14*k)],margin:[0,36,0,0],unbreakable:true});
+  if(D.rateCard&&D.rateCard.length){var rcb=[[{text:(D.nl?'Activiteit':'Activity').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:(D.nl?'Tarief (excl. btw)':'Rate (ex VAT)').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];D.rateCard.forEach(function(r){rcb.push([{text:r.label,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:[{text:(r.rate||'—'),font:'I5',color:ink},{text:(r.unit?'  '+r.unit:''),color:muted,fontSize:11*k}],fontSize:13*k,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});c.push({stack:[secHead(nxA(),D.nl?'Tarievenkaart':'Rate card'),{table:{widths:['*','auto'],body:rcb},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,36,0,0],unbreakable:true});}
   return {pageSize:'A4',pageMargins:[ML,MT,ML,MT],
     background:function(cp,ps){return {canvas:[{type:'rect',x:0,y:0,w:ps.width,h:ps.height,color:'#ffffff'}]};},
     footer:function(cp,pc){return {margin:[ML,8,ML,0],columns:[{width:'*',text:''},{width:'auto',text:'Quotation '+D.number+' · '+cp+' / '+pc,font:'M4',fontSize:10*k,color:muted,characterSpacing:lsf(0.03,10*k)}]};},
@@ -2675,7 +2677,7 @@ function mapQuoteToTokens(d){
   active.forEach(ph=>{const sw=ph.startWeek||0,dw=ph.durationWeeks||4;tasks.push({name:ph.tlTitle||ph.customName||t(ph.name,L),left:sw/totalWeeks,width:dw/totalWeeks,color:'#05100e',label:ph.barLabel||''});});
   steps.forEach(sx=>{const sw=sx.startWeek||0,dw=sx.durationWeeks||1;tasks.push({name:t(sx.name,L),left:sw/totalWeeks,width:dw/totalWeeks,color:'#9aa09e',label:t(sx.barLabel,L)||''});});
   if(d.conditions&&d.conditions.timelineEnabled===false){weeks.length=0;tasks.length=0;}
-  let delivery=d.project.deliveryDate?fmtLong(d.project.deliveryDate):(d.project.date?fmtLong(addDays(d.project.date,totalWeeks*7)):'');
+  let delivery=d.project.deliveryDate?fmtMonthY(d.project.deliveryDate):(d.project.date?fmtMonthY(addDays(d.project.date,totalWeeks*7)):'');
   const scope=active.filter(ph=>t(ph.description,L)).map(ph=>({lead:(ph.customName||t(ph.name,L))+'.',body:t(ph.description,L)}));
   const effort=(active.find(ph=>ph.effort)||{}).effort||'';
   const cost_items=finLines.map(ln=>({d:ln.desc||'',a:fmtE(ln.total)}));
