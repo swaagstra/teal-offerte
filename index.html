@@ -1741,7 +1741,7 @@ function BudgetTab({data:d,set}){
           {(d.procOTS||[]).map((it,i)=>{
             const h=(it.amount||0)*(it.handlingPct||0);
             return <tr key={it.id||i}>
-              <td><input value={it.desc||''} onChange={e=>upOTS(i,'desc',e.target.value)}/></td>
+              <td><input value={it.desc||''} onChange={e=>upOTS(i,'desc',e.target.value)}/><input value={it.showAs||''} onChange={e=>upOTS(i,'showAs',e.target.value)} placeholder={L==='nl'?'Toon als (offerte)':'Show as (quote)'} style={{marginTop:4,width:'100%',fontSize:11,color:'#888'}}/></td>
               <td><input value={it.supplier||''} onChange={e=>upOTS(i,'supplier',e.target.value)}/></td>
               <td><input type="number" value={it.amount||''} onChange={e=>upOTS(i,'amount',parseFloat(e.target.value)||0)}/></td>
               <td className="tr mono">{Math.round((it.handlingPct||0)*100)}%</td>
@@ -1766,7 +1766,7 @@ function BudgetTab({data:d,set}){
             const h=(it.amount||0)*(it.handlingPct||0);
             const r=(it.amount||0)*(it.riskPct||0);
             return <tr key={it.id||i}>
-              <td><input value={it.desc||''} onChange={e=>upCust(i,'desc',e.target.value)}/></td>
+              <td><input value={it.desc||''} onChange={e=>upCust(i,'desc',e.target.value)}/><input value={it.showAs||''} onChange={e=>upCust(i,'showAs',e.target.value)} placeholder={L==='nl'?'Toon als (offerte)':'Show as (quote)'} style={{marginTop:4,width:'100%',fontSize:11,color:'#888'}}/></td>
               <td><input value={it.supplier||''} onChange={e=>upCust(i,'supplier',e.target.value)}/></td>
               <td><input type="number" value={it.amount||''} onChange={e=>upCust(i,'amount',parseFloat(e.target.value)||0)}/></td>
               <td className="tr mono">{Math.round((it.handlingPct||0)*100)}%</td>
@@ -1791,7 +1791,7 @@ function BudgetTab({data:d,set}){
           {(d.subs||[]).map((it,i)=>{
             const c=(it.amount||0)*(it.coordPct||COORD_MARGIN);
             return <tr key={it.id||i}>
-              <td><input value={it.desc||''} onChange={e=>upSub(i,'desc',e.target.value)}/></td>
+              <td><input value={it.desc||''} onChange={e=>upSub(i,'desc',e.target.value)}/><input value={it.showAs||''} onChange={e=>upSub(i,'showAs',e.target.value)} placeholder={L==='nl'?'Toon als (offerte)':'Show as (quote)'} style={{marginTop:4,width:'100%',fontSize:11,color:'#888'}}/></td>
               <td><input value={it.company||''} onChange={e=>upSub(i,'company',e.target.value)}/></td>
               <td><input type="number" value={it.amount||''} onChange={e=>upSub(i,'amount',parseFloat(e.target.value)||0)}/></td>
               <td className="tr mono">{Math.round((it.coordPct||COORD_MARGIN)*100)}%</td>
@@ -2229,24 +2229,16 @@ function buildFinancialLines(d,totals,L){
     lines.push({desc:pn(ph),total:pd.total});
   });
 
-  // Procurement items
-  (d.procOTS||[]).forEach(it=>{
-    if(!it.amount)return;
-    const h=(it.amount||0)*(it.handlingPct||0);
-    lines.push({desc:it.desc||'Materials',total:it.amount+h});
-  });
-  (d.procCustom||[]).forEach(it=>{
-    if(!it.amount)return;
-    const h=(it.amount||0)*(it.handlingPct||0);
-    const r=(it.amount||0)*(it.riskPct||0);
-    lines.push({desc:it.desc||'Custom materials',total:it.amount+h+r});
-  });
-
-  // Subcontractors
-  (d.subs||[]).forEach(it=>{
-    if(!it.amount)return;
-    const c=(it.amount||0)*(it.coordPct||COORD_MARGIN);
-    lines.push({desc:it.desc||'Subcontractor',total:it.amount+c});
+  // Procurement + subcontractors: collect with an optional "show as" display group,
+  // then merge rows that share the same label into one client-facing line.
+  const ext=[];
+  (d.procOTS||[]).forEach(it=>{if(!it.amount)return;const h=(it.amount||0)*(it.handlingPct||0);ext.push({desc:it.desc||(L==='nl'?'Materialen':'Materials'),total:it.amount+h,showAs:it.showAs});});
+  (d.procCustom||[]).forEach(it=>{if(!it.amount)return;const h=(it.amount||0)*(it.handlingPct||0);const r=(it.amount||0)*(it.riskPct||0);ext.push({desc:it.desc||(L==='nl'?'Maatwerk':'Custom materials'),total:it.amount+h+r,showAs:it.showAs});});
+  (d.subs||[]).forEach(it=>{if(!it.amount)return;const c=(it.amount||0)*(it.coordPct||COORD_MARGIN);ext.push({desc:it.desc||(L==='nl'?'Onderaannemer':'Subcontractor'),total:it.amount+c,showAs:it.showAs});});
+  const groupIdx={};
+  ext.forEach(e=>{const g=(e.showAs||'').trim();
+    if(g){if(g in groupIdx){lines[groupIdx[g]].total+=e.total;}else{groupIdx[g]=lines.length;lines.push({desc:g,total:e.total});}}
+    else{lines.push({desc:e.desc,total:e.total});}
   });
 
   // Installation & travel (lump sum)
