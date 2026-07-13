@@ -1185,10 +1185,11 @@ function generateOfferteMD(d){
     add('| ',NL?'Mijlpaal':'Milestone',' | % | ',NL?'Bedrag':'Amount',' |');
     add('| --- | ---: | ---: |');
     const milestoneDateISOs=()=>{
-      if(!proj.date||!milestones.length)return milestones.map(()=>'');
       const totalW=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
       const n=milestones.length;
-      return milestones.map((_,i)=>{
+      return milestones.map((ms,i)=>{
+        if(ms.date)return ms.date;
+        if(!proj.date)return '';
         const wk=Math.round((i/(n-1||1))*totalW);
         const dt=new Date(proj.date);dt.setDate(dt.getDate()+wk*7);
         return dt.toISOString().slice(0,10);
@@ -2266,14 +2267,13 @@ function PreviewTab({data:d}){
   // Helper: compute milestone richtdatum (stagger evenly across total duration)
   const fmtMonth=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{month:'long',year:'numeric'}):'';
   const milestoneDateISOs=()=>{
-    if(!d.project.date)return d.payment.milestones.map(()=>'');
     const totalWeeks=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0);
-    let cumPct=0;
-    return d.payment.milestones.map(ms=>{
-      cumPct+=ms.pct;
-      const weekOffset=Math.round(totalWeeks*cumPct/100);
-      const dt=new Date(d.project.date);dt.setDate(dt.getDate()+weekOffset*7);
-      return ms.date||dt.toISOString().slice(0,10);
+    const n=Math.max(1,d.payment.milestones.length);
+    return d.payment.milestones.map((ms,i)=>{
+      if(ms.date)return ms.date;
+      if(!d.project.date)return '';
+      const dt=new Date(d.project.date);dt.setDate(dt.getDate()+Math.round(totalWeeks*(i+1)/n)*7);
+      return dt.toISOString().slice(0,10);
     });
   };
   const msISOs=milestoneDateISOs();
@@ -2679,7 +2679,7 @@ function mapQuoteToTokens(d){
   const scope=active.filter(ph=>t(ph.description,L)).map(ph=>({lead:(ph.customName||t(ph.name,L))+'.',body:t(ph.description,L)}));
   const effort=(active.find(ph=>ph.effort)||{}).effort||'';
   const cost_items=finLines.map(ln=>({d:ln.desc||'',a:fmtE(ln.total)}));
-  const msISOs=(!d.project.date||!d.payment.milestones.length)?d.payment.milestones.map(()=>''):d.payment.milestones.map((_,i)=>addDays(d.project.date,Math.round(totalWeeks*(i+1)/Math.max(1,d.payment.milestones.length))*7));
+  const msISOs=d.payment.milestones.map((ms,i)=>ms.date||(d.project.date?addDays(d.project.date,Math.round(totalWeeks*(i+1)/Math.max(1,d.payment.milestones.length))*7):''));
   const payment=[];
   d.payment.milestones.forEach((ms,i)=>{const amt=fmtE(grand*(ms.pct||0)/100);const mo=msISOs[i]?fmtMonthY(msISOs[i]):'';payment.push(t(ms.name,L)+': '+ms.pct+'% ('+amt+')'+(mo?' — '+mo:'')+'.');});
   payment.push((NL?'Betaling binnen ':'Payment is due within ')+(d.conditions.paymentTerm||14)+(NL?' dagen na factuurdatum.':' days of the invoice date.'));
