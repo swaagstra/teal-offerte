@@ -3081,6 +3081,8 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
   const[expandedId,setExpandedId]=useState(null);
   const[avRefresh,setAvRefresh]=useState(0);
   const refresh=()=>setArchive(loadArchiveLive());
+  const[collapsedProj,setCollapsedProj]=useState({});
+  const toggleProj=(k)=>setCollapsedProj(c=>({...c,[k]:!c[k]}));
   const projDragRef=React.useRef(null);
   const[projDragName,setProjDragName]=useState(null);
   const startProjDrag=(g)=>{projDragRef.current={name:g.name,ids:g.rows.map(r=>r.e.id)};setProjDragName(g.name);};
@@ -3125,7 +3127,7 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
   const counts={alle:archive.length};STATUS_ORDER.concat('verlopen').forEach(s=>{counts[s]=archive.filter(e=>effectiveStatus(e)===s).length;});
   const typeCounts={alle:archive.length,offertes:archive.filter(e=>kindOf(e)!=='change_order'&&kindOf(e)!=='delivery').length,change_orders:archive.filter(e=>kindOf(e)==='change_order').length,deliveries:archive.filter(e=>kindOf(e)==='delivery').length};
   // Build visible project groups (an offerte shows if it or any of its children matches the filters)
-  const groups=projOrder.map(key=>{const g=projMap[key];const rows=[];g.offertes.forEach(off=>{const kids=childrenByParent[off.id]||[];const visKids=kids.filter(docVisible);if(docVisible(off)||visKids.length){rows.push({e:off,child:false});visKids.forEach(c=>rows.push({e:c,child:true}));}});(g.loose||[]).filter(docVisible).forEach(c=>rows.push({e:c,child:false}));const src=g.first||{projectName:g.name,type:'build',data:{client:((g.loose&&g.loose[0]&&g.loose[0].data&&g.loose[0].data.client)||{})}};return {name:g.name,src,external:!g.first,rows};}).filter(g=>g.rows.length);
+  const groups=projOrder.map(key=>{const g=projMap[key];const rows=[];g.offertes.forEach(off=>{const kids=childrenByParent[off.id]||[];const visKids=kids.filter(docVisible);if(docVisible(off)||visKids.length){rows.push({e:off,child:false});visKids.forEach(c=>rows.push({e:c,child:true}));}});(g.loose||[]).filter(docVisible).forEach(c=>rows.push({e:c,child:false}));const src=g.first||{projectName:g.name,type:'build',data:{client:((g.loose&&g.loose[0]&&g.loose[0].data&&g.loose[0].data.client)||{})}};return {key,name:g.name,src,external:!g.first,rows};}).filter(g=>g.rows.length);
   const orphanRows=namelessOrphans.filter(docVisible).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
   const anyVisible=groups.length>0||orphanRows.length>0;
   const renderItem=(item,indent)=>{
@@ -3262,14 +3264,17 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
       <p style={{color:'#999',marginBottom:16}}>{archive.length===0?'Nog geen documenten. Begin met een nieuwe offerte.':'Geen documenten in dit filter.'}</p>
     </div>:
     <div>
-      {groups.map((g,gi)=>{const isSrc=projDragName===g.name,isTgt=projDragName&&projDragName!==g.name;return <div key={gi} style={{marginBottom:8,opacity:isSrc?0.5:1,outline:isTgt?'2px dashed #2D8659':'none',outlineOffset:6,borderRadius:6,transition:'opacity .12s'}}
+      {groups.map((g,gi)=>{const isSrc=projDragName===g.name,isTgt=projDragName&&projDragName!==g.name;const isColl=!!collapsedProj[g.key];return <div key={gi} style={{marginBottom:8,opacity:isSrc?0.5:1,outline:isTgt?'2px dashed #2D8659':'none',outlineOffset:6,borderRadius:6,transition:'opacity .12s'}}
         onDragOver={e=>{if(projDragRef.current&&projDragRef.current.name!==g.name)e.preventDefault();}} onDrop={e=>dropProj(g,e)}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',margin:'22px 0 8px',flexWrap:'wrap',gap:8}}>
           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
             <span draggable onDragStart={()=>startProjDrag(g)} onDragEnd={endProjDrag} title={isTgt?'Laat hier los om samen te voegen':'Sleep op een ander project om samen te voegen'} style={{cursor:'grab',color:'#b8bcba',fontSize:16,lineHeight:1,userSelect:'none'}}>⠿</span>
-            <span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#071412'}}>Project</span>
-            <span style={{fontSize:15,fontWeight:700}}>{g.name}</span>
-            {(()=>{const nOff=g.rows.filter(r=>!r.child&&kindOf(r.e)!=='change_order'&&kindOf(r.e)!=='delivery').length;return <span style={{fontSize:12,color:'#999'}}>{nOff>0?nOff+'× offerte':'offerte buiten de tool'}</span>;})()}
+            <div onClick={()=>toggleProj(g.key)} title={isColl?'Uitvouwen':'Invouwen'} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+              <span style={{fontSize:12,color:'#999',display:'inline-block',transform:isColl?'rotate(-90deg)':'none',transition:'.12s'}}>▾</span>
+              <span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#071412'}}>Project</span>
+              <span style={{fontSize:15,fontWeight:700}}>{g.name}</span>
+            </div>
+            {(()=>{const nOff=g.rows.filter(r=>!r.child&&kindOf(r.e)!=='change_order'&&kindOf(r.e)!=='delivery').length;return <span style={{fontSize:12,color:'#999'}}>{(nOff>0?nOff+'× offerte':'offerte buiten de tool')+(isColl?' · '+g.rows.length+' doc.':'')}</span>;})()}
           </div>
           <div className="flex g8" style={{flexWrap:'wrap'}}>
             <button className="btn btn-sm btn-g" onClick={()=>onNewInProject(g.src)}>+ Offerte</button>
@@ -3277,7 +3282,7 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
             <button className="btn btn-sm btn-g" onClick={()=>onNewDeliveryForProject(g.name)}>+ Oplevering</button>
           </div>
         </div>
-        {g.rows.map(r=>renderItem(r.e,r.child))}
+        {!isColl&&g.rows.map(r=>renderItem(r.e,r.child))}
       </div>;})}
       {orphanRows.length>0&&<div>
         <div style={{margin:'22px 0 8px'}}><span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#999'}}>Losse documenten (geen gekoppelde offerte)</span></div>
