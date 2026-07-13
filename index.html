@@ -1630,10 +1630,10 @@ function BudgetTab({data:d,set}){
   const changeRole=(pi,ii,roleId)=>{
     const r=roleMap[roleId];
     if(!r)return;
-    upItem(pi,ii,'role',roleId);
-    upItem(pi,ii,'extRate',r.ext);
-    upItem(pi,ii,'intRate',r.int);
-    upItem(pi,ii,'unit',r.unit);
+    const p=[...d.phases];const items=[...p[pi].items];
+    items[ii]={...items[ii],role:roleId,extRate:r.ext,intRate:r.int,unit:r.unit};
+    p[pi]={...p[pi],items};
+    set({...d,phases:p});
   };
 
   // Procurement helpers
