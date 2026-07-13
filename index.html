@@ -45,6 +45,7 @@
   .btn-s{background:var(--teal-mint);color:var(--teal-dark)}.btn-s:hover{background:#c2e3da}
   .btn-g{background:0;color:var(--dark-grey);border:1px solid #d0d0ce}.btn-g:hover{background:var(--warm-grey)}
   .btn-sm{padding:4px 10px;font-size:12px}
+  .btn-xs{padding:3px 8px;font-size:11px;border-radius:5px}
   .bt{width:100%;border-collapse:collapse;font-size:13px}
   .bt th{text-align:left;padding:8px 12px;background:var(--warm-grey);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dark-grey);border-bottom:2px solid #d0d0ce}
   .bt td{padding:6px 12px;border-bottom:1px solid #eee;vertical-align:middle}
@@ -79,7 +80,7 @@
   .prev table .label-cell{background:#f0f0ee;font-weight:500;width:160px}
   .prev .foot{margin-top:48px;padding-top:12px;border-top:1px solid #ddd;font-size:9px;color:#999;display:flex;justify-content:space-between;align-items:flex-end}
   .flex{display:flex}.between{display:flex;justify-content:space-between;align-items:center}
-  .g8{gap:8px}.g16{gap:16px}.mt16{margin-top:16px}.mt24{margin-top:24px}.mb16{margin-bottom:16px}
+  .g6{gap:6px}.g8{gap:8px}.g16{gap:16px}.mt16{margin-top:16px}.mt24{margin-top:24px}.mb16{margin-bottom:16px}
   .tr{text-align:right}.mono{font-size:12px}.sm{font-size:12px}.muted{color:var(--mid-grey)}
   @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   @media(max-width:768px){.row,.row3,.row4{grid-template-columns:1fr}.tsel{flex-direction:column}.main{padding:16px}.hdr{padding:12px 16px}.tabs{padding:0 16px}.prev{padding:24px}}
@@ -3081,6 +3082,7 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
   const[expandedId,setExpandedId]=useState(null);
   const[avRefresh,setAvRefresh]=useState(0);
   const refresh=()=>setArchive(loadArchiveLive());
+  const[showSettings,setShowSettings]=useState(false);
   const[collapsedProj,setCollapsedProj]=useState(()=>{try{return JSON.parse(localStorage.getItem('teal.offerte.collapsed')||'{}')||{};}catch(e){return {};}});
   const toggleProj=(k)=>setCollapsedProj(c=>{const n={...c,[k]:!c[k]};if(!n[k])delete n[k];try{localStorage.setItem('teal.offerte.collapsed',JSON.stringify(n));}catch(e){}return n;});
   const projDragRef=React.useRef(null);
@@ -3130,53 +3132,42 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
   const groups=projOrder.map(key=>{const g=projMap[key];const rows=[];g.offertes.forEach(off=>{const kids=childrenByParent[off.id]||[];const visKids=kids.filter(docVisible);if(docVisible(off)||visKids.length){rows.push({e:off,child:false});visKids.forEach(c=>rows.push({e:c,child:true}));}});(g.loose||[]).filter(docVisible).forEach(c=>rows.push({e:c,child:false}));const src=g.first||{projectName:g.name,type:'build',data:{client:((g.loose&&g.loose[0]&&g.loose[0].data&&g.loose[0].data.client)||{})}};return {key,name:g.name,src,external:!g.first,rows};}).filter(g=>g.rows.length);
   const orphanRows=namelessOrphans.filter(docVisible).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
   const anyVisible=groups.length>0||orphanRows.length>0;
-  const renderItem=(item,indent)=>{
+  const renderRow=(item,indent)=>{
     const isExpanded=expandedId===item.id;
     const k=kindOf(item);const isCO=k==='change_order';const isDel=k==='delivery';
-    const badge=isCO?{t:'change order',c:'#6b4ea0'}:isDel?{t:'oplevering',c:'#0f766e'}:{t:item.type||'offerte',c:item.type==='build'?'#071412':'#2D8659'};
+    const badge=isCO?{t:'CO',c:'#6b4ea0',label:'Change order'}:isDel?{t:'OPL',c:'#0f766e',label:'Oplevering'}:{t:(item.type==='build'?'B':'A'),c:item.type==='build'?'#071412':'#2D8659',label:(item.type==='build'?'Build offerte':'Assemble offerte')};
     const meta=statusMeta[effectiveStatus(item)]||statusMeta.concept;
     const phase=item.data&&item.data.project&&(item.data.project.subtitle||item.data.project.phaseLabel);
+    const title=(!indent&&phase)?phase:(item.projectName||badge.label);
     const sub=isDel?(((item.data&&item.data.deliverables)?item.data.deliverables.length:0)+' deliverables'):fmtE(entryTotal(item));
-    return <div key={item.id} className="card" style={{padding:0,overflow:'hidden',marginLeft:indent?24:0,borderLeft:indent?'3px solid '+badge.c:undefined}}>
-      <div style={{padding:'16px 20px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between'}} onClick={()=>setExpandedId(isExpanded?null:item.id)}>
-        <div style={{flex:1}}>
-          <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-            <span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#fff',background:badge.c,padding:'2px 8px',borderRadius:3}}>{badge.t}</span>
-            <span style={{fontWeight:600,fontSize:15}}>{!indent&&phase?phase:(item.projectName||'Naamloos')}</span>
-            <span style={{color:'#999',fontSize:12}}>{item.ref}</span>
-            <span style={{fontSize:11,fontWeight:600,color:meta.color,background:meta.bg,padding:'2px 8px',borderRadius:3}}>{meta.label}</span>
+    return <div key={item.id} style={{borderTop:'1px solid #f1f0ec'}}>
+      <div onClick={()=>setExpandedId(isExpanded?null:item.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 16px',paddingLeft:indent?44:16,cursor:'pointer',borderLeft:'3px solid '+badge.c,background:isExpanded?'#faf9f6':'transparent'}}>
+        <span title={badge.label} style={{flexShrink:0,minWidth:24,height:19,padding:'0 5px',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,letterSpacing:.5,color:'#fff',background:badge.c,borderRadius:3}}>{badge.t}</span>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap'}}>
+            <span style={{fontWeight:600,fontSize:14,color:'#071412'}}>{title}</span>
+            <span style={{color:'#b0b0ab',fontSize:12,fontFamily:"'JetBrains Mono',monospace"}}>{item.ref}</span>
           </div>
-          <div style={{marginTop:4,fontSize:12,color:'#999'}}>
-            {item.clientName||'Geen klant'} · {sub} · {fmtDt(item.updatedAt)}{indent&&item.parentRef?' · bij '+item.parentRef:''}
-          </div>
+          <div style={{marginTop:2,fontSize:12,color:'#9a9a94'}}>{item.clientName||'Geen klant'} · {sub} · {fmtDt(item.updatedAt)}{indent&&item.parentRef?' · bij '+item.parentRef:''}</div>
         </div>
-        <div style={{fontSize:18,color:'#999',transform:isExpanded?'rotate(180deg)':'',transition:'.15s'}}>▾</div>
+        <span style={{display:'flex',alignItems:'center',gap:6,flexShrink:0,fontSize:12,fontWeight:600,color:meta.color}}><span style={{width:7,height:7,borderRadius:7,background:meta.color,flexShrink:0}}/>{meta.label}</span>
+        <span style={{fontSize:15,color:'#ccc',flexShrink:0,transform:isExpanded?'rotate(180deg)':'',transition:'.15s'}}>▾</span>
       </div>
-      {isExpanded&&<div style={{borderTop:'1px solid #eee',padding:'16px 20px'}}>
-        <div style={{marginBottom:14}}>
+      {isExpanded&&<div style={{padding:'14px 16px 16px',paddingLeft:indent?44:16,background:'#faf9f6',borderLeft:'3px solid '+badge.c}}>
+        <div style={{marginBottom:12}}>
           <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:6}}>Status</div>
           <div className="flex g8" style={{flexWrap:'wrap'}}>
             {STATUS_ORDER.map(st=>{const on=(item.status||'concept')===st;const m=statusMeta[st];return <button key={st} className="btn btn-sm" onClick={()=>{archiveSetStatus(item.id,st);refresh();}} style={{border:'1px solid '+(on?m.color:'#d0d0ce'),background:on?m.bg:'#fff',color:on?m.color:'#555',fontWeight:on?700:600}}>{m.label}</button>;})}
           </div>
         </div>
-        <div className="flex g8" style={{marginBottom:16,flexWrap:'wrap'}}>
+        <div className="flex g8" style={{flexWrap:'wrap',alignItems:'center'}}>
           <button className="btn btn-sm btn-p" onClick={()=>onOpen(item.data)}>Openen</button>
-          <button className="btn btn-sm btn-s" onClick={()=>{onDuplicate(item.data);refresh();}}>Dupliceren</button>
+          <button className="btn btn-sm btn-g" onClick={()=>{onDuplicate(item.data);refresh();}}>Dupliceren</button>
           {!isCO&&!isDel&&<button className="btn btn-sm btn-g" onClick={()=>{onBumpVersion(item.id);refresh();}}>Nieuwe versie</button>}
-          {!isCO&&!isDel&&<button className="btn btn-sm btn-g" onClick={()=>{onNewCO(item);refresh();}}>+ Change order</button>}
-          {!isCO&&!isDel&&<button className="btn btn-sm btn-g" onClick={()=>{onNewDelivery(item);refresh();}}>+ Oplevering</button>}
-          {!isDel&&<button className="btn btn-sm btn-g" title="Maak een concept-factuur in TEAL Odoo" onClick={()=>{pushToOdoo(item).then(refresh);}}>Naar Odoo</button>}
-          <button className="btn btn-sm btn-g" style={{color:'var(--red)'}} onClick={()=>{if(confirm(`"${item.projectName||'Naamloos'}" verwijderen?`)){onDelete(item.id);refresh();}}}>Verwijderen</button>
+          {!isDel&&<button className="btn btn-sm btn-g" title="Concept-factuur in TEAL Odoo" onClick={()=>{pushToOdoo(item).then(refresh);}}>Naar Odoo</button>}
+          <div style={{flex:1,minWidth:12}}/>
+          <button className="btn btn-sm btn-g" style={{color:'var(--red)',borderColor:'#e8cfcd'}} onClick={()=>{if(confirm('"'+title+'" verwijderen?')){onDelete(item.id);refresh();}}}>Verwijderen</button>
         </div>
-        {!isCO&&!isDel&&<div style={{fontSize:12,color:'#555'}}>
-          <strong style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999'}}>Versies</strong>
-          <div style={{marginTop:6,maxHeight:220,overflowY:'auto'}}>
-            {(()=>{const vs=item.changelog.filter(l=>l.action==='version');if(!vs.length)return <div style={{color:'#999'}}>Versie {currentVersion(item.ref)}. Nog geen wijzigingen vastgelegd. Klik op Nieuwe versie om bij een aanpassing te noteren wat er anders is.</div>;return [...vs].reverse().map((log,i)=><div key={i} style={{display:'flex',gap:8,marginBottom:8}}>
-              <span style={{color:'#999',flexShrink:0,width:130}}>{fmtDt(log.date)}</span>
-              <span><strong>Versie {log.version}</strong>{log.note?' — '+log.note:''}</span>
-            </div>);})()}
-          </div>
-        </div>}
       </div>}
     </div>;
   };
@@ -3212,23 +3203,17 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
       </div>
     </div>
 
-    {/* KPI's */}
-    <div className="flex g16" style={{marginBottom:16}}>
-      <div className="card" style={{flex:1,marginBottom:0}}>
-        <div className="card-h" style={{border:0,padding:0,marginBottom:6}}>Openstaand</div>
-        <div style={{fontSize:24,fontWeight:700,color:'#071412'}}>{fmtE(openVal)}</div>
-        <div className="sm muted">Concept + verstuurd</div>
-      </div>
-      <div className="card" style={{flex:1,marginBottom:0}}>
-        <div className="card-h" style={{border:0,padding:0,marginBottom:6}}>Gewonnen dit kwartaal</div>
-        <div style={{fontSize:24,fontWeight:700,color:'#2D8659'}}>{fmtE(wonQ)}</div>
-        <div className="sm muted">{acc} geaccepteerd totaal</div>
-      </div>
-      <div className="card" style={{flex:1,marginBottom:0}}>
-        <div className="card-h" style={{border:0,padding:0,marginBottom:6}}>Win-rate</div>
-        <div style={{fontSize:24,fontWeight:700,color:'#071412'}}>{winRate==null?'–':winRate+'%'}</div>
-        <div className="sm muted">{acc} gewonnen / {rej} verloren</div>
-      </div>
+    {/* KPI-strip */}
+    <div className="card" style={{marginBottom:16,padding:0,display:'flex',flexWrap:'wrap'}}>
+      {[
+        {lab:'Openstaand',val:fmtE(openVal),sub:'concept + verstuurd',c:'#071412'},
+        {lab:'Gewonnen dit kwartaal',val:fmtE(wonQ),sub:acc+' geaccepteerd totaal',c:'#2D8659'},
+        {lab:'Win-rate',val:winRate==null?'–':winRate+'%',sub:acc+' gewonnen / '+rej+' verloren',c:'#071412'},
+      ].map((k,i)=><div key={i} style={{flex:'1 1 160px',padding:'14px 18px',borderLeft:i?'1px solid #f1f0ec':'none'}}>
+        <div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,color:'#9a9f9d',marginBottom:4}}>{k.lab}</div>
+        <div style={{fontSize:22,fontWeight:700,color:k.c,lineHeight:1.1}}>{k.val}</div>
+        <div style={{fontSize:11,color:'#a8adaa',marginTop:2}}>{k.sub}</div>
+      </div>)}
     </div>
 
     {/* Doc-type filter */}
@@ -3247,48 +3232,53 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
       })}
     </div>
 
-    <div className="card" style={{marginBottom:16}}>
-      <div className="card-h">Algemene Voorwaarden (PDF)</div>
-      <p className="sm muted" style={{margin:'0 0 10px'}}>Geldt voor alle offertes. Een geupload bestand wordt automatisch achter elke offerte geplakt en blijft bewaard in deze browser. Wijzig je je AV, vervang hier de PDF; de code hoef je niet meer aan te passen.</p>
-      {['nl','en'].map(lng=>{const has=getAVB64(lng);return <div key={lng+avRefresh} className="flex g8" style={{alignItems:'center',marginBottom:6}}>
-        <span style={{width:28,fontSize:12,fontWeight:700,textTransform:'uppercase'}}>{lng}</span>
-        <label className="btn btn-sm btn-g" style={{cursor:'pointer',margin:0}}>{has?'Vervang PDF':'Upload PDF'}
-          <input type="file" accept="application/pdf" style={{display:'none'}} onChange={e=>{const fl=e.target.files&&e.target.files[0];if(!fl)return;const r=new FileReader();r.onload=()=>{const b64=String(r.result||'').split(',')[1]||'';setAVB64(lng,b64);setAvRefresh(x=>x+1);};r.readAsDataURL(fl);e.target.value='';}}/>
-        </label>
-        <span className="sm" style={{color:has?'var(--green)':'#999'}}>{has?'eigen versie actief':'standaard versie'}</span>
-        {has&&<button className="btn btn-sm btn-g" onClick={()=>{setAVB64(lng,null);setAvRefresh(x=>x+1);}}>Verwijder</button>}
-      </div>;})}
-    </div>
-
     {!anyVisible?<div className="card" style={{textAlign:'center',padding:48}}>
       <p style={{color:'#999',marginBottom:16}}>{archive.length===0?'Nog geen documenten. Begin met een nieuwe offerte.':'Geen documenten in dit filter.'}</p>
     </div>:
     <div>
-      {groups.map((g,gi)=>{const isSrc=projDragName===g.name,isTgt=projDragName&&projDragName!==g.name;const isColl=!!collapsedProj[g.key];return <div key={gi} style={{marginBottom:8,opacity:isSrc?0.5:1,outline:isTgt?'2px dashed #2D8659':'none',outlineOffset:6,borderRadius:6,transition:'opacity .12s'}}
+      {groups.map((g,gi)=>{const isSrc=projDragName===g.name,isTgt=projDragName&&projDragName!==g.name;const isColl=!!collapsedProj[g.key];const nOff=g.rows.filter(r=>!r.child&&kindOf(r.e)!=='change_order'&&kindOf(r.e)!=='delivery').length;const projVal=g.rows.filter(r=>kindOf(r.e)!=='delivery').reduce((s,r)=>s+entryTotal(r.e),0);return <div key={gi} className="card" style={{marginBottom:12,padding:0,overflow:'hidden',opacity:isSrc?0.5:1,outline:isTgt?'2px dashed #2D8659':'none',outlineOffset:2,transition:'opacity .12s'}}
         onDragOver={e=>{if(projDragRef.current&&projDragRef.current.name!==g.name)e.preventDefault();}} onDrop={e=>dropProj(g,e)}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',margin:'22px 0 8px',flexWrap:'wrap',gap:8}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-            <span draggable onDragStart={()=>startProjDrag(g)} onDragEnd={endProjDrag} title={isTgt?'Laat hier los om samen te voegen':'Sleep op een ander project om samen te voegen'} style={{cursor:'grab',color:'#b8bcba',fontSize:16,lineHeight:1,userSelect:'none'}}>⠿</span>
-            <div onClick={()=>toggleProj(g.key)} title={isColl?'Uitvouwen':'Invouwen'} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
-              <span style={{fontSize:12,color:'#999',display:'inline-block',transform:isColl?'rotate(-90deg)':'none',transition:'.12s'}}>▾</span>
-              <span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#071412'}}>Project</span>
-              <span style={{fontSize:15,fontWeight:700}}>{g.name}</span>
-            </div>
-            {(()=>{const nOff=g.rows.filter(r=>!r.child&&kindOf(r.e)!=='change_order'&&kindOf(r.e)!=='delivery').length;return <span style={{fontSize:12,color:'#999'}}>{(nOff>0?nOff+'× offerte':'offerte buiten de tool')+(isColl?' · '+g.rows.length+' doc.':'')}</span>;})()}
+        <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',background:'#faf9f6',borderBottom:isColl?'none':'1px solid #ecebe6'}}>
+          <span draggable onDragStart={()=>startProjDrag(g)} onDragEnd={endProjDrag} title={isTgt?'Laat hier los om samen te voegen':'Sleep op een ander project om samen te voegen'} style={{cursor:'grab',color:'#c4c8c6',fontSize:15,lineHeight:1,userSelect:'none'}}>⠿</span>
+          <div onClick={()=>toggleProj(g.key)} title={isColl?'Uitvouwen':'Invouwen'} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',flex:1,minWidth:0}}>
+            <span style={{fontSize:11,color:'#b0b4b2',display:'inline-block',transform:isColl?'rotate(-90deg)':'none',transition:'.12s'}}>▾</span>
+            <span style={{fontSize:14,fontWeight:700,color:'#071412',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.name}</span>
+            <span style={{fontSize:11,color:'#a0a4a2',whiteSpace:'nowrap'}}>{(nOff>0?nOff+'× offerte':'extern')+' · '+g.rows.length+' doc.'}</span>
           </div>
-          <div className="flex g8" style={{flexWrap:'wrap'}}>
-            <button className="btn btn-sm btn-g" onClick={()=>onNewInProject(g.src)}>+ Offerte</button>
-            <button className="btn btn-sm btn-g" onClick={()=>onNewCOForProject(g.name)}>+ Change order</button>
-            <button className="btn btn-sm btn-g" onClick={()=>onNewDeliveryForProject(g.name)}>+ Oplevering</button>
+          <span style={{fontSize:12,color:'#6b706e',fontWeight:600,whiteSpace:'nowrap'}}>{fmtE(projVal)}</span>
+          <div className="proj-actions flex g6" style={{flexShrink:0}}>
+            <button className="btn btn-xs btn-g" title="Nieuwe offerte in dit project" onClick={()=>onNewInProject(g.src)}>+ Offerte</button>
+            <button className="btn btn-xs btn-g" title="Change order" onClick={()=>onNewCOForProject(g.name)}>+ CO</button>
+            <button className="btn btn-xs btn-g" title="Oplevering" onClick={()=>onNewDeliveryForProject(g.name)}>+ Oplev.</button>
           </div>
         </div>
-        {!isColl&&g.rows.map(r=>renderItem(r.e,r.child))}
+        {!isColl&&g.rows.map(r=>renderRow(r.e,r.child))}
       </div>;})}
-      {orphanRows.length>0&&<div>
-        <div style={{margin:'22px 0 8px'}}><span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#999'}}>Losse documenten (geen gekoppelde offerte)</span></div>
-        {orphanRows.map(e=>renderItem(e,false))}
+      {orphanRows.length>0&&<div className="card" style={{marginBottom:12,padding:0,overflow:'hidden'}}>
+        <div style={{padding:'12px 16px',background:'#faf9f6',borderBottom:'1px solid #ecebe6'}}><span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#999'}}>Losse documenten</span></div>
+        {orphanRows.map(e=>renderRow(e,false))}
       </div>}
     </div>}
+
+    {/* Instellingen (inklapbaar) */}
+    <div style={{marginTop:28,borderTop:'1px solid #ecebe6',paddingTop:14}}>
+      <div onClick={()=>setShowSettings(s=>!s)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',userSelect:'none'}}>
+        <span style={{fontSize:11,color:'#b0b4b2',display:'inline-block',transform:showSettings?'none':'rotate(-90deg)',transition:'.12s'}}>▾</span>
+        <span style={{fontSize:12,fontWeight:600,color:'#8a908d'}}>Instellingen · Algemene Voorwaarden</span>
+      </div>
+      {showSettings&&<div className="card" style={{marginTop:12}}>
+        <div className="card-h">Algemene Voorwaarden (PDF)</div>
+        <p className="sm muted" style={{margin:'0 0 10px'}}>Geldt voor alle offertes. Een geupload bestand wordt automatisch achter elke offerte geplakt en blijft bewaard in deze browser. Wijzig je je AV, vervang hier de PDF; de code hoef je niet meer aan te passen.</p>
+        {['nl','en'].map(lng=>{const has=getAVB64(lng);return <div key={lng+avRefresh} className="flex g8" style={{alignItems:'center',marginBottom:6}}>
+          <span style={{width:28,fontSize:12,fontWeight:700,textTransform:'uppercase'}}>{lng}</span>
+          <label className="btn btn-sm btn-g" style={{cursor:'pointer',margin:0}}>{has?'Vervang PDF':'Upload PDF'}
+            <input type="file" accept="application/pdf" style={{display:'none'}} onChange={e=>{const fl=e.target.files&&e.target.files[0];if(!fl)return;const r=new FileReader();r.onload=()=>{const b64=String(r.result||'').split(',')[1]||'';setAVB64(lng,b64);setAvRefresh(x=>x+1);};r.readAsDataURL(fl);e.target.value='';}}/>
+          </label>
+          <span className="sm" style={{color:has?'var(--green)':'#999'}}>{has?'eigen versie actief':'standaard versie'}</span>
+          {has&&<button className="btn btn-sm btn-g" onClick={()=>{setAVB64(lng,null);setAvRefresh(x=>x+1);}}>Verwijder</button>}
+        </div>;})}
+      </div>}
+    </div>
   </div>;
 }
 
