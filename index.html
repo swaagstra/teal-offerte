@@ -46,7 +46,8 @@
   .btn-g{background:0;color:var(--dark-grey);border:1px solid #d0d0ce}.btn-g:hover{background:var(--warm-grey)}
   .btn-sm{padding:4px 10px;font-size:12px}
   .btn-xs{padding:3px 8px;font-size:11px;border-radius:5px}
-  .bt{width:100%;border-collapse:collapse;font-size:13px}
+  .tbl-scroll{overflow-x:auto;margin:0 -24px;padding:0 24px}
+  .bt{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
   .bt th{text-align:left;padding:8px 12px;background:var(--warm-grey);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dark-grey);border-bottom:2px solid #d0d0ce}
   .bt td{padding:6px 12px;border-bottom:1px solid #eee;vertical-align:middle}
   .bt tbody tr:not(.ph):not(.sub):not(.tot):hover{background:var(--mint-light)}
@@ -1727,7 +1728,7 @@ function BudgetTab({data:d,set}){
     <div className="card">
       <div className="card-h">{ll.blockATitle}</div>
       <p className="sm muted mb16">{ll.blockAHelp}</p>
-      <table className="bt">
+      <div className="tbl-scroll"><table className="bt">
         <thead><tr><th style={{width:'20%'}}>{ll.omschrijvingCol}</th><th style={{width:'12%'}}>{ll.rol}</th><th style={{width:'7%'}}>{ll.aantal}</th><th style={{width:'7%'}}>{ll.eenheid}</th><th style={{width:'9%'}}>{ll.extTarief}</th><th style={{width:'10%'}}>{ll.klantprijs}</th><th style={{width:'9%'}}>{ll.intTarief}</th><th style={{width:'10%'}}>{ll.kostprijs}</th><th style={{width:'10%'}}>{ll.marge}</th><th style={{width:'4%'}}></th></tr></thead>
         <tbody>
           {d.phases.map((ph,pi)=><React.Fragment key={ph.id}>
@@ -1782,14 +1783,14 @@ function BudgetTab({data:d,set}){
             <td className="tr mono">{fmtE(totals.blockACost)}</td>
             <td className="tr mono">{fmtE(totals.blockAClient-totals.blockACost)}</td><td></td></tr>
         </tbody>
-      </table>
+      </table></div>
     </div>
 
     {/* Block B1: Off-the-shelf */}
     <div className="card">
       <div className="card-h">{ll.blockB1Title}</div>
       <p className="sm muted mb16">{ll.blockB1Help}</p>
-      <table className="bt">
+      <div className="tbl-scroll"><table className="bt">
         <thead><tr><th>{ll.item}</th><th style={{width:'14%'}}>{ll.leverancier}</th><th style={{width:'12%'}}>{ll.inkoopwaarde}</th><th style={{width:'8%'}}>{ll.handlingPct}</th><th style={{width:'12%'}}>{ll.handlingFee}</th><th style={{width:'12%'}}>{ll.klantprijs}</th><th style={{width:'4%'}}></th></tr></thead>
         <tbody>
           {(d.procOTS||[]).map((it,i)=>{
@@ -1805,7 +1806,7 @@ function BudgetTab({data:d,set}){
             </tr>})}
           <tr className="sub"><td colSpan={2}>{ll.subtotaalB1}</td><td className="tr mono">{fmt(totals.b1Purchase)}</td><td></td><td className="tr mono">{fmt(totals.b1Handling)}</td><td className="tr mono">{fmt(totals.b1Purchase+totals.b1Handling)}</td><td></td></tr>
         </tbody>
-      </table>
+      </table></div>
       <div className="flex g8 mt16"><button className="btn btn-sm btn-g" onClick={addOTS}>{ll.inkooppost}</button><button className="btn btn-sm btn-g" onClick={()=>setLibType('ots')}>Uit bibliotheek</button></div>
     </div>
 
@@ -1813,7 +1814,7 @@ function BudgetTab({data:d,set}){
     <div className="card">
       <div className="card-h">{ll.blockB2Title}</div>
       <p className="sm muted mb16">{ll.blockB2Help}</p>
-      <table className="bt">
+      <div className="tbl-scroll"><table className="bt">
         <thead><tr><th>{ll.item}</th><th style={{width:'12%'}}>{ll.leverancier}</th><th style={{width:'10%'}}>{ll.inkoopwaarde}</th><th style={{width:'7%'}}>{ll.handlingPct}</th><th style={{width:'9%'}}>{ll.handlingFee}</th><th style={{width:'7%'}}>{ll.riskPct}</th><th style={{width:'9%'}}>{ll.riskBuffer}</th><th style={{width:'10%'}}>{ll.klantprijs}</th><th style={{width:'4%'}}></th></tr></thead>
         <tbody>
           {(d.procCustom||[]).map((it,i)=>{
@@ -1832,14 +1833,14 @@ function BudgetTab({data:d,set}){
             </tr>})}
           <tr className="sub"><td colSpan={2}>{ll.subtotaalB2}</td><td className="tr mono">{fmt(totals.b2Purchase)}</td><td></td><td className="tr mono">{fmt(totals.b2Handling)}</td><td></td><td className="tr mono">{fmt(totals.b2Risk)}</td><td className="tr mono">{fmt(totals.b2Purchase+totals.b2Handling+totals.b2Risk)}</td><td></td></tr>
         </tbody>
-      </table>
+      </table></div>
       <div className="flex g8 mt16"><button className="btn btn-sm btn-g" onClick={addCust}>{ll.maatwerk}</button><button className="btn btn-sm btn-g" onClick={()=>setLibType('custom')}>Uit bibliotheek</button></div>
     </div>
 
     {/* Block C: Subcontractors */}
     <div className="card">
       <div className="card-h">{ll.blockCTitle}</div>
-      <table className="bt">
+      <div className="tbl-scroll"><table className="bt">
         <thead><tr><th>{ll.omschrijvingCol}</th><th style={{width:'14%'}}>{ll.onderaannemer}</th><th style={{width:'12%'}}>{ll.bedrag}</th><th style={{width:'8%'}}>{ll.coordPct}</th><th style={{width:'12%'}}>{ll.coordFee}</th><th style={{width:'12%'}}>{ll.klantprijs}</th><th style={{width:'4%'}}></th></tr></thead>
         <tbody>
           {(d.subs||[]).map((it,i)=>{
@@ -1855,7 +1856,7 @@ function BudgetTab({data:d,set}){
             </tr>})}
           <tr className="sub"><td colSpan={2}>{ll.subtotaalC}</td><td className="tr mono">{fmt(totals.subFees)}</td><td></td><td className="tr mono">{fmt(totals.subCoord)}</td><td className="tr mono">{fmt(totals.subClient)}</td><td></td></tr>
         </tbody>
-      </table>
+      </table></div>
       <div className="flex g8 mt16"><button className="btn btn-sm btn-g" onClick={addSub}>{ll.plusOnderaannemer}</button><button className="btn btn-sm btn-g" onClick={()=>setLibType('sub')}>Uit bibliotheek</button></div>
     </div>
 
@@ -1867,7 +1868,7 @@ function BudgetTab({data:d,set}){
         <span className="sm muted">{L==='nl'?'Installatie- en reisblok meenemen in deze offerte':'Include installation & travel block in this quote'}</span>
       </label>
       {d.install&&d.install.enabled&&<>
-        <table className="bt">
+        <div className="tbl-scroll"><table className="bt">
           <thead><tr>
             <th style={{width:'12%'}}>{L==='nl'?'Rol':'Role'}</th>
             <th style={{width:'20%'}}>{L==='nl'?'Persoon':'Person'}</th>
@@ -1901,7 +1902,7 @@ function BudgetTab({data:d,set}){
               </tr>;
             })}
           </tbody>
-        </table>
+        </table></div>
         <button className="btn btn-sm btn-g mt16" onClick={addInstCrew}>{L==='nl'?'+ persoon':'+ person'}</button>
 
         <div className="flex g8" style={{alignItems:'center',marginTop:14}}>
@@ -1974,7 +1975,7 @@ function BudgetTab({data:d,set}){
     {/* Totals + Margin */}
     <div className="card">
       <div className="card-h">{ll.totaalOverzicht}</div>
-      <table className="bt">
+      <div className="tbl-scroll"><table className="bt">
         <tbody>
           <tr><td>{ll.tealFees}</td><td className="tr mono">{fmtE(totals.blockAClient)}</td><td className="tr mono muted">({ll.kost}: {fmtE(totals.blockACost)})</td></tr>
           <tr><td>{ll.inkoopTotal}</td><td className="tr mono">{fmtE(totals.procClient)}</td><td className="tr mono muted">({ll.kost}: {fmtE(totals.procCost)})</td></tr>
@@ -1982,7 +1983,7 @@ function BudgetTab({data:d,set}){
           {totals.inst&&totals.inst.client>0&&<tr><td>{L==='nl'?'Installatie / reizen':'Installation / travel'}</td><td className="tr mono">{fmtE(totals.inst.client)}</td><td className="tr mono muted">({ll.kost}: {fmtE(totals.inst.cost)})</td></tr>}
           <tr className="tot"><td>{ll.totaalExcl}</td><td className="tr mono">{fmtE(totals.grandClient)}</td><td className="tr mono" style={{color:'var(--teal-mint)'}}>({ll.margeLabel}: {fmtE(totals.grandClient-totals.grandCost)})</td></tr>
         </tbody>
-      </table>
+      </table></div>
       <div className={`mbar ${marginStatus(totals.margin)}`}>
         <span>{ll.margeLabel}: {Math.round(totals.margin*100)}%</span>
         <span style={{fontSize:12,fontWeight:400}}>{ll.target}</span>
@@ -2075,7 +2076,7 @@ function PaymentTab({data:d,set}){
 
   return <div className="card">
     <div className="card-h">{ll.betalingsschema}</div>
-    <table className="bt">
+    <div className="tbl-scroll"><table className="bt">
       <thead><tr><th>{ll.mijlpaal}</th><th style={{width:'10%'}}>%</th><th style={{width:'18%'}}>{ll.bedragExcl}</th><th style={{width:'18%'}}>{ll.richtdatum}</th><th style={{width:'6%'}}></th></tr></thead>
       <tbody>
         {d.payment.milestones.map((ms,i)=><tr key={i}>
@@ -2087,7 +2088,7 @@ function PaymentTab({data:d,set}){
         </tr>)}
         <tr className="sub"><td>{ll.totaal}</td><td style={{color:totPct===100?'var(--green)':'var(--red)',fontWeight:600}}>{totPct}%</td><td className="mono">{fmtE(grand)}</td><td></td><td></td></tr>
       </tbody>
-    </table>
+    </table></div>
     <button className="btn btn-sm btn-g mt16" onClick={()=>{const ms=[...d.payment.milestones,{name:{nl:'',en:''},pct:0,date:''}];set({...d,payment:{...d.payment,milestones:ms}})}}>{ll.plusMijlpaal}</button>
 
     <div className="mt24"><div className="card-h">{ll.voorwaarden}</div>
