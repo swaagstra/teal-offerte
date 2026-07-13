@@ -2749,19 +2749,22 @@ function emailQuote(d){
   quotePdfBytes(d,function(bytes){
     const blob=new Blob([bytes],{type:'application/pdf'});
     const file=new File([blob],filename,{type:'application/pdf'});
-    const gmailFallback=function(){
-      const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(function(){URL.revokeObjectURL(url);},5000);
-      const gmail='https://mail.google.com/mail/?authuser=erik@teamteal.nl&view=cm&fs=1'+(to?'&to='+encodeURIComponent(to):'')+'&su='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
-      window.open(gmail,'_blank');
-      alert(NL?'De offerte-PDF is gedownload en er opent een nieuw e-mailbericht (vanuit je eigen account). Sleep de PDF uit je downloads in de mail als bijlage.':'The quotation PDF was downloaded and a new email opened (from your own account). Drag the PDF from your downloads into the email to attach it.');
+    const isMobile=/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent||'');
+    const openMail=function(){
+      // download the PDF so it can be attached, then open the default mail app
+      const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(function(){URL.revokeObjectURL(url);},6000);
+      const m=document.createElement('a');m.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);m.click();
+      setTimeout(function(){alert(NL?'De offerte-PDF is gedownload en je mailprogramma opent een nieuw bericht (vanuit je eigen account). Sleep de PDF uit je downloads in de mail als bijlage.':'The quotation PDF was downloaded and your mail app opened a new message (from your own account). Drag the PDF from your downloads into the email to attach it.');},400);
     };
+    // On mobile the share sheet reliably offers Mail and attaches the file; on desktop it often
+    // hides Mail, so open the mail app directly instead.
     try{
-      if(navigator.canShare&&navigator.canShare({files:[file]})){
-        navigator.share({files:[file],title:subject,text:body}).catch(function(err){if(err&&err.name!=='AbortError')gmailFallback();});
+      if(isMobile&&navigator.canShare&&navigator.canShare({files:[file]})){
+        navigator.share({files:[file],title:subject,text:body}).catch(function(err){if(err&&err.name!=='AbortError')openMail();});
         return;
       }
     }catch(e){}
-    gmailFallback();
+    openMail();
   });
 }
 
