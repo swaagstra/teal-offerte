@@ -646,7 +646,29 @@ function effectiveStatus(entry){const s=(entry&&entry.status)||'concept';if(s===
 function archiveSetStatus(id,status){if(!id)return;const all=loadArchive();const idx=all.findIndex(x=>x.id===id);if(idx>=0){const now=new Date().toISOString();all[idx].status=status;all[idx].statusAt=now;all[idx].updatedAt=now;all[idx].changelog.push({action:'status_'+status,date:now});saveArchive(all);}}
 function bumpSent(id){if(!id)return;const all=loadArchive();const i=all.findIndex(x=>x.id===id);if(i>=0&&((all[i].status||'concept')==='concept'))archiveSetStatus(id,'verstuurd');}
 function currentVersion(ref){const parts=String(ref||'').split('-');const v=parseInt(parts[parts.length-1]);return isNaN(v)?1:v;}
-function archiveBumpVersion(id,note){const all=loadArchive();const idx=all.findIndex(x=>x.id===id);if(idx<0)return null;const e=all[idx];const parts=String(e.ref||(e.data&&e.data.ref)||'').split('-');let v=parseInt(parts[parts.length-1]);if(isNaN(v)){parts.push('2');v=2;}else{v=v+1;parts[parts.length-1]=String(v);}const newRef=parts.join('-');const now=new Date().toISOString();e.ref=newRef;e.data={...e.data,ref:newRef};e.updatedAt=now;e.changelog.push({action:'version',version:v,note:note||'',date:now});all[idx]=e;saveArchive(all);return e;}
+function entryItemCount(e){try{const d=(e&&e.data)||{};if(d.kind==='change_order')return (d.costItems||[]).length;if(d.kind==='delivery')return (d.deliverables||[]).length;let n=0;(d.phases||[]).forEach(p=>{if(p.enabled!==false)n+=(p.items||[]).length;});n+=(d.procOTS||[]).length+(d.procCustom||[]).length+(d.subs||[]).length;return n;}catch(_e){return 0;}}
+function archiveBumpVersion(id,note){const all=loadArchive();const idx=all.findIndex(x=>x.id===id);if(idx<0)return null;const e=all[idx];const parts=String(e.ref||(e.data&&e.data.ref)||'').split('-');let v=parseInt(parts[parts.length-1]);if(isNaN(v)){parts.push('2');v=2;}else{v=v+1;parts[parts.length-1]=String(v);}const oldRef=e.ref||(e.data&&e.data.ref)||'';const closedV=isNaN(parseInt(parts[parts.length-1]))?1:v-1;const newRef=parts.join('-');const now=new Date().toISOString();
+  // Snapshot the version we're closing so we can show a diff later.
+  const snap={version:closedV,ref:oldRef,date:now,note:note||'',total:entryTotal(e),items:entryItemCount(e)};
+  e.versions=[...(e.versions||[]),snap];
+  e.ref=newRef;e.data={...e.data,ref:newRef};e.updatedAt=now;e.changelog.push({action:'version',version:v,note:note||'',date:now});all[idx]=e;saveArchive(all);return e;}
+
+// ── Dashboard display helpers ──
+function clientLabel(e){const c=(e&&e.data&&e.data.client)||{};return (c.name||c.company||c.contact||'').trim();}
+function lastExportOf(e){try{const cl=(e&&e.changelog)||[];for(let i=cl.length-1;i>=0;i--){if(cl[i].action==='pdf_exported')return cl[i].date;}return null;}catch(_e){return null;}}
+function daysUntilExpiry(e){try{const ex=quoteExpiry(e&&e.data);if(!ex)return null;return Math.ceil((ex-new Date())/86400000);}catch(_e){return null;}}
+function fmtDate(iso){if(!iso)return'';try{return new Date(iso).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'});}catch(_e){return'';}}
+// Days between two ISO dates (b-a) in whole days.
+function daysBetween(a,b){try{return Math.round((new Date(b)-new Date(a))/86400000);}catch(_e){return null;}}
+// First changelog date for a given status_* action.
+function statusChangeDate(e,status){try{const cl=(e&&e.changelog)||[];for(const c of cl){if(c.action==='status_'+status)return c.date;}return null;}catch(_e){return null;}}
+
+// ── Bouwblokken-bibliotheek (herbruikbare posten) ──
+const LIBK='teal.offerte.library';
+function loadLibrary(){try{const v=JSON.parse(localStorage.getItem(LIBK)||'{}');return {blocks:Array.isArray(v.blocks)?v.blocks:[]};}catch(_e){return {blocks:[]};}}
+function saveLibrary(lib){try{localStorage.setItem(LIBK,JSON.stringify(lib));schedulePush&&0;}catch(_e){}}
+function addLibraryBlock(block){const lib=loadLibrary();block.id=uid();block.createdAt=new Date().toISOString();lib.blocks.push(block);saveLibrary(lib);return block;}
+function deleteLibraryBlock(id){const lib=loadLibrary();lib.blocks=lib.blocks.filter(b=>b.id!==id);saveLibrary(lib);}
 
 // One-off: renumber existing deliveries from the old "<ref>-OPL<n>" / "OPL-<date>-<n>"
 // format to the new "DL<n>-<ref>" format. Idempotent (new refs don't match).
@@ -1691,10 +1713,16 @@ function BudgetTab({data:d,set}){
   const addInstCrew=()=>upInst('crew',[...((d.install||{}).crew||[]),{id:uid(),role:'crew',res:'L1',custom:0,wd:0,td:0,hn:0,ot:0}]);
   const rmInstCrew=i=>upInst('crew',((d.install||{}).crew||[]).filter((_,x)=>x!==i));
 
+  // Bouwblokken-bibliotheek
+  const[libType,setLibType]=useState(null); // 'ots' | 'custom' | 'sub' → insert-modus
+  const saveToLib=(type,item)=>{const nm=window.prompt('Naam voor dit bouwblok in de bibliotheek:',item.desc||item.showAs||'');if(nm===null)return;if(!nm.trim())return;const {id,...payload}=item;addLibraryBlock({type,name:nm.trim(),payload});alert('Opgeslagen in de bibliotheek. Voeg later in via “Uit bibliotheek”.');};
+  const insertFromLib=(b)=>{const p={...b.payload,id:uid()};if(b.type==='ots')set({...d,procOTS:[...(d.procOTS||[]),p]});else if(b.type==='custom')set({...d,procCustom:[...(d.procCustom||[]),p]});else if(b.type==='sub')set({...d,subs:[...(d.subs||[]),p]});setLibType(null);};
+
   const ll=L_(L);
   const phaseName=(ph)=>ph.customName||t(ph.name,L);
 
   return <>
+    {libType&&<LibraryModal insertMode filterType={libType} onInsert={insertFromLib} onClose={()=>setLibType(null)}/>}
     {/* Block A */}
     <div className="card">
       <div className="card-h">{ll.blockATitle}</div>
@@ -1773,12 +1801,12 @@ function BudgetTab({data:d,set}){
               <td className="tr mono">{Math.round((it.handlingPct||0)*100)}%</td>
               <td className="tr mono">{fmt(h)}</td>
               <td className="tr mono">{fmt((it.amount||0)+h)}</td>
-              <td><button className="btn btn-sm btn-g" onClick={()=>rmOTS(i)}>&times;</button></td>
+              <td><div className="flex g6" style={{justifyContent:'flex-end'}}><button className="btn btn-sm btn-g" title="Opslaan in bibliotheek" onClick={()=>saveToLib('ots',it)}>★</button><button className="btn btn-sm btn-g" onClick={()=>rmOTS(i)}>&times;</button></div></td>
             </tr>})}
           <tr className="sub"><td colSpan={2}>{ll.subtotaalB1}</td><td className="tr mono">{fmt(totals.b1Purchase)}</td><td></td><td className="tr mono">{fmt(totals.b1Handling)}</td><td className="tr mono">{fmt(totals.b1Purchase+totals.b1Handling)}</td><td></td></tr>
         </tbody>
       </table>
-      <button className="btn btn-sm btn-g mt16" onClick={addOTS}>{ll.inkooppost}</button>
+      <div className="flex g8 mt16"><button className="btn btn-sm btn-g" onClick={addOTS}>{ll.inkooppost}</button><button className="btn btn-sm btn-g" onClick={()=>setLibType('ots')}>Uit bibliotheek</button></div>
     </div>
 
     {/* Block B2: Custom */}
@@ -1800,12 +1828,12 @@ function BudgetTab({data:d,set}){
               <td><input type="number" value={Math.round((it.riskPct||0)*100)} onChange={e=>upCust(i,'riskPct',(parseInt(e.target.value)||0)/100)} style={{width:50}}/></td>
               <td className="tr mono">{fmt(r)}</td>
               <td className="tr mono">{fmt((it.amount||0)+h+r)}</td>
-              <td><button className="btn btn-sm btn-g" onClick={()=>rmCust(i)}>&times;</button></td>
+              <td><div className="flex g6" style={{justifyContent:'flex-end'}}><button className="btn btn-sm btn-g" title="Opslaan in bibliotheek" onClick={()=>saveToLib('custom',it)}>★</button><button className="btn btn-sm btn-g" onClick={()=>rmCust(i)}>&times;</button></div></td>
             </tr>})}
           <tr className="sub"><td colSpan={2}>{ll.subtotaalB2}</td><td className="tr mono">{fmt(totals.b2Purchase)}</td><td></td><td className="tr mono">{fmt(totals.b2Handling)}</td><td></td><td className="tr mono">{fmt(totals.b2Risk)}</td><td className="tr mono">{fmt(totals.b2Purchase+totals.b2Handling+totals.b2Risk)}</td><td></td></tr>
         </tbody>
       </table>
-      <button className="btn btn-sm btn-g mt16" onClick={addCust}>{ll.maatwerk}</button>
+      <div className="flex g8 mt16"><button className="btn btn-sm btn-g" onClick={addCust}>{ll.maatwerk}</button><button className="btn btn-sm btn-g" onClick={()=>setLibType('custom')}>Uit bibliotheek</button></div>
     </div>
 
     {/* Block C: Subcontractors */}
@@ -1823,12 +1851,12 @@ function BudgetTab({data:d,set}){
               <td className="tr mono">{Math.round((it.coordPct||COORD_MARGIN)*100)}%</td>
               <td className="tr mono">{fmt(c)}</td>
               <td className="tr mono">{fmt((it.amount||0)+c)}</td>
-              <td><button className="btn btn-sm btn-g" onClick={()=>rmSub(i)}>&times;</button></td>
+              <td><div className="flex g6" style={{justifyContent:'flex-end'}}><button className="btn btn-sm btn-g" title="Opslaan in bibliotheek" onClick={()=>saveToLib('sub',it)}>★</button><button className="btn btn-sm btn-g" onClick={()=>rmSub(i)}>&times;</button></div></td>
             </tr>})}
           <tr className="sub"><td colSpan={2}>{ll.subtotaalC}</td><td className="tr mono">{fmt(totals.subFees)}</td><td></td><td className="tr mono">{fmt(totals.subCoord)}</td><td className="tr mono">{fmt(totals.subClient)}</td><td></td></tr>
         </tbody>
       </table>
-      <button className="btn btn-sm btn-g mt16" onClick={addSub}>{ll.plusOnderaannemer}</button>
+      <div className="flex g8 mt16"><button className="btn btn-sm btn-g" onClick={addSub}>{ll.plusOnderaannemer}</button><button className="btn btn-sm btn-g" onClick={()=>setLibType('sub')}>Uit bibliotheek</button></div>
     </div>
 
     {/* Installatie / reizen */}
@@ -3092,6 +3120,11 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
   const dropProj=(targetG,e)=>{const src=projDragRef.current;if(src&&src.name!==targetG.name){e.preventDefault();if(window.confirm('Project "'+src.name+'" samenvoegen met "'+targetG.name+'"?\n\nAlle documenten van "'+src.name+'" komen dan onder "'+targetG.name+'".')){archiveRenameProject(src.ids,targetG.name);refresh();}}endProjDrag();};
   const[filter,setFilter]=useState('alle');
   const[typeFilter,setTypeFilter]=useState('alle');
+  const[q,setQ]=useState('');
+  const[sortBy,setSortBy]=useState('recent');
+  const[showAnalytics,setShowAnalytics]=useState(false);
+  const[dupFor,setDupFor]=useState(null);
+  const[libOpen,setLibOpen]=useState(false);
   const[synced,setSynced]=useState(false);
   useEffect(()=>{pullArchive().then(a=>{migrateDeliveryRefs();setArchive(loadArchiveLive());setSynced(true);});},[]);
   const statusMeta={
@@ -3117,7 +3150,9 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
   // Filters (doc-type + status)
   const matchType=e=>{if(typeFilter==='alle')return true;const k=kindOf(e);if(typeFilter==='offertes')return k!=='change_order'&&k!=='delivery';if(typeFilter==='change_orders')return k==='change_order';if(typeFilter==='deliveries')return k==='delivery';return true;};
   const matchStatus=e=>filter==='alle'?true:effectiveStatus(e)===filter;
-  const docVisible=e=>matchType(e)&&matchStatus(e);
+  const qn=q.trim().toLowerCase();
+  const matchQ=e=>{if(!qn)return true;const hay=[(e.projectName||''),clientLabel(e),(e.ref||''),(e.data&&e.data.project&&(e.data.project.subtitle||e.data.project.phaseLabel))||''].join(' ').toLowerCase();return hay.includes(qn);};
+  const docVisible=e=>matchType(e)&&matchStatus(e)&&matchQ(e);
   // KPI's (deliveries carry no money)
   const _now=new Date();const _q0=new Date(_now.getFullYear(),Math.floor(_now.getMonth()/3)*3,1);
   let openVal=0,wonQ=0,acc=0,rej=0;
@@ -3130,6 +3165,17 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
   const typeCounts={alle:archive.length,offertes:archive.filter(e=>kindOf(e)!=='change_order'&&kindOf(e)!=='delivery').length,change_orders:archive.filter(e=>kindOf(e)==='change_order').length,deliveries:archive.filter(e=>kindOf(e)==='delivery').length};
   // Build visible project groups (an offerte shows if it or any of its children matches the filters)
   const groups=projOrder.map(key=>{const g=projMap[key];const rows=[];g.offertes.forEach(off=>{const kids=childrenByParent[off.id]||[];const visKids=kids.filter(docVisible);if(docVisible(off)||visKids.length){rows.push({e:off,child:false});visKids.forEach(c=>rows.push({e:c,child:true}));}});(g.loose||[]).filter(docVisible).forEach(c=>rows.push({e:c,child:false}));const src=g.first||{projectName:g.name,type:'build',data:{client:((g.loose&&g.loose[0]&&g.loose[0].data&&g.loose[0].data.client)||{})}};return {key,name:g.name,src,external:!g.first,rows};}).filter(g=>g.rows.length);
+  // Sort project groups by chosen key
+  const gRecent=g=>g.rows.reduce((m,r)=>Math.max(m,+new Date(r.e.updatedAt||0)),0);
+  const gAmount=g=>g.rows.reduce((s,r)=>s+(kindOf(r.e)==='delivery'?0:entryTotal(r.e)),0);
+  const statusRank={verstuurd:0,concept:1,geaccepteerd:2,verlopen:3,afgewezen:4};
+  const gStatus=g=>Math.min(99,...g.rows.map(r=>statusRank[effectiveStatus(r.e)]!=null?statusRank[effectiveStatus(r.e)]:9));
+  groups.sort((a,b)=>{
+    if(sortBy==='amount')return gAmount(b)-gAmount(a);
+    if(sortBy==='name')return a.name.localeCompare(b.name,'nl');
+    if(sortBy==='status')return gStatus(a)-gStatus(b)||gRecent(b)-gRecent(a);
+    return gRecent(b)-gRecent(a);
+  });
   const orphanRows=namelessOrphans.filter(docVisible).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
   const anyVisible=groups.length>0||orphanRows.length>0;
   const renderRow=(item,indent)=>{
@@ -3140,6 +3186,11 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
     const phase=item.data&&item.data.project&&(item.data.project.subtitle||item.data.project.phaseLabel);
     const title=(!indent&&phase)?phase:(item.projectName||badge.label);
     const sub=isDel?(((item.data&&item.data.deliverables)?item.data.deliverables.length:0)+' deliverables'):fmtE(entryTotal(item));
+    const cl=clientLabel(item);
+    const eStat=effectiveStatus(item);
+    const d2x=(!isCO&&!isDel&&eStat==='verstuurd')?daysUntilExpiry(item):null;
+    const expChip=d2x!=null?(d2x<=7?{c:'#8a6d00',bg:'#fff6e0',t:'verloopt over '+d2x+'d'}:{c:'#9a9f9d',bg:'transparent',t:'nog '+d2x+' dagen geldig'}):null;
+    const lastExp=lastExportOf(item);
     return <div key={item.id} style={{borderTop:'1px solid #f1f0ec'}}>
       <div onClick={()=>setExpandedId(isExpanded?null:item.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 16px',paddingLeft:indent?44:16,cursor:'pointer',borderLeft:'3px solid '+badge.c,background:isExpanded?'#faf9f6':'transparent'}}>
         <span title={badge.label} style={{flexShrink:0,minWidth:24,height:19,padding:'0 5px',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,letterSpacing:.5,color:'#fff',background:badge.c,borderRadius:3}}>{badge.t}</span>
@@ -3148,8 +3199,9 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
             <span style={{fontWeight:600,fontSize:14,color:'#071412'}}>{title}</span>
             <span style={{color:'#b0b0ab',fontSize:12,fontFamily:"'JetBrains Mono',monospace"}}>{item.ref}</span>
           </div>
-          <div style={{marginTop:2,fontSize:12,color:'#9a9a94'}}>{item.clientName||'Geen klant'} · {sub} · {fmtDt(item.updatedAt)}{indent&&item.parentRef?' · bij '+item.parentRef:''}</div>
+          <div style={{marginTop:2,fontSize:12,color:'#9a9a94'}}>{cl?cl+' · ':''}{sub} · {fmtDt(item.updatedAt)}{indent&&item.parentRef?' · bij '+item.parentRef:''}</div>
         </div>
+        {expChip&&<span title="Geldigheid offerte" style={{flexShrink:0,fontSize:11,fontWeight:600,color:expChip.c,background:expChip.bg,padding:expChip.bg==='transparent'?0:'2px 7px',borderRadius:10,whiteSpace:'nowrap'}}>{expChip.t}</span>}
         <span style={{display:'flex',alignItems:'center',gap:6,flexShrink:0,fontSize:12,fontWeight:600,color:meta.color}}><span style={{width:7,height:7,borderRadius:7,background:meta.color,flexShrink:0}}/>{meta.label}</span>
         <span style={{fontSize:15,color:'#ccc',flexShrink:0,transform:isExpanded?'rotate(180deg)':'',transition:'.15s'}}>▾</span>
       </div>
@@ -3157,14 +3209,25 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
         <div style={{marginBottom:12}}>
           <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:6}}>Status</div>
           <div className="flex g8" style={{flexWrap:'wrap'}}>
-            {STATUS_ORDER.map(st=>{const on=(item.status||'concept')===st;const m=statusMeta[st];return <button key={st} className="btn btn-sm" onClick={()=>{archiveSetStatus(item.id,st);refresh();}} style={{border:'1px solid '+(on?m.color:'#d0d0ce'),background:on?m.bg:'#fff',color:on?m.color:'#555',fontWeight:on?700:600}}>{m.label}</button>;})}
+            {STATUS_ORDER.map(st=>{const on=(item.status||'concept')===st;const m=statusMeta[st];return <button key={st} className="btn btn-sm" onClick={()=>{archiveSetStatus(item.id,st);refresh();if(st==='geaccepteerd'&&!isCO&&!isDel){const ms=(item.data&&item.data.payment&&item.data.payment.milestones)||[];if(ms.length>1&&confirm('Offerte geaccepteerd — facturatieschema ('+ms.length+' termijnen) als concept-facturen in TEAL Odoo aanmaken?')){pushToOdoo(item).then(refresh);}}}} style={{border:'1px solid '+(on?m.color:'#d0d0ce'),background:on?m.bg:'#fff',color:on?m.color:'#555',fontWeight:on?700:600}}>{m.label}</button>;})}
           </div>
         </div>
+        {(item.versions&&item.versions.length>0)&&<div style={{marginBottom:12}}>
+          <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:6}}>Versiegeschiedenis</div>
+          {(()=>{const hist=item.versions;const curTot=entryTotal(item),curItems=entryItemCount(item);const rows=hist.map((sv,i)=>{const next=i<hist.length-1?hist[i+1]:{total:curTot,items:curItems,version:currentVersion(item.ref),ref:item.ref};const dT=next.total-sv.total;const dI=next.items-sv.items;return {from:sv,to:next,dT,dI};});return rows.map((r,i)=><div key={i} style={{fontSize:12,color:'#6b706e',display:'flex',gap:8,alignItems:'baseline',padding:'3px 0',borderTop:i?'1px solid #efeee9':'none'}}>
+            <span style={{fontWeight:600,color:'#071412'}}>v{r.from.version}→v{r.to.version}</span>
+            <span style={{color:Math.abs(r.dT)<0.5?'#a8adaa':(r.dT>0?'#2D8659':'#b3261e'),fontWeight:600}}>{Math.abs(r.dT)<0.5?'geen bedragswijziging':(r.dT>0?'+':'−')+fmtE(Math.abs(r.dT))}</span>
+            {r.dI!==0&&<span style={{color:'#9a9f9d'}}>{r.dI>0?'+':''}{r.dI} post(en)</span>}
+            {r.from.note&&<span style={{color:'#a8adaa',fontStyle:'italic'}}>· {r.from.note}</span>}
+            <span style={{marginLeft:'auto',color:'#c0c4c2'}}>{fmtDate(r.from.date)}</span>
+          </div>);})()}
+        </div>}
+        {lastExp&&<div style={{fontSize:11,color:'#a8adaa',marginBottom:10}}>Laatst als PDF geëxporteerd op {fmtDate(lastExp)}</div>}
         <div className="flex g8" style={{flexWrap:'wrap',alignItems:'center'}}>
           <button className="btn btn-sm btn-p" onClick={()=>onOpen(item.data)}>Openen</button>
-          <button className="btn btn-sm btn-g" onClick={()=>{onDuplicate(item.data);refresh();}}>Dupliceren</button>
+          <button className="btn btn-sm btn-g" onClick={()=>setDupFor(item)}>Dupliceren ▾</button>
           {!isCO&&!isDel&&<button className="btn btn-sm btn-g" onClick={()=>{onBumpVersion(item.id);refresh();}}>Nieuwe versie</button>}
-          {!isDel&&<button className="btn btn-sm btn-g" title="Concept-factuur in TEAL Odoo" onClick={()=>{pushToOdoo(item).then(refresh);}}>Naar Odoo</button>}
+          {!isDel&&<button className="btn btn-sm btn-g" title={((item.data&&item.data.payment&&item.data.payment.milestones||[]).length>1)?'Concept-facturen per termijn in TEAL Odoo':'Concept-factuur in TEAL Odoo'} onClick={()=>{pushToOdoo(item).then(refresh);}}>Naar Odoo</button>}
           <div style={{flex:1,minWidth:12}}/>
           <button className="btn btn-sm btn-g" style={{color:'var(--red)',borderColor:'#e8cfcd'}} onClick={()=>{if(confirm('"'+title+'" verwijderen?')){onDelete(item.id);refresh();}}}>Verwijderen</button>
         </div>
@@ -3216,6 +3279,63 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
       </div>)}
     </div>
 
+    {/* Zoeken + sorteren + acties */}
+    <div className="flex g8" style={{marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
+      <div style={{position:'relative',flex:'1 1 240px',minWidth:200}}>
+        <span style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'#b0b4b2',fontSize:13,pointerEvents:'none'}}>⌕</span>
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Zoek op project, klant of referentie…" style={{width:'100%',padding:'8px 30px 8px 28px',border:'1px solid #d0d0ce',borderRadius:8,fontSize:13,background:'#fff',boxSizing:'border-box'}}/>
+        {q&&<button onClick={()=>setQ('')} title="Wissen" style={{position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',border:0,background:'none',cursor:'pointer',color:'#999',fontSize:16,lineHeight:1,padding:4}}>×</button>}
+      </div>
+      <select value={sortBy} onChange={e=>setSortBy(e.target.value)} title="Sorteren" style={{padding:'8px 10px',border:'1px solid #d0d0ce',borderRadius:8,fontSize:13,background:'#fff',cursor:'pointer',color:'#444'}}>
+        <option value="recent">Sorteer: recent</option>
+        <option value="amount">Sorteer: bedrag</option>
+        <option value="status">Sorteer: status</option>
+        <option value="name">Sorteer: naam (A–Z)</option>
+      </select>
+      <button className="btn btn-sm btn-g" onClick={()=>setLibOpen(true)} title="Herbruikbare posten beheren">Bibliotheek</button>
+      <button className="btn btn-sm btn-g" onClick={()=>setShowAnalytics(s=>!s)} style={showAnalytics?{borderColor:'#071412',color:'#071412',fontWeight:700}:null}>Analyse {showAnalytics?'▴':'▾'}</button>
+    </div>
+
+    {showAnalytics&&(()=>{
+      const parentsA=archive.filter(e=>kindOf(e)!=='change_order'&&kindOf(e)!=='delivery');
+      const byType=t=>{const set=parentsA.filter(e=>(e.type||(e.data&&e.data.type))===t);const a=set.filter(e=>effectiveStatus(e)==='geaccepteerd').length;const r=set.filter(e=>effectiveStatus(e)==='afgewezen').length;return {n:set.length,a,r,rate:(a+r)>0?Math.round(a/(a+r)*100):null};};
+      const bt=byType('build'),at=byType('assemble');
+      const cycles=parentsA.map(e=>{const acD=statusChangeDate(e,'geaccepteerd');if(!acD)return null;const start=statusChangeDate(e,'verstuurd')||e.createdAt;return daysBetween(start,acD);}).filter(v=>v!=null&&v>=0);
+      const avgCycle=cycles.length?Math.round(cycles.reduce((s,v)=>s+v,0)/cycles.length):null;
+      const qMap={};archive.forEach(e=>{if(kindOf(e)==='delivery')return;if(effectiveStatus(e)!=='geaccepteerd')return;const at2=e.statusAt||statusChangeDate(e,'geaccepteerd')||e.updatedAt;if(!at2)return;const dt=new Date(at2);const key=dt.getFullYear()+'-Q'+(Math.floor(dt.getMonth()/3)+1);qMap[key]=(qMap[key]||0)+entryTotal(e);});
+      const qKeys=Object.keys(qMap).sort();const qMax=Math.max(1,...qKeys.map(k=>qMap[k]));
+      const rateBar=(lab,o,col)=>{return <div style={{marginBottom:10}}>
+        <div className="flex" style={{justifyContent:'space-between',fontSize:12,marginBottom:3}}><span style={{fontWeight:600}}>{lab}</span><span style={{color:'#888'}}>{o.rate==null?'—':o.rate+'%'} · {o.a}/{o.a+o.r} <span style={{color:'#b0b4b2'}}>({o.n} tot.)</span></span></div>
+        <div style={{height:8,borderRadius:4,background:'#eee',overflow:'hidden'}}><div style={{height:'100%',width:(o.rate||0)+'%',background:col,transition:'.2s'}}/></div>
+      </div>;};
+      return <div className="card" style={{marginBottom:16}}>
+        <div className="flex" style={{gap:24,flexWrap:'wrap'}}>
+          <div style={{flex:'1 1 240px'}}>
+            <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,color:'#9a9f9d',marginBottom:10}}>Win-rate per type</div>
+            {rateBar('Build',bt,'#071412')}
+            {rateBar('Assemble',at,'#2D8659')}
+          </div>
+          <div style={{flex:'0 0 auto',minWidth:150}}>
+            <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,color:'#9a9f9d',marginBottom:10}}>Doorlooptijd</div>
+            <div style={{fontSize:28,fontWeight:700,color:'#071412'}}>{avgCycle==null?'—':avgCycle}</div>
+            <div style={{fontSize:12,color:'#a8adaa'}}>{avgCycle==null?'nog geen data':'dagen gem. verstuurd → geaccepteerd'}</div>
+            <div style={{fontSize:11,color:'#c0c4c2',marginTop:2}}>{cycles.length} geaccepteerde offerte(s)</div>
+          </div>
+          <div style={{flex:'1 1 260px'}}>
+            <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,color:'#9a9f9d',marginBottom:10}}>Omzet per kwartaal (geaccepteerd)</div>
+            {qKeys.length===0?<div style={{fontSize:12,color:'#a8adaa'}}>Nog geen geaccepteerde offertes.</div>:
+              <div className="flex" style={{alignItems:'flex-end',gap:10,height:90}}>
+                {qKeys.map(k=><div key={k} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+                  <div style={{fontSize:10,color:'#888',whiteSpace:'nowrap'}}>{fmtE(qMap[k]).replace(',00','')}</div>
+                  <div style={{width:'100%',maxWidth:34,height:Math.max(4,Math.round(qMap[k]/qMax*64)),background:'#2D8659',borderRadius:'3px 3px 0 0'}}/>
+                  <div style={{fontSize:10,color:'#a8adaa'}}>{k.replace('-','·')}</div>
+                </div>)}
+              </div>}
+          </div>
+        </div>
+      </div>;
+    })()}
+
     {/* Doc-type filter */}
     <div className="flex g8" style={{marginBottom:8,flexWrap:'wrap'}}>
       {[['alle','Alle'],['offertes','Offertes'],['change_orders','Change orders'],['deliveries','Opleveringen']].map(([id,lab])=>{
@@ -3252,6 +3372,19 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
             <button className="btn btn-xs btn-g" title="Oplevering" onClick={()=>onNewDeliveryForProject(g.name)}>+ Oplev.</button>
           </div>
         </div>
+        {!isColl&&g.rows.length>1&&(()=>{
+          const seq=g.rows.slice().sort((a,b)=>new Date(a.e.createdAt||a.e.updatedAt||0)-new Date(b.e.createdAt||b.e.updatedAt||0));
+          return <div style={{display:'flex',alignItems:'flex-start',gap:0,padding:'12px 18px 4px',overflowX:'auto',borderBottom:'1px solid #f1f0ec'}}>
+            {seq.map((r,i)=>{const e=r.e;const k=kindOf(e);const m=statusMeta[effectiveStatus(e)]||statusMeta.concept;const tl=k==='change_order'?'CO':k==='delivery'?'OPL':(e.type==='build'?'B':'A');return <div key={e.id} style={{display:'flex',alignItems:'center',flexShrink:0}}>
+              {i>0&&<div style={{width:28,height:2,background:'#e6e5e0',margin:'0 2px',marginBottom:22}}/>}
+              <div title={tl+' '+e.ref+' — '+m.label} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,minWidth:44}}>
+                <span style={{width:12,height:12,borderRadius:12,background:m.color,border:'2px solid #fff',boxShadow:'0 0 0 1px '+m.color}}/>
+                <span style={{fontSize:9,fontWeight:700,color:'#8a908d',letterSpacing:.3}}>{tl}</span>
+                <span style={{fontSize:9,color:m.color,whiteSpace:'nowrap'}}>{m.label}</span>
+              </div>
+            </div>;})}
+          </div>;
+        })()}
         {!isColl&&g.rows.map(r=>renderRow(r.e,r.child))}
       </div>;})}
       {orphanRows.length>0&&<div className="card" style={{marginBottom:12,padding:0,overflow:'hidden'}}>
@@ -3278,6 +3411,53 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
           {has&&<button className="btn btn-sm btn-g" onClick={()=>{setAVB64(lng,null);setAvRefresh(x=>x+1);}}>Verwijder</button>}
         </div>;})}
       </div>}
+    </div>
+
+    {dupFor&&(()=>{const it=dupFor;const isQuote=kindOf(it)==='quote';const lng=(it.data&&it.data.lang)||'nl';const other=lng==='nl'?'en':'nl';const close=()=>setDupFor(null);
+      const doDup=(opts)=>{onDuplicate(it.data,opts);refresh();close();};
+      return <div onClick={close} style={{position:'fixed',inset:0,background:'rgba(7,20,18,.35)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,padding:20}}>
+        <div onClick={e=>e.stopPropagation()} className="card" style={{maxWidth:400,width:'100%',marginBottom:0}}>
+          <div className="card-h" style={{marginBottom:4}}>Dupliceren</div>
+          <p className="sm muted" style={{margin:'0 0 14px'}}>{it.projectName||it.ref}</p>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            <button className="btn btn-g" style={{justifyContent:'flex-start',textAlign:'left'}} onClick={()=>doDup({})}>Exacte kopie</button>
+            {isQuote&&<button className="btn btn-g" style={{justifyContent:'flex-start',textAlign:'left'}} onClick={()=>doDup({lang:other})}>Kopie in het {other==='en'?'Engels':'Nederlands'}</button>}
+            <button className="btn btn-g" style={{justifyContent:'flex-start',textAlign:'left'}} onClick={()=>{const nm=window.prompt('Naam van het nieuwe project:',(it.projectName||'')+' (kopie)');if(nm===null)return;doDup({newProject:nm});}}>Kopie naar nieuw project…</button>
+          </div>
+          <div style={{textAlign:'right',marginTop:16}}><button className="btn btn-sm btn-g" onClick={close}>Annuleren</button></div>
+        </div>
+      </div>;})()}
+
+    {libOpen&&<LibraryModal onClose={()=>setLibOpen(false)}/>}
+  </div>;
+}
+
+// ── Bouwblokken-bibliotheek: overzicht/beheer ──
+function LibraryModal({onClose,onInsert,insertMode,filterType}){
+  const[lib,setLib]=useState(loadLibrary());
+  const refresh=()=>setLib(loadLibrary());
+  const del=(id)=>{deleteLibraryBlock(id);refresh();};
+  const typeLabel={phase_item:'Uurregel',ots:'Inkooppost',custom:'Maatwerk',sub:'Onderaannemer',text:'Standaardtekst'};
+  const typeColor={phase_item:'#071412',ots:'#2D8659',custom:'#6b4ea0',sub:'#0f766e',text:'#8a6d00'};
+  const blocks=filterType?lib.blocks.filter(b=>b.type===filterType):lib.blocks;
+  const groups={};blocks.forEach(b=>{(groups[b.type]=groups[b.type]||[]).push(b);});
+  const summary=(b)=>{if(b.type==='phase_item')return (b.payload.qty||0)+' × '+fmtE(b.payload.extRate||0)+(b.payload.role?(' · '+b.payload.role):'');if(b.type==='text')return (t(b.payload.text||{nl:'',en:''},'nl')||'').slice(0,60)+'…';return fmtE(b.payload.amount||0);};
+  return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(7,20,18,.35)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,padding:20}}>
+    <div onClick={e=>e.stopPropagation()} className="card" style={{maxWidth:560,width:'100%',marginBottom:0,maxHeight:'80vh',overflow:'auto'}}>
+      <div className="between" style={{marginBottom:4}}><div className="card-h" style={{border:0,padding:0,margin:0}}>Bouwblokken-bibliotheek</div><button className="btn btn-sm btn-g" onClick={onClose}>Sluiten</button></div>
+      <p className="sm muted" style={{margin:'0 0 14px'}}>{insertMode?'Kies een blok om in te voegen.':'Herbruikbare posten en teksten. Sla ze op vanuit een offerte (knop “In bibliotheek”) en voeg ze met één klik weer in.'}</p>
+      {blocks.length===0?<p className="sm" style={{color:'#999'}}>Nog geen blokken opgeslagen.</p>:
+        Object.keys(groups).map(tp=><div key={tp} style={{marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,color:typeColor[tp]||'#999',marginBottom:6}}>{typeLabel[tp]||tp}</div>
+          {groups[tp].map(b=><div key={b.id} className="flex" style={{alignItems:'center',gap:10,padding:'7px 0',borderTop:'1px solid #f1f0ec'}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:600}}>{b.name}</div>
+              <div style={{fontSize:11,color:'#9a9a94'}}>{summary(b)}</div>
+            </div>
+            {insertMode&&onInsert&&<button className="btn btn-sm btn-p" onClick={()=>{onInsert(b);}}>Invoegen</button>}
+            <button className="btn btn-sm btn-g" style={{color:'var(--red)',borderColor:'#e8cfcd'}} onClick={()=>del(b.id)}>×</button>
+          </div>)}
+        </div>)}
     </div>
   </div>;
 }
@@ -3524,7 +3704,10 @@ function App(){
   const newDeliveryForProject=(name)=>{const dvd=createDelivery(null,(d&&d.lang)||'nl');if(name)dvd.project.name=name;const saved=archiveSave(dvd,'created');save(saved);setD(saved);setShowDash(false);};
   const newExternalProject=()=>{const name=window.prompt('Projectnaam (offerte buiten de tool):');if(name===null)return;const co=createChangeOrder(null,'nl');co.project.name=(name||'').trim();const saved=archiveSave(co,'created');save(saved);setD(saved);setShowDash(false);};
   const bumpVersion=(id)=>{const note=window.prompt('Wat is er anders in deze nieuwe versie? (kort)');if(note===null)return;const e=archiveBumpVersion(id,note);if(e&&d&&d._archiveId===id){setD(e.data);save(e.data);}};
-  const duplicateQuote=(data)=>{const copy={...JSON.parse(JSON.stringify(data)),_archiveId:undefined};delete copy._archiveId;const ref=data.ref.split('-');ref[ref.length-1]='1';copy.ref=ref.join('-')+'-copy';archiveSave(copy,'created');archiveLogAction(data,'duplicated');};
+  const duplicateQuote=(data,opts={})=>{const copy={...JSON.parse(JSON.stringify(data)),_archiveId:undefined};delete copy._archiveId;const ref=data.ref.split('-');ref[ref.length-1]='1';copy.ref=ref.join('-')+'-copy';
+    if(opts.lang&&(opts.lang==='nl'||opts.lang==='en'))copy.lang=opts.lang;
+    if(opts.newProject!=null){const nm=String(opts.newProject).trim();if(copy.project)copy.project={...copy.project,name:nm};else copy.project={name:nm};if(opts.clearClient)copy.client={name:'',contact:'',email:'',addr:'',zip:'',city:''};}
+    const saved=archiveSave(copy,'created');archiveLogAction(data,'duplicated');return saved;};
   const deleteQuote=(id)=>{archiveDelete(id);if(d&&d._archiveId===id){setD(null);save(null);}};
   const goToDash=()=>{if(d)archiveSave(d,'updated');setShowDash(true);};
 
