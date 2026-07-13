@@ -667,7 +667,7 @@ function statusChangeDate(e,status){try{const cl=(e&&e.changelog)||[];for(const 
 // ── Bouwblokken-bibliotheek (herbruikbare posten) ──
 const LIBK='teal.offerte.library';
 function loadLibrary(){try{const v=JSON.parse(localStorage.getItem(LIBK)||'{}');return {blocks:Array.isArray(v.blocks)?v.blocks:[]};}catch(_e){return {blocks:[]};}}
-function saveLibrary(lib){try{localStorage.setItem(LIBK,JSON.stringify(lib));schedulePush&&0;}catch(_e){}}
+function saveLibrary(lib){try{localStorage.setItem(LIBK,JSON.stringify(lib));}catch(_e){}}
 function addLibraryBlock(block){const lib=loadLibrary();block.id=uid();block.createdAt=new Date().toISOString();lib.blocks.push(block);saveLibrary(lib);return block;}
 function deleteLibraryBlock(id){const lib=loadLibrary();lib.blocks=lib.blocks.filter(b=>b.id!==id);saveLibrary(lib);}
 
@@ -3093,10 +3093,10 @@ function odooPayloadFromEntry(entry){
   return {type:'quote',ref:d.ref,lang:L,client:{name:d.client?.name,email:d.client?.email,contact:d.client?.contact},
     note:(d.project?.name||'')+' · '+d.ref,lines,milestones};
 }
-async function pushToOdoo(entry){
+async function pushToOdoo(entry,opts={}){
   const payload=odooPayloadFromEntry(entry);
   if(!payload.lines.length){alert('Geen kostenregels om naar Odoo te sturen.');return;}
-  if(!confirm('Concept-factuur aanmaken in TEAL Odoo voor '+(payload.client.name||'deze klant')+'?\nHet blijft een concept; er wordt niets verstuurd of geboekt.'))return;
+  if(!opts.skipConfirm&&!confirm('Concept-factuur aanmaken in TEAL Odoo voor '+(payload.client.name||'deze klant')+'?\nHet blijft een concept; er wordt niets verstuurd of geboekt.'))return;
   try{
     const res=await fetch('/api/odoo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     let j={};try{j=await res.json();}catch(e){}
@@ -3210,7 +3210,7 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
         <div style={{marginBottom:12}}>
           <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:6}}>Status</div>
           <div className="flex g8" style={{flexWrap:'wrap'}}>
-            {STATUS_ORDER.map(st=>{const on=(item.status||'concept')===st;const m=statusMeta[st];return <button key={st} className="btn btn-sm" onClick={()=>{archiveSetStatus(item.id,st);refresh();if(st==='geaccepteerd'&&!isCO&&!isDel){const ms=(item.data&&item.data.payment&&item.data.payment.milestones)||[];if(ms.length>1&&confirm('Offerte geaccepteerd — facturatieschema ('+ms.length+' termijnen) als concept-facturen in TEAL Odoo aanmaken?')){pushToOdoo(item).then(refresh);}}}} style={{border:'1px solid '+(on?m.color:'#d0d0ce'),background:on?m.bg:'#fff',color:on?m.color:'#555',fontWeight:on?700:600}}>{m.label}</button>;})}
+            {STATUS_ORDER.map(st=>{const on=(item.status||'concept')===st;const m=statusMeta[st];return <button key={st} className="btn btn-sm" onClick={()=>{archiveSetStatus(item.id,st);refresh();if(st==='geaccepteerd'&&!isCO&&!isDel){const ms=(item.data&&item.data.payment&&item.data.payment.milestones)||[];if(ms.length>1&&confirm('Offerte geaccepteerd — facturatieschema ('+ms.length+' termijnen) als concept-facturen in TEAL Odoo aanmaken?')){pushToOdoo(item,{skipConfirm:true}).then(refresh);}}}} style={{border:'1px solid '+(on?m.color:'#d0d0ce'),background:on?m.bg:'#fff',color:on?m.color:'#555',fontWeight:on?700:600}}>{m.label}</button>;})}
           </div>
         </div>
         {(item.versions&&item.versions.length>0)&&<div style={{marginBottom:12}}>
