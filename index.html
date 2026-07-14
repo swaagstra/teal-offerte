@@ -419,14 +419,14 @@ function defaultAnnexes(){return {
     nl:'Meerwerk omvat al het werk buiten de overeengekomen scope, werk dat voortkomt uit niet-nagekomen verantwoordelijkheden van de klant, wijzigingen op verzoek van de klant, en werk dat voortvloeit uit onjuist gebleken uitgangspunten. TEAL meldt dit, stuurt een change order met de werkzaamheden en de kosten, en start het werk pas na schriftelijke bevestiging van de klant. Bevestigd meerwerk wordt aan het eind van de kalendermaand gefactureerd volgens de bijgevoegde tarievenkaart. De betalingstermijn van de hoofdovereenkomst is van toepassing.',
     en:'Additional work includes any work outside the agreed scope, work arising from client responsibilities that are not met, changes requested by the client, and work resulting from assumptions that prove incorrect. TEAL will notify the client and issue a change order specifying the work and the cost, and will start work only after the client’s written confirmation. Confirmed additional work is invoiced at the end of the calendar month at the attached rate card. The payment terms of the main agreement apply.'}},
   rateCard:{enabled:false,rows:[
-    {label:{nl:'Ontwerp & engineering',en:'Design & engineering'},rate:'',unit:{nl:'per uur',en:'per hour'}},
-    {label:{nl:'Productie & assemblage',en:'Production & assembly'},rate:'',unit:{nl:'per uur',en:'per hour'}},
-    {label:{nl:'Installatieteam',en:'Installation crew'},rate:'',unit:{nl:'per uur',en:'per hour'}},
-    {label:{nl:'Projectmanagement',en:'Project management'},rate:'',unit:{nl:'per uur',en:'per hour'}},
-    {label:{nl:'Transport',en:'Transport'},rate:'',unit:{nl:'per rit',en:'per trip'}},
-    {label:{nl:'Opslag',en:'Storage'},rate:'',unit:{nl:'per m² per maand',en:'per m² per month'}},
-    {label:{nl:'Reiskosten',en:'Travel'},rate:'',unit:{nl:'per km',en:'per km'}},
-    {label:{nl:'Handlingtoeslag materiaal',en:'Material handling surcharge'},rate:'',unit:{nl:'percentage',en:'percentage'}}
+    {label:{nl:'Ontwerp & engineering',en:'Design & engineering'},rate:'€ 120',unit:{nl:'per uur',en:'per hour'}},
+    {label:{nl:'Productie & assemblage',en:'Production & assembly'},rate:'€ 45–65',unit:{nl:'per uur',en:'per hour'}},
+    {label:{nl:'Installatieteam',en:'Installation crew'},rate:'€ 600',unit:{nl:'per dag',en:'per day'}},
+    {label:{nl:'Projectmanagement',en:'Project management'},rate:'€ 95',unit:{nl:'per uur',en:'per hour'}},
+    {label:{nl:'Transport',en:'Transport'},rate:'',unit:{nl:'per rit · op aanvraag',en:'per trip · on request'}},
+    {label:{nl:'Opslag',en:'Storage'},rate:'',unit:{nl:'per m² per maand · op aanvraag',en:'per m² per month · on request'}},
+    {label:{nl:'Reiskosten',en:'Travel'},rate:'€ 0,50',unit:{nl:'per km',en:'per km'}},
+    {label:{nl:'Handlingtoeslag materiaal',en:'Material handling surcharge'},rate:'8–20%',unit:{nl:'staffel op inkoopwaarde',en:'tiered on purchase value'}}
   ]},
   responsibilities:{enabled:false,rows:[
     {party:{nl:'TEAL',en:'TEAL'},item:{nl:'Ontwerp, engineering en productiebegeleiding.',en:'Design, engineering and production supervision.'}},
@@ -490,6 +490,8 @@ function migrateConds(d){
   const c={...d.conditions};let ch=false;
   if(!d.annexes){d={...d,annexes:defaultAnnexes()};ch=true;}
   else if(!d.annexes.responsibilities){d={...d,annexes:{...d.annexes,responsibilities:defaultAnnexes().responsibilities}};ch=true;}
+  // Fill the rate card with the current default prices, but only when it is still entirely empty (never clobber custom rates).
+  if(d.annexes&&d.annexes.rateCard&&(d.annexes.rateCard.rows||[]).length&&(d.annexes.rateCard.rows||[]).every(r=>!String(r.rate||'').trim())){d={...d,annexes:{...d.annexes,rateCard:{...d.annexes.rateCard,rows:defaultAnnexes().rateCard.rows}}};ch=true;}
   if(c.meerwerk===undefined){c.meerwerk={nl:I.nl.meerwerkTekst,en:I.en.meerwerkTekst,_ensrc:I.nl.meerwerkTekst};if(c.meerwerkEnabled===undefined)c.meerwerkEnabled=true;ch=true;}
   if(c.akkoord===undefined){c.akkoord={nl:I.nl.akkoordTekst,en:I.en.akkoordTekst,_ensrc:I.nl.akkoordTekst};if(c.akkoordEnabled===undefined)c.akkoordEnabled=true;ch=true;}
   return ch?{...d,conditions:c}:d;
