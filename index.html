@@ -1716,7 +1716,7 @@ function ScopeTab({data:d,set}){
     <div className="card-h">{L==='nl'?'Uitsluitingen & aannames':'Exclusions & assumptions'}</div>
     <p className="sm muted mb16">{L==='nl'?'Twee optionele blokken die direct onder de fases in de offerte verschijnen. Zet ze aan met het vinkje.':'Two optional blocks that appear directly under the phases in the quotation. Toggle each on with its checkbox.'}</p>
     <div style={{marginBottom:22}}>
-      <label className="flex g8" style={{alignItems:'center',fontWeight:600,marginBottom:8,cursor:'pointer'}}><input type="checkbox" checked={exclEnabled} onChange={e=>setExclEnabled(e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/> {L==='nl'?'Uitgesloten van deze offerte':'Excluded from this quotation'}</label>
+      <label className="flex g8" style={{alignItems:'center',fontWeight:600,marginBottom:8,cursor:'pointer'}}><input type="checkbox" checked={exclEnabled} onChange={e=>setExclEnabled(e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/> {L==='nl'?'Uitgesloten van deze offerte':'Outside scope'}</label>
       <textarea value={t(d.project.exclusions,L)} onChange={e=>setExclText(e.target.value)} rows={3} disabled={!exclEnabled} placeholder={L==='nl'?'Eén uitsluiting per regel (bijv. vergunningen, grondwerk, stroomvoorziening).':'One exclusion per line (e.g. permits, groundwork, power supply).'} style={{width:'100%',opacity:exclEnabled?1:.5}}/>
     </div>
     <div>
@@ -2168,7 +2168,7 @@ function PaymentTab({data:d,set}){
         <div className="fg"></div>
       </div>
 
-      <p className="sm muted" style={{margin:'4px 0 0'}}>{L==='nl'?'Uitsluitingen staan nu bij de Scope-tab (blok “Uitgesloten van deze offerte”).':'Exclusions now live on the Scope tab (“Excluded from this quotation” block).'}</p>
+      <p className="sm muted" style={{margin:'4px 0 0'}}>{L==='nl'?'Uitsluitingen staan nu bij de Scope-tab (blok “Uitgesloten van deze offerte”).':'Exclusions now live on the Scope tab (“Outside scope” block).'}</p>
 
       <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
         <div className="between" style={{alignItems:'center'}}>
@@ -2450,6 +2450,14 @@ function PreviewTab({data:d}){
         <SecHead n={pn()} title={NL?'Werkzaamheden & planning':'Scope of work & timeline'}/>
         {T.scope.map((s,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0}}><strong style={{fontWeight:600}}>{s.lead} </strong>{s.body}</div>)}
         {(T.delivery||T.effort)&&<div style={{fontSize:13,color:sec,marginTop:10}}>{(NL?'Oplevering: ':'Expected delivery: ')+(T.delivery||'')+(T.effort?' — '+T.effort:'')}</div>}
+        {T.excluded&&T.excluded.length>0&&<div style={{marginTop:26,background:'#efeee9',borderRadius:6,padding:'15px 20px'}}>
+          <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.12em',color:ink,marginBottom:8}}>{NL?'Uitgesloten van deze offerte':'Outside scope'}</div>
+          {T.excluded.map((x,i)=><div key={i} style={{display:'flex',gap:10,fontSize:13.5,lineHeight:1.55,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{x}</span></div>)}
+        </div>}
+        {T.assumptions&&T.assumptions.length>0&&<div style={{marginTop:16,background:'#efeee9',borderRadius:6,padding:'15px 20px'}}>
+          <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.12em',color:ink,marginBottom:8}}>{NL?'Aannames':'Assumptions'}</div>
+          {T.assumptions.map((a,i)=><div key={i} style={{display:'flex',gap:10,fontSize:13.5,lineHeight:1.55,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{a}</span></div>)}
+        </div>}
         {T.weeks.length>0&&<div style={{marginTop:26}}>
           <Eyebrow mb={14}>{NL?'Indicatieve planning':'Indicative timeline'}</Eyebrow>
           <div style={{display:'flex',paddingLeft:172,marginBottom:8}}>
@@ -2464,14 +2472,6 @@ function PreviewTab({data:d}){
           </div>)}
         </div>}
       </div>
-      {T.excluded&&T.excluded.length>0&&<div style={{marginTop:26,background:'#efeee9',borderRadius:6,padding:'15px 20px'}}>
-        <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.12em',color:ink,marginBottom:8}}>{NL?'Uitgesloten van deze offerte':'Excluded from this quotation'}</div>
-        {T.excluded.map((x,i)=><div key={i} style={{display:'flex',gap:10,fontSize:13.5,lineHeight:1.55,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{x}</span></div>)}
-      </div>}
-      {T.assumptions&&T.assumptions.length>0&&<div style={{marginTop:16,background:'#efeee9',borderRadius:6,padding:'15px 20px'}}>
-        <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.12em',color:ink,marginBottom:8}}>{NL?'Aannames':'Assumptions'}</div>
-        {T.assumptions.map((a,i)=><div key={i} style={{display:'flex',gap:10,fontSize:13.5,lineHeight:1.55,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{a}</span></div>)}
-      </div>}
       <div style={{flex:1}}/>
       <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:30,display:'flex',justifyContent:'space-between'}}>
         <span></span><span>{word} {T.number} · 1 / 2</span>
@@ -2767,14 +2767,15 @@ function buildQuoteDocDef(D, logoImg){
     if(D.teal_role)ds.push({stack:[eyebrow("TEAL's role",4.5),paras(D.teal_role,14*k)],margin:[0,14,0,0]});
     c.push({stack:ds,margin:[0,26,0,0],unbreakable:true});
   }
+  function hardBlock(title,items){var rows=[{text:String(title).toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.12,11*k),margin:[0,0,0,7]}];items.forEach(function(x,i){rows.push({columns:[{width:'auto',text:'·',color:muted,fontSize:13*k},{width:'*',text:x,fontSize:13*k,color:body,lineHeight:1.5}],columnGap:7,margin:[0,i?5:0,0,0]});});return {table:{widths:['*'],body:[[{stack:rows,fillColor:'#efeee9'}]]},layout:{defaultBorder:false,paddingLeft:function(){return 16;},paddingRight:function(){return 16;},paddingTop:function(){return 13;},paddingBottom:function(){return 13;}},margin:[0,24,0,0],unbreakable:true};}
   var sc=[secHead(nx(),'Scope of work & timeline')];
   (D.scope||[]).forEach(function(s,i){sc.push({text:[{text:(s.lead?s.lead+' ':''),font:'I6',color:body},{text:s.body||'',color:body}],fontSize:14*k,lineHeight:1.65,margin:[0,i?6:0,0,0]});});
   if(D.delivery||D.effort)sc.push({text:'Expected delivery: '+(D.delivery||'')+(D.effort?' — '+D.effort:''),fontSize:13*k,color:sec,margin:[0,6,0,0]});
-  if(D.tasks&&D.tasks.length)sc.push({stack:[eyebrow('Indicative timeline',9),{svg:timelineSVG(),width:CW}],margin:[0,14,0,0]});
   c.push({stack:sc,margin:[0,26,0,0],unbreakable:true});
-  function hardBlock(title,items){var rows=[{text:String(title).toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.12,11*k),margin:[0,0,0,7]}];items.forEach(function(x,i){rows.push({columns:[{width:'auto',text:'·',color:muted,fontSize:13*k},{width:'*',text:x,fontSize:13*k,color:body,lineHeight:1.5}],columnGap:7,margin:[0,i?5:0,0,0]});});return {table:{widths:['*'],body:[[{stack:rows,fillColor:'#efeee9'}]]},layout:{defaultBorder:false,paddingLeft:function(){return 16;},paddingRight:function(){return 16;},paddingTop:function(){return 13;},paddingBottom:function(){return 13;}},margin:[0,24,0,0],unbreakable:true};}
-  if(D.excluded&&D.excluded.length)c.push(hardBlock(D.nl?'Uitgesloten van deze offerte':'Excluded from this quotation',D.excluded));
+  // Exclusions + assumptions belong with the scope: render them above the timeline.
+  if(D.excluded&&D.excluded.length)c.push(hardBlock(D.nl?'Uitgesloten van deze offerte':'Outside scope',D.excluded));
   if(D.assumptions&&D.assumptions.length)c.push(hardBlock(D.nl?'Aannames':'Assumptions',D.assumptions));
+  if(D.tasks&&D.tasks.length)c.push({stack:[eyebrow('Indicative timeline',9),{svg:timelineSVG(),width:CW}],margin:[0,24,0,0],unbreakable:true});
   // page 2
   c.push({pageBreak:'before',columns:[{width:'auto',image:logoImg,fit:[240,20*k]},{width:'*',text:D.title+(D.subtitle?' — '+D.subtitle:''),font:'I4',fontSize:11*k,color:sec,alignment:'right',margin:[0,3,0,0]}]});
   c.push({canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,13.5,0,18]});
