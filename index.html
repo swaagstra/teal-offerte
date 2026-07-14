@@ -1681,7 +1681,17 @@ function ScopeTab({data:d,set}){
   const upPhase=(i,k,v)=>{const p=[...d.phases];p[i]={...p[i],[k]:v};set({...d,phases:p})};
   const upDesc=(i,v)=>{const p=[...d.phases];const o=p[i].description||{nl:'',en:''};const n=typeof o==='string'?{nl:o,en:o}:{...o};n[L]=v;p[i]={...p[i],description:n};set({...d,phases:p})};
   const phaseName=(ph)=>ph.customName||t(ph.name,L);
-  return <div className="card">
+  const ax=d.annexes||{};
+  const exclEnabled=(d.conditions&&d.conditions.exclusionsEnabled)!==false;
+  const setExclEnabled=(v)=>set({...d,conditions:{...d.conditions,exclusionsEnabled:v}});
+  const setExclText=(v)=>{const o=d.project.exclusions;const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=v;set({...d,project:{...d.project,exclusions:nn}});};
+  const assump=ax.assumptions||{enabled:false,items:[]};
+  const setAssumpEnabled=(v)=>set({...d,annexes:{...ax,assumptions:{...assump,enabled:v}}});
+  const setAssumpItem=(i,val)=>{const items=(assump.items||[]).slice();const o=items[i]||{nl:'',en:''};const nn=typeof o==='string'?{nl:o,en:o}:{...o};nn[L]=val;items[i]=nn;set({...d,annexes:{...ax,assumptions:{...assump,items}}});};
+  const addAssump=()=>set({...d,annexes:{...ax,assumptions:{...assump,items:[...(assump.items||[]),{nl:'',en:''}]}}});
+  const delAssump=(i)=>set({...d,annexes:{...ax,assumptions:{...assump,items:(assump.items||[]).filter((_,j)=>j!==i)}}});
+  return <>
+  <div className="card">
     <div className="card-h">{ll.scopePerFase} ({L.toUpperCase()})</div>
     <p className="sm muted mb16">{ll.scopeHelp}</p>
     {d.phases.map((ph,i)=><div key={ph.id} style={{marginBottom:24,paddingBottom:16,borderBottom:'1px solid #eee',opacity:ph.enabled===false?.45:1}}>
@@ -1701,7 +1711,25 @@ function ScopeTab({data:d,set}){
         <textarea value={t(ph.description,L)} onChange={e=>upDesc(i,e.target.value)} rows={3}/>
       </div>
     </div>)}
-  </div>;
+  </div>
+  <div className="card">
+    <div className="card-h">{L==='nl'?'Uitsluitingen & aannames':'Exclusions & assumptions'}</div>
+    <p className="sm muted mb16">{L==='nl'?'Twee optionele blokken die direct onder de fases in de offerte verschijnen. Zet ze aan met het vinkje.':'Two optional blocks that appear directly under the phases in the quotation. Toggle each on with its checkbox.'}</p>
+    <div style={{marginBottom:22}}>
+      <label className="flex g8" style={{alignItems:'center',fontWeight:600,marginBottom:8,cursor:'pointer'}}><input type="checkbox" checked={exclEnabled} onChange={e=>setExclEnabled(e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/> {L==='nl'?'Uitgesloten van deze offerte':'Excluded from this quotation'}</label>
+      <textarea value={t(d.project.exclusions,L)} onChange={e=>setExclText(e.target.value)} rows={3} disabled={!exclEnabled} placeholder={L==='nl'?'Eén uitsluiting per regel (bijv. vergunningen, grondwerk, stroomvoorziening).':'One exclusion per line (e.g. permits, groundwork, power supply).'} style={{width:'100%',opacity:exclEnabled?1:.5}}/>
+    </div>
+    <div>
+      <label className="flex g8" style={{alignItems:'center',fontWeight:600,marginBottom:8,cursor:'pointer'}}><input type="checkbox" checked={!!assump.enabled} onChange={e=>setAssumpEnabled(e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/> {L==='nl'?'Aannames':'Assumptions'}</label>
+      <div style={{opacity:assump.enabled?1:.5}}>
+        {(assump.items||[]).map((it,i)=><div key={i} className="flex g8" style={{marginBottom:8,alignItems:'flex-start'}}>
+          <textarea style={{flex:1,minHeight:44}} value={t(it,L)} onChange={e=>setAssumpItem(i,e.target.value)} disabled={!assump.enabled} placeholder={L==='nl'?'Eén aanname per regel.':'One assumption per line.'}/>
+          <button className="btn btn-sm btn-g" onClick={()=>delAssump(i)} disabled={!assump.enabled}>×</button></div>)}
+        <button className="btn btn-sm btn-g" onClick={addAssump} disabled={!assump.enabled}>+ {L==='nl'?'Aanname':'Assumption'}</button>
+      </div>
+    </div>
+  </div>
+  </>;
 }
 
 // ── Budget Tab ──
@@ -2140,10 +2168,7 @@ function PaymentTab({data:d,set}){
         <div className="fg"></div>
       </div>
 
-      <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
-        <label>{ll.nietInbegrepen}</label>
-        <textarea rows={2} value={t(d.project.exclusions,L)} placeholder={L==='nl'?'Wat valt buiten deze offerte (leeg = niet tonen)':'What is excluded (empty = hidden)'} onChange={e=>{const o=d.project.exclusions;const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=e.target.value;set({...d,project:{...d.project,exclusions:nn}});}}/>
-      </div></div>
+      <p className="sm muted" style={{margin:'4px 0 0'}}>{L==='nl'?'Uitsluitingen staan nu bij de Scope-tab (blok “Uitgesloten van deze offerte”).':'Exclusions now live on the Scope tab (“Excluded from this quotation” block).'}</p>
 
       <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
         <div className="between" style={{alignItems:'center'}}>
@@ -2187,10 +2212,6 @@ function AnnexesTab({data:d,set}){
   const ax=d.annexes||defaultAnnexes();
   const up=(patch)=>set({...d,annexes:{...ax,...patch}});
   const tval=(o)=>t(o,L);
-  const setAssumpEnabled=(v)=>up({assumptions:{...ax.assumptions,enabled:v}});
-  const setAssumpItem=(i,val)=>{const items=ax.assumptions.items.slice();items[i]={...items[i],[L]:val};up({assumptions:{...ax.assumptions,items}});};
-  const addAssump=()=>up({assumptions:{...ax.assumptions,items:[...ax.assumptions.items,{nl:'',en:''}]}});
-  const delAssump=(i)=>up({assumptions:{...ax.assumptions,items:ax.assumptions.items.filter((_,j)=>j!==i)}});
   const setMwEnabled=(v)=>up({meerwerk:{...ax.meerwerk,enabled:v}});
   const setMwText=(val)=>up({meerwerk:{...ax.meerwerk,text:{...ax.meerwerk.text,[L]:val}}});
   const setRcEnabled=(v)=>up({rateCard:{...ax.rateCard,enabled:v}});
@@ -2203,16 +2224,7 @@ function AnnexesTab({data:d,set}){
   const addResp=()=>up({responsibilities:{...resp,rows:[...(resp.rows||[]),{party:{nl:'',en:''},item:{nl:'',en:''}}]}});
   const delResp=(i)=>up({responsibilities:{...resp,rows:(resp.rows||[]).filter((_,j)=>j!==i)}});
   return <div>
-    <p className="sm muted" style={{marginBottom:16}}>{NL?'Bijlagen verschijnen alleen in deze offerte als je ze aanzet. Standaard uit, zo gaan ze alleen mee bij grote projecten.':'Annexes appear in this quotation only when enabled. Off by default.'}</p>
-    <div className="card">
-      <div className="between mb16"><div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Aannames':'Assumptions'}</div>
-        <label className="flex g8" style={{alignItems:'center',fontSize:13}}><input type="checkbox" checked={ax.assumptions.enabled} onChange={e=>setAssumpEnabled(e.target.checked)}/> {NL?'Tonen':'Show'}</label></div>
-      <p className="sm muted" style={{marginTop:-8,marginBottom:12}}>{NL?'Verschijnt als blok direct onder de fases in de offerte.':'Appears as a block directly under the phases in the quotation.'}</p>
-      {ax.assumptions.items.map((it,i)=><div key={i} className="flex g8" style={{marginBottom:8,alignItems:'flex-start'}}>
-        <textarea style={{flex:1,minHeight:46}} value={tval(it)} onChange={e=>setAssumpItem(i,e.target.value)}/>
-        <button className="btn btn-sm btn-g" onClick={()=>delAssump(i)}>×</button></div>)}
-      <button className="btn btn-sm btn-g" onClick={addAssump}>+ {NL?'Aanname':'Assumption'}</button>
-    </div>
+    <p className="sm muted" style={{marginBottom:16}}>{NL?'Bijlagen verschijnen alleen in deze offerte als je ze aanzet. Standaard uit, zo gaan ze alleen mee bij grote projecten. (Uitsluitingen en aannames staan bij de Scope-tab.)':'Annexes appear in this quotation only when enabled. Off by default. (Exclusions and assumptions live on the Scope tab.)'}</p>
     <div className="card">
       <div className="between mb16"><div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Meerwerkclausule':'Additional work clause'}</div>
         <label className="flex g8" style={{alignItems:'center',fontSize:13}}><input type="checkbox" checked={ax.meerwerk.enabled} onChange={e=>setMwEnabled(e.target.checked)}/> {NL?'Tonen':'Show'}</label></div>
@@ -2809,7 +2821,7 @@ function mapQuoteToTokens(d){
   const payment=[];
   d.payment.milestones.forEach((ms,i)=>{const amt=fmtE(grand*(ms.pct||0)/100);const mo=msISOs[i]?fmtMonthY(msISOs[i]):'';payment.push(t(ms.name,L)+': '+ms.pct+'% ('+amt+')'+(mo?' — '+mo:'')+'.');});
   payment.push((NL?'Betaling binnen ':'Payment is due within ')+(d.conditions.paymentTerm||14)+(NL?' dagen na factuurdatum.':' days of the invoice date.'));
-  const excluded=t(d.project.exclusions,L)?t(d.project.exclusions,L).split(/\n+/).map(s=>s.trim()).filter(Boolean):[];
+  const excluded=((d.conditions&&d.conditions.exclusionsEnabled)!==false&&t(d.project.exclusions,L))?t(d.project.exclusions,L).split(/\n+/).map(s=>s.trim()).filter(Boolean):[];
   const conditions=[];
   if(d.conditions.warrantyEnabled!==false&&t(d.conditions.warranty,L))conditions.push((NL?'Garantie: ':'Warranty: ')+t(d.conditions.warranty,L));
   if(d.conditions.meerwerkEnabled!==false&&t(d.conditions.meerwerk,L))conditions.push(t(d.conditions.meerwerk,L));
