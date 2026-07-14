@@ -2408,7 +2408,7 @@ function PreviewTab({data:d}){
   const SecHead=({n,title})=><div style={{display:'flex',alignItems:'baseline',gap:12,marginBottom:14}}><span style={{fontFamily:mono,fontSize:13,color:muted}}>{n}</span><span style={{fontSize:13,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:ink}}>{title}</span></div>;
   const Eyebrow=({children,mb})=><div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:600,color:ink,marginBottom:mb||0}}>{children}</div>;
   const Para=({text})=>{const ps=String(text||'').split(/\n\s*\n+/).map(s=>s.trim()).filter(Boolean);return <React.Fragment>{ps.map((p,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0,whiteSpace:'pre-wrap'}}>{p}</div>)}</React.Fragment>;};
-  const runHdr=T.title+(T.subtitle?' — '+T.subtitle:'');
+  const runHdr=T.title+(T.subtitle?' · '+T.subtitle:'');
   const word=(ll.offerte||'Quotation');
   let _pn=2;const pn=()=>String(++_pn).padStart(2,'0');let _pa=0;const pa=()=>String.fromCharCode(65+_pa++);
 
@@ -2449,7 +2449,7 @@ function PreviewTab({data:d}){
       <div style={{marginTop:48}}>
         <SecHead n={pn()} title={NL?'Werkzaamheden & planning':'Scope of work & timeline'}/>
         {T.scope.map((s,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0}}><strong style={{fontWeight:600}}>{s.lead} </strong>{s.body}</div>)}
-        {(T.delivery||T.effort)&&<div style={{fontSize:13,color:sec,marginTop:10}}>{(NL?'Oplevering: ':'Expected delivery: ')+(T.delivery||'')+(T.effort?' — '+T.effort:'')}</div>}
+        {(T.delivery||T.effort)&&<div style={{fontSize:13,color:sec,marginTop:10}}>{(NL?'Oplevering: ':'Expected delivery: ')+(T.delivery||'')+(T.effort?', '+T.effort:'')}</div>}
         {T.excluded&&T.excluded.length>0&&<div style={{marginTop:26,background:'#efeee9',borderRadius:6,padding:'15px 20px'}}>
           <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.12em',color:ink,marginBottom:8}}>{NL?'Uitgesloten van deze offerte':'Outside scope'}</div>
           {T.excluded.map((x,i)=><div key={i} style={{display:'flex',gap:10,fontSize:13.5,lineHeight:1.55,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{x}</span></div>)}
@@ -2461,7 +2461,7 @@ function PreviewTab({data:d}){
         {T.weeks.length>0&&<div style={{marginTop:26}}>
           <Eyebrow mb={14}>{NL?'Indicatieve planning':'Indicative timeline'}</Eyebrow>
           <div style={{display:'flex',paddingLeft:172,marginBottom:8}}>
-            {T.weeks.map((w,i)=><div key={i} style={{flex:1,fontFamily:mono,fontSize:10,color:faint}}>{w}</div>)}
+            {(()=>{const wkStep=Math.max(1,Math.ceil(T.weeks.length/7));return T.weeks.map((w,i)=><div key={i} style={{flex:1,fontFamily:mono,fontSize:10,color:faint,whiteSpace:'nowrap',overflow:'hidden'}}>{i%wkStep===0?w:''}</div>);})()}
           </div>
           {T.tasks.map((tk,i)=><div key={i} style={{display:'flex',alignItems:'center',marginBottom:8}}>
             <div style={{width:172,fontSize:13,color:ink,paddingRight:16}}>{tk.name}</div>
@@ -2518,11 +2518,11 @@ function PreviewTab({data:d}){
         </div>
       </div>
       {T.responsibilities&&T.responsibilities.length>0&&<div style={{marginTop:48}}>
-        <SecHead n={pa()} title={NL?'Scope of work — verantwoordelijkheden':'Scope of work — responsibilities'}/>
+        <SecHead n={pa()} title={NL?'Scope of work / verantwoordelijkheden':'Scope of work / responsibilities'}/>
         <div style={{display:'flex',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
           <div style={{width:150}}>{NL?'Partij':'Party'}</div><div style={{flex:1}}>{NL?'Verantwoordelijk voor':'Responsible for'}</div></div>
         {T.responsibilities.map((r,i)=><div key={i} style={{display:'flex',alignItems:'flex-start',padding:'11px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
-          <div style={{width:150,fontWeight:600,color:ink,paddingRight:12}}>{r.party||'—'}</div><div style={{flex:1,color:body,lineHeight:1.55}}>{r.item}</div></div>)}
+          <div style={{width:150,fontWeight:600,color:ink,paddingRight:12}}>{r.party||''}</div><div style={{flex:1,color:body,lineHeight:1.55}}>{r.item}</div></div>)}
       </div>}
       {T.meerwerkClause&&<div style={{marginTop:48}}>
         <SecHead n={pa()} title={NL?'Meerwerk':'Additional work'}/>
@@ -2533,7 +2533,7 @@ function PreviewTab({data:d}){
         <div style={{display:'flex',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
           <div style={{flex:1}}>{NL?'Activiteit':'Activity'}</div><div style={{textAlign:'right'}}>{NL?'Tarief (excl. btw)':'Rate (ex VAT)'}</div></div>
         {T.rateCard.map((r,i)=><div key={i} style={{display:'flex',alignItems:'baseline',padding:'11px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
-          <div style={{flex:1,color:ink}}>{r.label}</div><div style={{textAlign:'right'}}><span style={{fontWeight:500}}>{r.rate||'—'}</span>{r.unit?<span style={{color:muted,fontSize:11,marginLeft:6}}>{r.unit}</span>:null}</div></div>)}
+          <div style={{flex:1,color:ink}}>{r.label}</div><div style={{textAlign:'right'}}><span style={{fontWeight:500}}>{r.rate||''}</span>{r.unit?<span style={{color:muted,fontSize:11,marginLeft:6}}>{r.unit}</span>:null}</div></div>)}
       </div>}
       <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:30,display:'flex',justifyContent:'space-between'}}>
         <span></span><span>{word} {T.number} · 2 / 2</span>
@@ -2731,7 +2731,8 @@ function buildQuoteDocDef(D, logoImg){
     var H=axisH + (D.tasks.length)*(rowH+gapH);
     var p='<svg width="'+CW+'" height="'+H+'" xmlns="http://www.w3.org/2000/svg" font-family="I4">';
     var n=Math.max(1,D.weeks.length), cellW=trackW/n;
-    D.weeks.forEach(function(w,i){p+='<text x="'+(g+i*cellW).toFixed(1)+'" y="'+(10*k).toFixed(1)+'" font-size="'+(10*k).toFixed(2)+'" font-family="M4" fill='+'"'+faint+'">'+esc(w)+'</text>';});
+    var wkStep=Math.max(1,Math.ceil(n/7));
+    D.weeks.forEach(function(w,i){if(i%wkStep)return;p+='<text x="'+(g+i*cellW).toFixed(1)+'" y="'+(10*k).toFixed(1)+'" font-size="'+(10*k).toFixed(2)+'" font-family="M4" fill='+'"'+faint+'">'+esc(w)+'</text>';});
     D.tasks.forEach(function(t,i){
       var top=axisH+i*(rowH+gapH);
       var _nm=String(t.name||'');if(_nm.length>23)_nm=_nm.slice(0,22)+'\u2026';p+='<text x="0" y="'+(top+rowH/2+(13*k)*0.34).toFixed(1)+'" font-size="'+(13*k).toFixed(2)+'" fill="'+ink+'">'+esc(_nm)+'</text>';
@@ -2770,14 +2771,14 @@ function buildQuoteDocDef(D, logoImg){
   function hardBlock(title,items){var rows=[{text:String(title).toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.12,11*k),margin:[0,0,0,7]}];items.forEach(function(x,i){rows.push({columns:[{width:'auto',text:'·',color:muted,fontSize:13*k},{width:'*',text:x,fontSize:13*k,color:body,lineHeight:1.5}],columnGap:7,margin:[0,i?5:0,0,0]});});return {table:{widths:['*'],body:[[{stack:rows,fillColor:'#efeee9'}]]},layout:{defaultBorder:false,paddingLeft:function(){return 16;},paddingRight:function(){return 16;},paddingTop:function(){return 13;},paddingBottom:function(){return 13;}},margin:[0,24,0,0],unbreakable:true};}
   var sc=[secHead(nx(),'Scope of work & timeline')];
   (D.scope||[]).forEach(function(s,i){sc.push({text:[{text:(s.lead?s.lead+' ':''),font:'I6',color:body},{text:s.body||'',color:body}],fontSize:14*k,lineHeight:1.65,margin:[0,i?6:0,0,0]});});
-  if(D.delivery||D.effort)sc.push({text:'Expected delivery: '+(D.delivery||'')+(D.effort?' — '+D.effort:''),fontSize:13*k,color:sec,margin:[0,6,0,0]});
+  if(D.delivery||D.effort)sc.push({text:'Expected delivery: '+(D.delivery||'')+(D.effort?', '+D.effort:''),fontSize:13*k,color:sec,margin:[0,6,0,0]});
   c.push({stack:sc,margin:[0,26,0,0],unbreakable:true});
   // Exclusions + assumptions belong with the scope: render them above the timeline.
   if(D.excluded&&D.excluded.length)c.push(hardBlock(D.nl?'Uitgesloten van deze offerte':'Outside scope',D.excluded));
   if(D.assumptions&&D.assumptions.length)c.push(hardBlock(D.nl?'Aannames':'Assumptions',D.assumptions));
   if(D.tasks&&D.tasks.length)c.push({stack:[eyebrow('Indicative timeline',9),{svg:timelineSVG(),width:CW}],margin:[0,24,0,0],unbreakable:true});
   // page 2
-  c.push({pageBreak:'before',columns:[{width:'auto',image:logoImg,fit:[240,20*k]},{width:'*',text:D.title+(D.subtitle?' — '+D.subtitle:''),font:'I4',fontSize:11*k,color:sec,alignment:'right',margin:[0,3,0,0]}]});
+  c.push({pageBreak:'before',columns:[{width:'auto',image:logoImg,fit:[240,20*k]},{width:'*',text:D.title+(D.subtitle?' · '+D.subtitle:''),font:'I4',fontSize:11*k,color:sec,alignment:'right',margin:[0,3,0,0]}]});
   c.push({canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,13.5,0,18]});
   var cr=[[{text:'DESCRIPTION',font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:'AMOUNT',font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];
   (D.cost_items||[]).forEach(function(it){cr.push([{text:it.d,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:it.a,font:'I5',fontSize:13*k,color:ink,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});
@@ -2790,9 +2791,9 @@ function buildQuoteDocDef(D, logoImg){
     {columns:[{width:'*',stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:140,y2:0,lineWidth:0.5,lineColor:ink}]},{text:'NAME',font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]},
       {width:'*',stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:140,y2:0,lineWidth:0.5,lineColor:ink}]},{text:'SIGNATURE',font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]},
       {width:130,stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:97,y2:0,lineWidth:0.5,lineColor:ink}]},{text:'DATE',font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]}],columnGap:24,margin:[0,48,0,0]}],margin:[0,40,0,0],unbreakable:true});
-  if(D.responsibilities&&D.responsibilities.length){var rpb=[[{text:(D.nl?'Partij':'Party').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:(D.nl?'Verantwoordelijk voor':'Responsible for').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];D.responsibilities.forEach(function(r){rpb.push([{text:r.party||'—',font:'I6',fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:r.item||'',fontSize:13*k,color:body,lineHeight:1.5,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});c.push({stack:[secHead(nxA(),D.nl?'Scope of work — verantwoordelijkheden':'Scope of work — responsibilities'),{table:{widths:[110,'*'],body:rpb},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(i){return i===0?12:0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,36,0,0],unbreakable:true});}
+  if(D.responsibilities&&D.responsibilities.length){var rpb=[[{text:(D.nl?'Partij':'Party').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:(D.nl?'Verantwoordelijk voor':'Responsible for').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];D.responsibilities.forEach(function(r){rpb.push([{text:r.party||'',font:'I6',fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:r.item||'',fontSize:13*k,color:body,lineHeight:1.5,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});c.push({stack:[secHead(nxA(),D.nl?'Scope of work / verantwoordelijkheden':'Scope of work / responsibilities'),{table:{widths:[110,'*'],body:rpb},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(i){return i===0?12:0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,36,0,0],unbreakable:true});}
   if(D.meerwerkClause)c.push({stack:[secHead(nxA(),D.nl?'Meerwerk':'Additional work'),paras(D.meerwerkClause,14*k)],margin:[0,36,0,0],unbreakable:true});
-  if(D.rateCard&&D.rateCard.length){var rcb=[[{text:(D.nl?'Activiteit':'Activity').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:(D.nl?'Tarief (excl. btw)':'Rate (ex VAT)').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];D.rateCard.forEach(function(r){rcb.push([{text:r.label,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:[{text:(r.rate||'—'),font:'I5',color:ink},{text:(r.unit?'  '+r.unit:''),color:muted,fontSize:11*k}],fontSize:13*k,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});c.push({stack:[secHead(nxA(),D.nl?'Tarievenkaart':'Rate card'),{table:{widths:['*','auto'],body:rcb},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,36,0,0],unbreakable:true});}
+  if(D.rateCard&&D.rateCard.length){var rcb=[[{text:(D.nl?'Activiteit':'Activity').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:(D.nl?'Tarief (excl. btw)':'Rate (ex VAT)').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];D.rateCard.forEach(function(r){rcb.push([{text:r.label,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:[{text:(r.rate||''),font:'I5',color:ink},{text:(r.unit?'  '+r.unit:''),color:muted,fontSize:11*k}],fontSize:13*k,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});c.push({stack:[secHead(nxA(),D.nl?'Tarievenkaart':'Rate card'),{table:{widths:['*','auto'],body:rcb},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,36,0,0],unbreakable:true});}
   return {pageSize:'A4',pageMargins:[ML,MT,ML,MT],
     background:function(cp,ps){return {canvas:[{type:'rect',x:0,y:0,w:ps.width,h:ps.height,color:'#ffffff'}]};},
     footer:function(cp,pc){return {margin:[ML,8,ML,0],columns:[{width:'*',text:''},{width:'auto',text:'Quotation '+D.number+' · '+cp+' / '+pc,font:'M4',fontSize:10*k,color:muted,characterSpacing:lsf(0.03,10*k)}]};},
@@ -2820,7 +2821,7 @@ function mapQuoteToTokens(d){
   const cost_items=finLines.map(ln=>({d:ln.desc||'',a:fmtE(ln.total)}));
   const msISOs=d.payment.milestones.map((ms,i)=>ms.date||(d.project.date?addDays(d.project.date,Math.round(totalWeeks*(i+1)/Math.max(1,d.payment.milestones.length))*7):''));
   const payment=[];
-  d.payment.milestones.forEach((ms,i)=>{const amt=fmtE(grand*(ms.pct||0)/100);const mo=msISOs[i]?fmtMonthY(msISOs[i]):'';payment.push(t(ms.name,L)+': '+ms.pct+'% ('+amt+')'+(mo?' — '+mo:'')+'.');});
+  d.payment.milestones.forEach((ms,i)=>{const amt=fmtE(grand*(ms.pct||0)/100);const mo=msISOs[i]?fmtMonthY(msISOs[i]):'';payment.push(t(ms.name,L)+': '+ms.pct+'% ('+amt+')'+(mo?', '+mo:'')+'.');});
   payment.push((NL?'Betaling binnen ':'Payment is due within ')+(d.conditions.paymentTerm||14)+(NL?' dagen na factuurdatum.':' days of the invoice date.'));
   const excluded=((d.conditions&&d.conditions.exclusionsEnabled)!==false&&t(d.project.exclusions,L))?t(d.project.exclusions,L).split(/\n+/).map(s=>s.trim()).filter(Boolean):[];
   const conditions=[];
@@ -2959,7 +2960,7 @@ function buildDeliveryDocDef(D, logoImg){
   var first=D.deliverables.slice(0,4), rest=D.deliverables.slice(4);
   c.push({stack:[secHead('04','Deliverables')].concat(gridRows(first)),margin:[0,26,0,0]});
   if(rest.length){
-    c.push({columns:[{width:'auto',image:logoImg,fit:[240,20*k]},{width:'*',text:D.title+' — '+(D.nl?'Oplevering':'Delivery'),font:'M4',fontSize:11*k,color:sec,alignment:'right',margin:[0,3,0,0]}],pageBreak:'before'});
+    c.push({columns:[{width:'auto',image:logoImg,fit:[240,20*k]},{width:'*',text:D.title+' · '+(D.nl?'Oplevering':'Delivery'),font:'M4',fontSize:11*k,color:sec,alignment:'right',margin:[0,3,0,0]}],pageBreak:'before'});
     c.push({canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,13.5,0,18]});
     c.push({stack:[secHead('04','Deliverables',D.nl?'(vervolg)':'(continued)')].concat(gridRows(rest))});
   }
