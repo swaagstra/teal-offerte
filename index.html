@@ -24,7 +24,8 @@
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:'Inter',sans-serif;background:var(--warm-grey);color:var(--teal-black);line-height:1.5;font-size:14px}
   .app{min-height:100vh;display:flex;flex-direction:column}
-  .hdr{background:var(--teal-dark);color:var(--teal-mint);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+  .topbar{position:sticky;top:0;z-index:100}
+  .hdr{background:var(--teal-dark);color:var(--teal-mint);padding:14px 28px;display:flex;align-items:center;justify-content:space-between}
   .hdr-left{display:flex;align-items:center;gap:12px}
   .hdr .sub{color:var(--mid-grey);font-size:13px;font-weight:400}
   .tabs{display:flex;gap:2px;background:var(--teal-dark);padding:0 28px;overflow-x:auto}
@@ -3851,8 +3852,10 @@ function App(){
   const isCO=d&&d.kind==='change_order';
   const isDelivery=d&&d.kind==='delivery';
   return <div className="app">
-    <Header data={showDash||isCO||isDelivery?null:d} onPdf={handlePdf} onExport={handleExport} setData={setDWithArchive} onBack={goToDash}/>
-    {!showDash&&d&&!isCO&&!isDelivery&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
+    <div className="topbar">
+      <Header data={showDash||isCO||isDelivery?null:d} onPdf={handlePdf} onExport={handleExport} setData={setDWithArchive} onBack={goToDash}/>
+      {!showDash&&d&&!isCO&&!isDelivery&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
+    </div>
     <div className="main">
       {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onNewInProject={newQuoteInProject} onNewExternalProject={newExternalProject} onImport={importDoc} onDuplicate={duplicateQuote} onDelete={deleteQuote} onNewCO={newCO} onNewDelivery={newDelivery} onNewCOForProject={newCOForProject} onNewDeliveryForProject={newDeliveryForProject} onBumpVersion={bumpVersion}/>:
       isCO?<ChangeOrderFlow data={d} set={setDWithArchive} onBack={goToDash}/>:
