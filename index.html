@@ -560,6 +560,36 @@ const setAVB64=(lng,b64)=>{try{const k=lng==='en'?AV_KEY.en:AV_KEY.nl;if(b64)loc
 const save=d=>{try{localStorage.setItem(SK,JSON.stringify(d))}catch(e){}};
 const load=()=>{try{const r=localStorage.getItem(SK);return r?JSON.parse(r):null}catch(e){return null}};
 const loadHash=()=>{try{const h=location.hash.slice(1);if(!h)return null;const p=new URLSearchParams(h);const dd=p.get('data');if(!dd)return null;const j=LZString.decompressFromEncodedURIComponent(dd);return j?JSON.parse(j):null}catch(e){return null}};
+// ── Import: turn a (possibly partial) offerte object into a complete, valid one ──
+// Merges onto a fresh createProject() so external/partial JSON (e.g. from the intake skill) is always safe to open.
+function importOfferte(obj){
+  if(!obj||typeof obj!=='object')return null;
+  if(obj.kind==='change_order'||obj.kind==='delivery')return migrateConds(obj);
+  const type=(obj.type==='assemble')?'assemble':'build';
+  const base=createProject(type);
+  const merged={...base,...obj,type,
+    project:{...base.project,...(obj.project||{})},
+    client:{...base.client,...(obj.client||{})},
+    conditions:{...base.conditions,...(obj.conditions||{})},
+    annexes:obj.annexes?{...base.annexes,...obj.annexes}:base.annexes,
+    payment:(obj.payment&&Array.isArray(obj.payment.milestones))?obj.payment:base.payment,
+    phases:(Array.isArray(obj.phases)&&obj.phases.length)?obj.phases:base.phases};
+  merged.ref=obj.ref||genRef(type);
+  delete merged._archiveId;
+  return migrateConds(merged);
+}
+// Decode a base64url (UTF-8 safe) payload from the #import= fragment.
+function b64urlToStr(s){s=String(s).replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const bin=atob(s);const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));return new TextDecoder().decode(bytes);}
+function loadImportHash(){try{const h=location.hash.slice(1);if(!h)return null;const p=new URLSearchParams(h);const dd=p.get('import');if(!dd)return null;return importOfferte(JSON.parse(b64urlToStr(dd)));}catch(e){return null;}}
+// Parse pasted content: raw JSON, a full #import= URL, or a bare base64url payload.
+function parseImportInput(text){
+  const s=String(text||'').trim();if(!s)return null;
+  try{if(s[0]==='{')return importOfferte(JSON.parse(s));}catch(e){}
+  const m=s.match(/[#&?]import=([A-Za-z0-9\-_]+)/);
+  const payload=m?m[1]:s;
+  try{return importOfferte(JSON.parse(b64urlToStr(payload)));}catch(e){}
+  return null;
+}
 const shareUrl=d=>{const{_archiveId,...clean}=d;const c=LZString.compressToEncodedURIComponent(JSON.stringify(clean));return`${location.origin}${location.pathname}#data=${c}`};
 
 // ── Short share links (/s/<id> via /api/share, falls back to #data= hash) ──
@@ -3148,7 +3178,7 @@ async function pushToOdoo(entry,opts={}){
 }
 
 // ── Dashboard ──
-function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate,onDelete,onNewCO,onNewDelivery,onNewCOForProject,onNewDeliveryForProject,onBumpVersion}){
+function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onImport,onDuplicate,onDelete,onNewCO,onNewDelivery,onNewCOForProject,onNewDeliveryForProject,onBumpVersion}){
   const[archive,setArchive]=useState(loadArchiveLive());
   const[expandedId,setExpandedId]=useState(null);
   const[avRefresh,setAvRefresh]=useState(0);
@@ -3168,6 +3198,9 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
   const[showAnalytics,setShowAnalytics]=useState(false);
   const[dupFor,setDupFor]=useState(null);
   const[libOpen,setLibOpen]=useState(false);
+  const[importOpen,setImportOpen]=useState(false);
+  const[importText,setImportText]=useState('');
+  const[importErr,setImportErr]=useState('');
   const[synced,setSynced]=useState(false);
   useEffect(()=>{pullArchive().then(a=>{migrateDeliveryRefs();setArchive(loadArchiveLive());setSynced(true);});},[]);
   const statusMeta={
@@ -3306,6 +3339,7 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
         <button className="btn btn-p" onClick={()=>onNew('build')}>+ Build</button>
         <button className="btn btn-p" onClick={()=>onNew('assemble')}>+ Assemble</button>
         <button className="btn btn-g" onClick={()=>onNewExternalProject()} title="Voeg een project toe waarvan de offerte buiten de tool is gemaakt, en maak er meteen een change order in aan">+ Project (extern)</button>
+        <button className="btn btn-g" onClick={()=>{setImportText('');setImportErr('');setImportOpen(true);}} title="Plak een offerte-JSON of import-link (bijv. gegenereerd door de intake-skill)">Importeren</button>
       </div>
     </div>
 
@@ -3472,6 +3506,19 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onDuplicate
       </div>;})()}
 
     {libOpen&&<LibraryModal onClose={()=>setLibOpen(false)}/>}
+
+    {importOpen&&<div onClick={()=>setImportOpen(false)} style={{position:'fixed',inset:0,background:'rgba(7,20,18,.35)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,padding:20}}>
+      <div onClick={e=>e.stopPropagation()} className="card" style={{maxWidth:520,width:'100%',marginBottom:0}}>
+        <div className="card-h" style={{marginBottom:4}}>Offerte importeren</div>
+        <p className="sm muted" style={{margin:'0 0 12px'}}>Plak een offerte-JSON, een <code>#import=</code>-link of de base64-payload (bijv. gegenereerd door de intake-skill). Er wordt een nieuwe offerte aangemaakt.</p>
+        <textarea value={importText} onChange={e=>{setImportText(e.target.value);setImportErr('');}} placeholder={'{ "type": "build", "project": { "name": "…" }, … }'} style={{width:'100%',minHeight:150,fontFamily:"'JetBrains Mono',monospace",fontSize:12,boxSizing:'border-box'}}/>
+        {importErr&&<p className="sm" style={{color:'var(--red)',margin:'8px 0 0'}}>{importErr}</p>}
+        <div className="flex g8" style={{justifyContent:'flex-end',marginTop:14}}>
+          <button className="btn btn-sm btn-g" onClick={()=>setImportOpen(false)}>Annuleren</button>
+          <button className="btn btn-sm btn-p" onClick={()=>{const merged=parseImportInput(importText);if(!merged){setImportErr('Kon dit niet lezen. Plak geldige offerte-JSON, een #import=-link of de base64-payload.');return;}setImportOpen(false);onImport(merged);}}>Importeren</button>
+        </div>
+      </div>
+    </div>}
   </div>;
 }
 
@@ -3721,8 +3768,10 @@ function App(){
 
   useEffect(()=>{
     migrateDeliveryRefs();
-    const sid=loadShortId();
     const _std=x=>x&&(x.kind==='change_order'||x.kind==='delivery');
+    const imp=loadImportHash();
+    if(imp){const saved=archiveSave(imp,'created');save(saved);setD(saved);setShowDash(false);history.replaceState(null,'',location.pathname);return;}
+    const sid=loadShortId();
     if(sid){fetchShared(sid).then(sd=>{if(sd){const saved=archiveSave(_std(sd)?sd:migrateConds(sd),'created');setD(saved);setShowDash(false);}history.replaceState(null,'','/');});return;}
     const h=loadHash();
     if(h){const saved=archiveSave(_std(h)?h:migrateConds(h),'created');setD(saved);setShowDash(false);history.replaceState(null,'',location.pathname);return;}
@@ -3746,6 +3795,7 @@ function App(){
   const newCOForProject=(name)=>{const co=createChangeOrder(null,(d&&d.lang)||'nl');if(name)co.project.name=name;const saved=archiveSave(co,'created');save(saved);setD(saved);setShowDash(false);};
   const newDeliveryForProject=(name)=>{const dvd=createDelivery(null,(d&&d.lang)||'nl');if(name)dvd.project.name=name;const saved=archiveSave(dvd,'created');save(saved);setD(saved);setShowDash(false);};
   const newExternalProject=()=>{const name=window.prompt('Projectnaam (offerte buiten de tool):');if(name===null)return;const co=createChangeOrder(null,'nl');co.project.name=(name||'').trim();const saved=archiveSave(co,'created');save(saved);setD(saved);setShowDash(false);};
+  const importDoc=(merged)=>{if(!merged)return;const saved=archiveSave(merged,'created');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const bumpVersion=(id)=>{const note=window.prompt('Wat is er anders in deze nieuwe versie? (kort)');if(note===null)return;const e=archiveBumpVersion(id,note);if(e&&d&&d._archiveId===id){setD(e.data);save(e.data);}};
   const duplicateQuote=(data,opts={})=>{const copy={...JSON.parse(JSON.stringify(data)),_archiveId:undefined};delete copy._archiveId;const ref=data.ref.split('-');ref[ref.length-1]='1';copy.ref=ref.join('-')+'-copy';
     if(opts.lang&&(opts.lang==='nl'||opts.lang==='en'))copy.lang=opts.lang;
@@ -3789,7 +3839,7 @@ function App(){
     <Header data={showDash||isCO||isDelivery?null:d} onPdf={handlePdf} onExport={handleExport} setData={setDWithArchive} onBack={goToDash}/>
     {!showDash&&d&&!isCO&&!isDelivery&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
     <div className="main">
-      {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onNewInProject={newQuoteInProject} onNewExternalProject={newExternalProject} onDuplicate={duplicateQuote} onDelete={deleteQuote} onNewCO={newCO} onNewDelivery={newDelivery} onNewCOForProject={newCOForProject} onNewDeliveryForProject={newDeliveryForProject} onBumpVersion={bumpVersion}/>:
+      {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onNewInProject={newQuoteInProject} onNewExternalProject={newExternalProject} onImport={importDoc} onDuplicate={duplicateQuote} onDelete={deleteQuote} onNewCO={newCO} onNewDelivery={newDelivery} onNewCOForProject={newCOForProject} onNewDeliveryForProject={newDeliveryForProject} onBumpVersion={bumpVersion}/>:
       isCO?<ChangeOrderFlow data={d} set={setDWithArchive} onBack={goToDash}/>:
       isDelivery?<DeliveryFlow data={d} set={setDWithArchive} onBack={goToDash}/>:
       !d?<Start onSelect={type=>{if(type==='load'){const r=load();if(r)openQuote(r);}else newQuote(type);}}/>:<>
