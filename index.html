@@ -2010,6 +2010,8 @@ function PlanningTab({data:d,set}){
   const setSteps=(arr)=>set({...d,timeline:arr});
   const upStep=(i,k,v)=>{const a=[...steps];a[i]={...a[i],[k]:v};setSteps(a);};
   const upStepName=(i,v)=>{const a=[...steps];const o=a[i].name||{nl:'',en:''};const nn=typeof o==='string'?{nl:o,en:o}:{...o};nn[L]=v;a[i]={...a[i],name:nn};setSteps(a);};
+  const upStepBar=(i,v)=>{const a=[...steps];const o=a[i].barLabel||{nl:'',en:''};const nn=typeof o==='string'?{nl:o,en:o}:{...o};nn[L]=v;a[i]={...a[i],barLabel:nn};setSteps(a);};
+  const autoAbbr=(s)=>String(s||'').replace(/[^A-Za-z0-9]/g,'').slice(0,3).toUpperCase();
   const addStep=()=>{const lastEnd=Math.max(0,...active.map(p=>(p.startWeek||0)+(p.durationWeeks||4)));setSteps([...steps,{id:uid(),name:{nl:'Tussenstap',en:'Step'},startWeek:lastEnd,durationWeeks:1}]);};
   const rmStep=(i)=>setSteps(steps.filter((_,j)=>j!==i));
   const dateFor=(sw)=>{if(!d.project.date)return'';const dt=new Date(d.project.date);dt.setDate(dt.getDate()+(sw||0)*7);return (L==='nl'?'wk ':'wk ')+isoWeek(dt)+' · '+dt.toLocaleDateString(L==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'short',year:'numeric'});};
@@ -2044,12 +2046,13 @@ function PlanningTab({data:d,set}){
       })}
     </div>
     <table className="bt mt24">
-      <thead><tr><th>{ll.fase}</th><th style={{width:'12%'}}>{ll.startWeek}</th><th style={{width:'12%'}}>{ll.duurWeken}</th><th style={{width:'20%'}}>{ll.startdatum}</th><th style={{width:'6%'}}></th></tr></thead>
+      <thead><tr><th>{ll.fase}</th><th style={{width:'12%'}} title={L==='nl'?'Kort label in de tijdlijnbalk (bijv. INS)':'Short label inside the timeline bar (e.g. INS)'}>{L==='nl'?'Balk':'Bar'}</th><th style={{width:'11%'}}>{ll.startWeek}</th><th style={{width:'11%'}}>{ll.duurWeken}</th><th style={{width:'18%'}}>{ll.startdatum}</th><th style={{width:'6%'}}></th></tr></thead>
       <tbody>
         {d.phases.map((ph,pi)=>{
           if(ph.enabled===false)return null;
           return <tr key={ph.id}>
             <td><span style={{color:'#999',fontSize:11,marginRight:4}}>{ph.code}</span><input value={ph.tlTitle||''} placeholder={phaseName(ph)} onChange={e=>upPh(pi,'tlTitle',e.target.value)} style={{width:'80%'}}/></td>
+            <td><input value={ph.barLabel||''} placeholder={autoAbbr(ph.tlTitle||phaseName(ph))} maxLength={6} onChange={e=>upPh(pi,'barLabel',e.target.value)} style={{textTransform:'uppercase'}}/></td>
             <td><input type="number" min={0} value={ph.startWeek||0} onChange={e=>upPh(pi,'startWeek',parseInt(e.target.value)||0)}/></td>
             <td><input type="number" min={1} value={ph.durationWeeks||4} onChange={e=>upPh(pi,'durationWeeks',parseInt(e.target.value)||1)}/></td>
             <td className="muted">{dateFor(ph.startWeek)}</td>
@@ -2059,6 +2062,7 @@ function PlanningTab({data:d,set}){
         {steps.map((s,si)=>(
           <tr key={s.id} style={{background:'#fafafa'}}>
             <td><input value={t(s.name,L)} onChange={e=>upStepName(si,e.target.value)} placeholder={L==='nl'?'Naam tussenstap':'Step name'} style={{width:'100%',fontStyle:'italic'}}/></td>
+            <td><input value={t(s.barLabel,L)||''} placeholder={autoAbbr(t(s.name,L))} maxLength={6} onChange={e=>upStepBar(si,e.target.value)} style={{textTransform:'uppercase'}}/></td>
             <td><input type="number" min={0} value={s.startWeek||0} onChange={e=>upStep(si,'startWeek',parseInt(e.target.value)||0)}/></td>
             <td><input type="number" min={1} value={s.durationWeeks||1} onChange={e=>upStep(si,'durationWeeks',parseInt(e.target.value)||1)}/></td>
             <td className="muted">{dateFor(s.startWeek)}</td>
