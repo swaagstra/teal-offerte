@@ -2461,7 +2461,7 @@ function PreviewTab({data:d}){
         {T.weeks.length>0&&<div style={{marginTop:26}}>
           <Eyebrow mb={14}>{NL?'Indicatieve planning':'Indicative timeline'}</Eyebrow>
           <div style={{display:'flex',paddingLeft:172,marginBottom:8}}>
-            {(()=>{const wkStep=Math.max(1,Math.ceil(T.weeks.length/7));return T.weeks.map((w,i)=><div key={i} style={{flex:1,fontFamily:mono,fontSize:10,color:faint,whiteSpace:'nowrap'}}>{i%wkStep===0?w:''}</div>);})()}
+            {T.weeks.map((w,i)=><div key={i} style={{flex:1,fontFamily:mono,fontSize:10,color:faint,whiteSpace:'nowrap'}}>{w}</div>)}
           </div>
           {T.tasks.map((tk,i)=><div key={i} style={{display:'flex',alignItems:'center',marginBottom:8}}>
             <div style={{width:172,fontSize:13,color:ink,paddingRight:16}}>{tk.name}</div>
@@ -2731,8 +2731,7 @@ function buildQuoteDocDef(D, logoImg){
     var H=axisH + (D.tasks.length)*(rowH+gapH);
     var p='<svg width="'+CW+'" height="'+H+'" xmlns="http://www.w3.org/2000/svg" font-family="I4">';
     var n=Math.max(1,D.weeks.length), cellW=trackW/n;
-    var wkStep=Math.max(1,Math.ceil(n/7));
-    D.weeks.forEach(function(w,i){if(i%wkStep)return;p+='<text x="'+(g+i*cellW).toFixed(1)+'" y="'+(10*k).toFixed(1)+'" font-size="'+(10*k).toFixed(2)+'" font-family="M4" fill='+'"'+faint+'">'+esc(w)+'</text>';});
+    D.weeks.forEach(function(w,i){if(!w)return;p+='<text x="'+(g+i*cellW).toFixed(1)+'" y="'+(10*k).toFixed(1)+'" font-size="'+(10*k).toFixed(2)+'" font-family="M4" fill='+'"'+faint+'">'+esc(w)+'</text>';});
     D.tasks.forEach(function(t,i){
       var top=axisH+i*(rowH+gapH);
       var _nm=String(t.name||'');if(_nm.length>23)_nm=_nm.slice(0,22)+'\u2026';p+='<text x="0" y="'+(top+rowH/2+(13*k)*0.34).toFixed(1)+'" font-size="'+(13*k).toFixed(2)+'" fill="'+ink+'">'+esc(_nm)+'</text>';
@@ -2811,7 +2810,8 @@ function mapQuoteToTokens(d){
   const steps=Array.isArray(d.timeline)?d.timeline:[];
   const totalWeeks=Math.max(1,...active.map(p=>(p.startWeek||0)+(p.durationWeeks||4)),...steps.map(s=>(s.startWeek||0)+(s.durationWeeks||1)));
   const addDays=(iso,dd)=>{const dt=new Date(iso);dt.setDate(dt.getDate()+dd);return dt.toISOString().slice(0,10);};
-  const weeks=[];for(let w=0;w<totalWeeks;w++){const wd=d.project.date?addDays(d.project.date,w*7):null;weeks.push(wd?fmtShort(wd):('W'+(w+1)));}
+  // Timeline axis: one label at the start of each month (jul, aug, …), empty elsewhere — keeps it uncluttered.
+  const weeks=[];let _lastMo=-1;for(let w=0;w<totalWeeks;w++){const wd=d.project.date?addDays(d.project.date,w*7):null;if(wd){const _dt=new Date(wd);if(_dt.getMonth()!==_lastMo){_lastMo=_dt.getMonth();weeks.push(_dt.toLocaleDateString(NL?'nl-NL':'en-GB',{month:'short'}));}else weeks.push('');}else weeks.push('');}
   const tasks=[];
   active.forEach(ph=>{const sw=ph.startWeek||0,dw=ph.durationWeeks||4;tasks.push({name:ph.tlTitle||ph.customName||t(ph.name,L),left:sw/totalWeeks,width:dw/totalWeeks,color:'#05100e',label:ph.barLabel||''});});
   steps.forEach(sx=>{const sw=sx.startWeek||0,dw=sx.durationWeeks||1;tasks.push({name:t(sx.name,L),left:sw/totalWeeks,width:dw/totalWeeks,color:'#9aa09e',label:t(sx.barLabel,L)||''});});
