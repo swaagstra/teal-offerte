@@ -1691,6 +1691,11 @@ function ScopeTab({data:d,set}){
   const setAssumpItem=(i,val)=>{const items=(assump.items||[]).slice();const o=items[i]||{nl:'',en:''};const nn=typeof o==='string'?{nl:o,en:o}:{...o};nn[L]=val;items[i]=nn;set({...d,annexes:{...ax,assumptions:{...assump,items}}});};
   const addAssump=()=>set({...d,annexes:{...ax,assumptions:{...assump,items:[...(assump.items||[]),{nl:'',en:''}]}}});
   const delAssump=(i)=>set({...d,annexes:{...ax,assumptions:{...assump,items:(assump.items||[]).filter((_,j)=>j!==i)}}});
+  const resp=ax.responsibilities||{enabled:false,rows:[]};
+  const setRespEnabled=(v)=>set({...d,annexes:{...ax,responsibilities:{...resp,enabled:v}}});
+  const setRespField=(i,field,val)=>{const rows=(resp.rows||[]).slice();rows[i]={...rows[i],[field]:{...(rows[i][field]||{nl:'',en:''}),[L]:val}};set({...d,annexes:{...ax,responsibilities:{...resp,rows}}});};
+  const addResp=()=>set({...d,annexes:{...ax,responsibilities:{...resp,rows:[...(resp.rows||[]),{party:{nl:'',en:''},item:{nl:'',en:''}}]}}});
+  const delResp=(i)=>set({...d,annexes:{...ax,responsibilities:{...resp,rows:(resp.rows||[]).filter((_,j)=>j!==i)}}});
   return <>
   <div className="card">
     <div className="card-h">{ll.scopePerFase} ({L.toUpperCase()})</div>
@@ -1729,6 +1734,17 @@ function ScopeTab({data:d,set}){
         <button className="btn btn-sm btn-g" onClick={addAssump} disabled={!assump.enabled}>+ {L==='nl'?'Aanname':'Assumption'}</button>
       </div>
     </div>
+  </div>
+  <div className="card">
+    <div className="between mb16"><div className="card-h" style={{border:0,padding:0,margin:0}}>{L==='nl'?'Scope of work / verantwoordelijkheden':'Scope of work / responsibilities'}</div>
+      <label className="flex g8" style={{alignItems:'center',fontSize:13}}><input type="checkbox" checked={!!resp.enabled} onChange={e=>setRespEnabled(e.target.checked)}/> {L==='nl'?'Tonen':'Show'}</label></div>
+    <p className="sm muted" style={{marginTop:0,marginBottom:12}}>{L==='nl'?'Maak per regel duidelijk welke partij waarvoor verantwoordelijk is (TEAL, klant, leverancier of onderaannemer).':'Per line, make clear which party is responsible for what (TEAL, client, supplier or subcontractor).'}</p>
+    <div className="flex g8 sm muted" style={{marginBottom:6}}><span style={{width:150}}>{L==='nl'?'Partij':'Party'}</span><span style={{flex:1}}>{L==='nl'?'Verantwoordelijk voor':'Responsible for'}</span><span style={{width:28}}></span></div>
+    {(resp.rows||[]).map((r,i)=><div key={i} className="flex g8" style={{marginBottom:8,alignItems:'flex-start'}}>
+      <input style={{width:150}} placeholder={L==='nl'?'bijv. TEAL / Klant':'e.g. TEAL / Client'} value={t(r.party,L)} onChange={e=>setRespField(i,'party',e.target.value)}/>
+      <textarea style={{flex:1,minHeight:40}} placeholder={L==='nl'?'Waar is deze partij verantwoordelijk voor?':'What is this party responsible for?'} value={t(r.item,L)} onChange={e=>setRespField(i,'item',e.target.value)}/>
+      <button className="btn btn-sm btn-g" onClick={()=>delResp(i)}>×</button></div>)}
+    <button className="btn btn-sm btn-g" onClick={addResp}>+ {L==='nl'?'Regel':'Row'}</button>
   </div>
   </>;
 }
@@ -2219,13 +2235,8 @@ function AnnexesTab({data:d,set}){
   const setRcRow=(i,field,val)=>{const rows=ax.rateCard.rows.slice();if(field==='rate'){rows[i]={...rows[i],rate:val};}else{rows[i]={...rows[i],[field]:{...(rows[i][field]||{nl:'',en:''}),[L]:val}};}up({rateCard:{...ax.rateCard,rows}});};
   const addRc=()=>up({rateCard:{...ax.rateCard,rows:[...ax.rateCard.rows,{label:{nl:'',en:''},rate:'',unit:{nl:'',en:''}}]}});
   const delRc=(i)=>up({rateCard:{...ax.rateCard,rows:ax.rateCard.rows.filter((_,j)=>j!==i)}});
-  const resp=ax.responsibilities||{enabled:false,rows:[]};
-  const setRespEnabled=(v)=>up({responsibilities:{...resp,enabled:v}});
-  const setRespField=(i,field,val)=>{const rows=(resp.rows||[]).slice();rows[i]={...rows[i],[field]:{...(rows[i][field]||{nl:'',en:''}),[L]:val}};up({responsibilities:{...resp,rows}});};
-  const addResp=()=>up({responsibilities:{...resp,rows:[...(resp.rows||[]),{party:{nl:'',en:''},item:{nl:'',en:''}}]}});
-  const delResp=(i)=>up({responsibilities:{...resp,rows:(resp.rows||[]).filter((_,j)=>j!==i)}});
   return <div>
-    <p className="sm muted" style={{marginBottom:16}}>{NL?'Bijlagen verschijnen alleen in deze offerte als je ze aanzet. Standaard uit, zo gaan ze alleen mee bij grote projecten. (Uitsluitingen en aannames staan bij de Scope-tab.)':'Annexes appear in this quotation only when enabled. Off by default. (Exclusions and assumptions live on the Scope tab.)'}</p>
+    <p className="sm muted" style={{marginBottom:16}}>{NL?'Bijlagen verschijnen alleen in deze offerte als je ze aanzet. Standaard uit, zo gaan ze alleen mee bij grote projecten. (Uitsluitingen, aannames en scope of work staan bij de Scope-tab.)':'Annexes appear in this quotation only when enabled. Off by default. (Exclusions, assumptions and scope of work live on the Scope tab.)'}</p>
     <div className="card">
       <div className="between mb16"><div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Meerwerkclausule':'Additional work clause'}</div>
         <label className="flex g8" style={{alignItems:'center',fontSize:13}}><input type="checkbox" checked={ax.meerwerk.enabled} onChange={e=>setMwEnabled(e.target.checked)}/> {NL?'Tonen':'Show'}</label></div>
@@ -2241,17 +2252,6 @@ function AnnexesTab({data:d,set}){
         <input style={{width:140}} placeholder={NL?'per uur':'per hour'} value={tval(r.unit)} onChange={e=>setRcRow(i,'unit',e.target.value)}/>
         <button className="btn btn-sm btn-g" onClick={()=>delRc(i)}>×</button></div>)}
       <button className="btn btn-sm btn-g" onClick={addRc}>+ {NL?'Regel':'Row'}</button>
-    </div>
-    <div className="card">
-      <div className="between mb16"><div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Scope of work / verantwoordelijkheden':'Scope of work / responsibilities'}</div>
-        <label className="flex g8" style={{alignItems:'center',fontSize:13}}><input type="checkbox" checked={!!resp.enabled} onChange={e=>setRespEnabled(e.target.checked)}/> {NL?'Tonen':'Show'}</label></div>
-      <p className="sm muted" style={{marginTop:0,marginBottom:12}}>{NL?'Maak per regel duidelijk welke partij waarvoor verantwoordelijk is (TEAL, klant, leverancier of onderaannemer).':'Per line, make clear which party is responsible for what (TEAL, client, supplier or subcontractor).'}</p>
-      <div className="flex g8 sm muted" style={{marginBottom:6}}><span style={{width:150}}>{NL?'Partij':'Party'}</span><span style={{flex:1}}>{NL?'Verantwoordelijk voor':'Responsible for'}</span><span style={{width:28}}></span></div>
-      {(resp.rows||[]).map((r,i)=><div key={i} className="flex g8" style={{marginBottom:8,alignItems:'flex-start'}}>
-        <input style={{width:150}} placeholder={NL?'bijv. TEAL / Klant':'e.g. TEAL / Client'} value={tval(r.party)} onChange={e=>setRespField(i,'party',e.target.value)}/>
-        <textarea style={{flex:1,minHeight:40}} placeholder={NL?'Waar is deze partij verantwoordelijk voor?':'What is this party responsible for?'} value={tval(r.item)} onChange={e=>setRespField(i,'item',e.target.value)}/>
-        <button className="btn btn-sm btn-g" onClick={()=>delResp(i)}>×</button></div>)}
-      <button className="btn btn-sm btn-g" onClick={addResp}>+ {NL?'Regel':'Row'}</button>
     </div>
   </div>;
 }
