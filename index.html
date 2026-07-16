@@ -1699,7 +1699,7 @@ function ScopeTab({data:d,set}){
       <div className="between mb16">
         <div className="flex g8" style={{alignItems:'center'}}>
           <input type="checkbox" checked={ph.enabled!==false} onChange={e=>upPhase(i,'enabled',e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/>
-          <span style={{fontWeight:600,color:'var(--dark-grey)',fontSize:12}}>{ph.code}</span>
+          <input value={ph.code||''} onChange={e=>upPhase(i,'code',e.target.value)} title={L==='nl'?'Fase-afkorting':'Phase code'} style={{width:44,fontWeight:600,color:'var(--dark-grey)',fontSize:12,textAlign:'center',border:'1px solid transparent',borderRadius:3,padding:'4px 2px',background:'transparent'}} onFocus={e=>{e.target.style.borderColor='#d0d0ce';e.target.style.background='#fff'}} onBlur={e=>{e.target.style.borderColor='transparent';e.target.style.background='transparent'}}/>
           <input value={phaseName(ph)} onChange={e=>upPhase(i,'customName',e.target.value)} style={{border:'1px solid transparent',borderRadius:3,padding:'4px 8px',fontWeight:600,fontSize:14,background:'transparent',width:300}} onFocus={e=>{e.target.style.borderColor='#d0d0ce';e.target.style.background='#fff'}} onBlur={e=>{e.target.style.borderColor='transparent';e.target.style.background='transparent'}}/>
         </div>
         <div className="fg" style={{width:200}}>
@@ -2164,8 +2164,8 @@ function PaymentTab({data:d,set}){
     <div className="mt24"><div className="card-h">{ll.voorwaarden}</div>
       <p className="sm muted" style={{margin:'-4px 0 12px'}}>{L==='nl'?'Alles hieronder verschijnt in de offerte. Vink uit of maak leeg om iets weg te laten. Met "standaardtekst" vul je de TEAL-standaard in.':'Everything below appears in the quotation. Uncheck or clear to omit. Use "default text" to insert the TEAL standard.'}</p>
       <div className="row row3">
-        <div className="fg"><label>{ll.geldigheid}</label><input type="number" value={d.conditions.validity} onChange={e=>set({...d,conditions:{...d.conditions,validity:parseInt(e.target.value)||30}})}/></div>
-        <div className="fg"><label>{ll.betalingstermijn}</label><input type="number" value={d.conditions.paymentTerm} onChange={e=>set({...d,conditions:{...d.conditions,paymentTerm:parseInt(e.target.value)||14}})}/></div>
+        <div className="fg"><label>{ll.geldigheid}</label><input type="number" value={d.conditions.validity} onChange={e=>{const v=e.target.value;set({...d,conditions:{...d.conditions,validity:v===''?'':(parseInt(v)||0)}})}}/></div>
+        <div className="fg"><label>{ll.betalingstermijn}</label><input type="number" value={d.conditions.paymentTerm} onChange={e=>{const v=e.target.value;set({...d,conditions:{...d.conditions,paymentTerm:v===''?'':(parseInt(v)||0)}})}}/></div>
         <div className="fg"></div>
       </div>
 
