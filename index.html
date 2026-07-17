@@ -496,14 +496,22 @@ function migrateConds(d){
   if(c.meerwerk===undefined){c.meerwerk={nl:I.nl.meerwerkTekst,en:I.en.meerwerkTekst,_ensrc:I.nl.meerwerkTekst};if(c.meerwerkEnabled===undefined)c.meerwerkEnabled=true;ch=true;}
   if(c.akkoord===undefined){c.akkoord={nl:I.nl.akkoordTekst,en:I.en.akkoordTekst,_ensrc:I.nl.akkoordTekst};if(c.akkoordEnabled===undefined)c.akkoordEnabled=true;ch=true;}
   // Exclusions: split the old single text field into point-by-point items.
-  if(d.project&&d.project.exclusionItems===undefined){
+  // Recover in two cases: never migrated (exclusionItems undefined), OR migrated
+  // to an empty list while the legacy text field still holds content (orphaned
+  // text that would otherwise be invisible). Clear the legacy field afterwards so
+  // it is a one-time source and can never resurrect deleted items later.
+  if(d.project){
     const ex=d.project.exclusions;
     const spl=(s)=>String(s||'').split(/\n+/).map(x=>x.trim()).filter(Boolean);
     const nlL=spl(t(ex,'nl')),enL=spl(t(ex,'en'));
-    const base=nlL.length?nlL:enL;
-    const items=base.map((_,i)=>({nl:nlL[i]||'',en:enL[i]||''}));
-    d={...d,project:{...d.project,exclusionItems:items,exclusionImages:d.project.exclusionImages||[]}};
-    ch=true;
+    const hasLegacyText=nlL.length>0||enL.length>0;
+    const itemsEmpty=!(d.project.exclusionItems&&d.project.exclusionItems.length);
+    if(d.project.exclusionItems===undefined||(itemsEmpty&&hasLegacyText)){
+      const base=nlL.length?nlL:enL;
+      const items=base.map((_,i)=>({nl:nlL[i]||'',en:enL[i]||''}));
+      d={...d,project:{...d.project,exclusionItems:items,exclusionImages:d.project.exclusionImages||[],exclusions:{nl:'',en:''}}};
+      ch=true;
+    }
   }
   return ch?{...d,conditions:c}:d;
 }
@@ -3859,7 +3867,7 @@ function App(){
     if(h){const saved=archiveSave(_std(h)?h:migrateConds(h),'created');setD(saved);setShowDash(false);history.replaceState(null,'',location.pathname);return;}
     // If there's an active quotation in old storage, keep it available but show dashboard
     const existing=load();
-    if(existing&&!existing._archiveId){const saved=archiveSave(existing,'created');save(saved);}
+    if(existing&&!existing._archiveId){const saved=archiveSave(_std(existing)?existing:migrateConds(existing),'created');save(saved);}
   },[]);
 
   // Auto-save to archive on changes
