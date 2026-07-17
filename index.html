@@ -1770,6 +1770,13 @@ function ScopeTab({data:d,set}){
       <button className="btn btn-sm btn-g" onClick={()=>delResp(i)}>×</button></div>)}
     <button className="btn btn-sm btn-g" onClick={addResp}>+ {L==='nl'?'Regel':'Row'}</button>
     <div style={{marginTop:18,opacity:resp.enabled?1:.5}}>
+      <div className="sm muted" style={{fontWeight:600,marginBottom:6}}>{L==='nl'?'Uitgesloten van deze offerte (out of scope)':'Outside scope'}</div>
+      {exclItems.map((it,i)=><div key={i} className="flex g8" style={{marginBottom:8,alignItems:'flex-start'}}>
+        <textarea style={{flex:1,minHeight:40}} value={t(it,L)} onChange={e=>setExclItem(i,e.target.value)} disabled={!resp.enabled} placeholder={L==='nl'?'Eén uitsluiting (bijv. vergunningen, grondwerk, stroomvoorziening).':'One exclusion (e.g. permits, groundwork, power supply).'}/>
+        <button className="btn btn-sm btn-g" onClick={()=>delExclItem(i)} disabled={!resp.enabled}>×</button></div>)}
+      <button className="btn btn-sm btn-g" onClick={addExclItem} disabled={!resp.enabled}>+ {L==='nl'?'Uitsluiting':'Exclusion'}</button>
+    </div>
+    <div style={{marginTop:18,opacity:resp.enabled?1:.5}}>
       <div className="sm muted" style={{marginBottom:6}}>{L==='nl'?'Afbeeldingen (optioneel, met bijschrift) — verschijnen onder dit blok in de offerte':'Images (optional, with caption) — shown below this block in the quotation'}</div>
       <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
         {exclImgs.map((im,i)=><div key={i} style={{width:180}}>
@@ -2568,7 +2575,7 @@ function PreviewTab({data:d}){
           </div>)}
         </div>
       </div>
-      {((T.responsibilities&&T.responsibilities.length>0)||(T.excludedImages&&T.excludedImages.length>0))&&<div style={{marginTop:48}}>
+      {((T.responsibilities&&T.responsibilities.length>0)||(T.excluded&&T.excluded.length>0)||(T.excludedImages&&T.excludedImages.length>0))&&<div style={{marginTop:48}}>
         <SecHead n={pa()} title={NL?'Scope of work / verantwoordelijkheden':'Scope of work / responsibilities'}/>
         {T.responsibilities&&T.responsibilities.length>0&&<React.Fragment>
         <div style={{display:'flex',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
@@ -2576,7 +2583,11 @@ function PreviewTab({data:d}){
         {T.responsibilities.map((r,i)=><div key={i} style={{display:'flex',alignItems:'flex-start',padding:'11px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
           <div style={{width:150,fontWeight:600,color:ink,paddingRight:12}}>{r.party||''}</div><div style={{flex:1,color:body,lineHeight:1.55}}>{r.item}</div></div>)}
         </React.Fragment>}
-        {T.excludedImages&&T.excludedImages.length>0&&<div style={{marginTop:T.responsibilities&&T.responsibilities.length?20:0,display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,alignItems:'start'}}>
+        {T.excluded&&T.excluded.length>0&&<div style={{marginTop:T.responsibilities&&T.responsibilities.length?22:0}}>
+          <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.12em',color:ink,marginBottom:8}}>{NL?'Uitgesloten van deze offerte':'Outside scope'}</div>
+          {T.excluded.map((x,i)=><div key={i} style={{display:'flex',gap:10,fontSize:13.5,lineHeight:1.55,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{x}</span></div>)}
+        </div>}
+        {T.excludedImages&&T.excludedImages.length>0&&<div style={{marginTop:(T.responsibilities&&T.responsibilities.length)||(T.excluded&&T.excluded.length)?20:0,display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,alignItems:'start'}}>
           {T.excludedImages.map((im,i)=><figure key={i} style={{margin:0}}>
             <img src={im.src} style={{width:'100%',maxHeight:230,objectFit:'contain',objectPosition:'left top',borderRadius:4,display:'block'}}/>
             {im.caption&&<figcaption style={{fontSize:12,color:muted,marginTop:6,lineHeight:1.4}}>{im.caption}</figcaption>}
@@ -2850,7 +2861,7 @@ function buildQuoteDocDef(D, logoImg){
     {columns:[{width:'*',stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:140,y2:0,lineWidth:0.5,lineColor:ink}]},{text:L('NAAM','NAME'),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]},
       {width:'*',stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:140,y2:0,lineWidth:0.5,lineColor:ink}]},{text:L('HANDTEKENING','SIGNATURE'),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]},
       {width:130,stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:97,y2:0,lineWidth:0.5,lineColor:ink}]},{text:L('DATUM','DATE'),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]}],columnGap:24,margin:[0,48,0,0]}],margin:[0,40,0,0],unbreakable:true});
-  if((D.responsibilities&&D.responsibilities.length)||(D.excludedImages&&D.excludedImages.length)){
+  if((D.responsibilities&&D.responsibilities.length)||(D.excluded&&D.excluded.length)||(D.excludedImages&&D.excludedImages.length)){
     var respTitle=D.nl?'Scope of work / verantwoordelijkheden':'Scope of work / responsibilities';
     if(D.responsibilities&&D.responsibilities.length){
       var rpb=[[{text:(D.nl?'Partij':'Party').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:(D.nl?'Verantwoordelijk voor':'Responsible for').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];
@@ -2859,14 +2870,21 @@ function buildQuoteDocDef(D, logoImg){
     } else {
       c.push({stack:[secHead(nxA(),respTitle)],margin:[0,36,0,0]});
     }
+    // Outside scope: point-by-point list, directly under the responsibilities table.
+    if(D.excluded&&D.excluded.length){
+      var exb=[{text:(D.nl?'Uitgesloten van deze offerte':'Outside scope').toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.12,11*k),margin:[0,0,0,7]}];
+      D.excluded.forEach(function(x,i){exb.push({columns:[{width:'auto',text:'·',color:muted,fontSize:13*k},{width:'*',text:x,fontSize:13*k,color:body,lineHeight:1.5}],columnGap:7,margin:[0,i?5:0,0,0]});});
+      c.push({stack:exb,margin:[0,(D.responsibilities&&D.responsibilities.length)?18:12,0,0],unbreakable:true});
+    }
     // Images: two per row, equal-width columns, top-aligned, caption under each.
     if(D.excludedImages&&D.excludedImages.length){
       var iw=(CW-18)/2;
+      var imgTop=((D.responsibilities&&D.responsibilities.length)||(D.excluded&&D.excluded.length))?18:14;
       for(var _i=0;_i<D.excludedImages.length;_i+=2){
         var pair=D.excludedImages.slice(_i,_i+2);
         var cols=pair.map(function(im){return {width:'*',stack:[{image:im.src,fit:[iw,190]},im.caption?{text:im.caption,fontSize:11*k,color:muted,margin:[0,5,0,0],lineHeight:1.4}:{text:''}]};});
         if(cols.length===1)cols.push({width:'*',text:''});
-        c.push({columns:cols,columnGap:18,margin:[0,(D.responsibilities&&D.responsibilities.length)||_i>0?12:14,0,0],unbreakable:true});
+        c.push({columns:cols,columnGap:18,margin:[0,_i>0?12:imgTop,0,0],unbreakable:true});
       }
     }
   }
@@ -2902,9 +2920,9 @@ function mapQuoteToTokens(d){
   const payment=[];
   d.payment.milestones.forEach((ms,i)=>{const amt=fmtE(grand*(ms.pct||0)/100);const mo=msISOs[i]?fmtMonthY(msISOs[i]):'';payment.push(t(ms.name,L)+': '+ms.pct+'% ('+amt+')'+(mo?', '+mo:'')+'.');});
   payment.push((NL?'Betaling binnen ':'Payment is due within ')+(d.conditions.paymentTerm||14)+(NL?' dagen na factuurdatum.':' days of the invoice date.'));
-  // Outside scope is retired; images now live under Scope of work / responsibilities.
+  // Outside scope, exclusions text and images all live under Scope of work / responsibilities.
   const respOn=!!(d.annexes&&d.annexes.responsibilities&&d.annexes.responsibilities.enabled);
-  const excluded=[];
+  const excluded=respOn?((d.project.exclusionItems||[]).map(it=>t(it,L)).filter(Boolean)):[];
   const excludedImages=respOn?((d.project.exclusionImages||[]).filter(im=>im&&im.src).map(im=>({src:im.src,caption:t(im.caption,L)}))):[];
   const conditions=[];
   if(d.conditions.warrantyEnabled!==false&&t(d.conditions.warranty,L))conditions.push((NL?'Garantie: ':'Warranty: ')+t(d.conditions.warranty,L));
