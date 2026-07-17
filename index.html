@@ -2530,6 +2530,25 @@ function PreviewTab({data:d}){
           </div>)}
         </div>}
       </div>
+      {((T.responsibilities&&T.responsibilities.length>0)||(T.excluded&&T.excluded.length>0)||(T.excludedImages&&T.excludedImages.length>0))&&<div style={{marginTop:48}}>
+        <SecHead n={pn()} title={NL?'Scope of work / verantwoordelijkheden':'Scope of work / responsibilities'}/>
+        {T.responsibilities&&T.responsibilities.length>0&&<React.Fragment>
+        <div style={{display:'flex',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
+          <div style={{width:150}}>{NL?'Partij':'Party'}</div><div style={{flex:1}}>{NL?'Verantwoordelijk voor':'Responsible for'}</div></div>
+        {T.responsibilities.map((r,i)=><div key={i} style={{display:'flex',alignItems:'flex-start',padding:'11px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
+          <div style={{width:150,fontWeight:600,color:ink,paddingRight:12}}>{r.party||''}</div><div style={{flex:1,color:body,lineHeight:1.55}}>{r.item}</div></div>)}
+        </React.Fragment>}
+        {T.excluded&&T.excluded.length>0&&<div style={{marginTop:T.responsibilities&&T.responsibilities.length?22:0}}>
+          <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.12em',color:ink,marginBottom:8}}>{NL?'Uitgesloten van deze offerte':'Outside scope'}</div>
+          {T.excluded.map((x,i)=><div key={i} style={{display:'flex',gap:10,fontSize:13.5,lineHeight:1.55,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{x}</span></div>)}
+        </div>}
+        {T.excludedImages&&T.excludedImages.length>0&&<div style={{marginTop:(T.responsibilities&&T.responsibilities.length)||(T.excluded&&T.excluded.length)?20:0,display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,alignItems:'start'}}>
+          {T.excludedImages.map((im,i)=><figure key={i} style={{margin:0}}>
+            <img src={im.src} style={{width:'100%',maxHeight:230,objectFit:'contain',objectPosition:'left top',borderRadius:4,display:'block'}}/>
+            {im.caption&&<figcaption style={{fontSize:12,color:muted,marginTop:6,lineHeight:1.4}}>{im.caption}</figcaption>}
+          </figure>)}
+        </div>}
+      </div>}
       <div style={{flex:1}}/>
       <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:30,display:'flex',justifyContent:'space-between'}}>
         <span></span><span>{word} {T.number} · 1 / 2</span>
@@ -2575,25 +2594,6 @@ function PreviewTab({data:d}){
           </div>)}
         </div>
       </div>
-      {((T.responsibilities&&T.responsibilities.length>0)||(T.excluded&&T.excluded.length>0)||(T.excludedImages&&T.excludedImages.length>0))&&<div style={{marginTop:48}}>
-        <SecHead n={pa()} title={NL?'Scope of work / verantwoordelijkheden':'Scope of work / responsibilities'}/>
-        {T.responsibilities&&T.responsibilities.length>0&&<React.Fragment>
-        <div style={{display:'flex',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
-          <div style={{width:150}}>{NL?'Partij':'Party'}</div><div style={{flex:1}}>{NL?'Verantwoordelijk voor':'Responsible for'}</div></div>
-        {T.responsibilities.map((r,i)=><div key={i} style={{display:'flex',alignItems:'flex-start',padding:'11px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
-          <div style={{width:150,fontWeight:600,color:ink,paddingRight:12}}>{r.party||''}</div><div style={{flex:1,color:body,lineHeight:1.55}}>{r.item}</div></div>)}
-        </React.Fragment>}
-        {T.excluded&&T.excluded.length>0&&<div style={{marginTop:T.responsibilities&&T.responsibilities.length?22:0}}>
-          <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.12em',color:ink,marginBottom:8}}>{NL?'Uitgesloten van deze offerte':'Outside scope'}</div>
-          {T.excluded.map((x,i)=><div key={i} style={{display:'flex',gap:10,fontSize:13.5,lineHeight:1.55,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{x}</span></div>)}
-        </div>}
-        {T.excludedImages&&T.excludedImages.length>0&&<div style={{marginTop:(T.responsibilities&&T.responsibilities.length)||(T.excluded&&T.excluded.length)?20:0,display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,alignItems:'start'}}>
-          {T.excludedImages.map((im,i)=><figure key={i} style={{margin:0}}>
-            <img src={im.src} style={{width:'100%',maxHeight:230,objectFit:'contain',objectPosition:'left top',borderRadius:4,display:'block'}}/>
-            {im.caption&&<figcaption style={{fontSize:12,color:muted,marginTop:6,lineHeight:1.4}}>{im.caption}</figcaption>}
-          </figure>)}
-        </div>}
-      </div>}
       {T.meerwerkClause&&<div style={{marginTop:48}}>
         <SecHead n={pa()} title={NL?'Meerwerk':'Additional work'}/>
         <Para text={T.meerwerkClause}/>
@@ -2847,6 +2847,32 @@ function buildQuoteDocDef(D, logoImg){
   // is retired; its images now sit under Scope of work / responsibilities.)
   if(D.assumptions&&D.assumptions.length)c.push(hardBlock(D.nl?'Aannames':'Assumptions',D.assumptions));
   if(D.tasks&&D.tasks.length)c.push({stack:[eyebrow(L('Indicatieve planning','Indicative timeline'),9),{svg:timelineSVG(),width:CW}],margin:[0,24,0,0],unbreakable:true});
+  // Scope of work / responsibilities: numbered section directly under the scope (not an annex).
+  if((D.responsibilities&&D.responsibilities.length)||(D.excluded&&D.excluded.length)||(D.excludedImages&&D.excludedImages.length)){
+    var respTitle=D.nl?'Scope of work / verantwoordelijkheden':'Scope of work / responsibilities';
+    if(D.responsibilities&&D.responsibilities.length){
+      var rpb=[[{text:(D.nl?'Partij':'Party').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:(D.nl?'Verantwoordelijk voor':'Responsible for').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];
+      D.responsibilities.forEach(function(r){rpb.push([{text:r.party||'',font:'I6',fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:r.item||'',fontSize:13*k,color:body,lineHeight:1.5,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});
+      c.push({stack:[secHead(nx(),respTitle),{table:{widths:[110,'*'],body:rpb},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(i){return i===0?12:0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,36,0,0],unbreakable:true});
+    } else {
+      c.push({stack:[secHead(nx(),respTitle)],margin:[0,36,0,0]});
+    }
+    if(D.excluded&&D.excluded.length){
+      var exb=[{text:(D.nl?'Uitgesloten van deze offerte':'Outside scope').toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.12,11*k),margin:[0,0,0,7]}];
+      D.excluded.forEach(function(x,i){exb.push({columns:[{width:'auto',text:'·',color:muted,fontSize:13*k},{width:'*',text:x,fontSize:13*k,color:body,lineHeight:1.5}],columnGap:7,margin:[0,i?5:0,0,0]});});
+      c.push({stack:exb,margin:[0,(D.responsibilities&&D.responsibilities.length)?18:12,0,0],unbreakable:true});
+    }
+    if(D.excludedImages&&D.excludedImages.length){
+      var iw=(CW-18)/2;
+      var imgTop=((D.responsibilities&&D.responsibilities.length)||(D.excluded&&D.excluded.length))?18:14;
+      for(var _i=0;_i<D.excludedImages.length;_i+=2){
+        var pair=D.excludedImages.slice(_i,_i+2);
+        var cols=pair.map(function(im){return {width:'*',stack:[{image:im.src,fit:[iw,190]},im.caption?{text:im.caption,fontSize:11*k,color:muted,margin:[0,5,0,0],lineHeight:1.4}:{text:''}]};});
+        if(cols.length===1)cols.push({width:'*',text:''});
+        c.push({columns:cols,columnGap:18,margin:[0,_i>0?12:imgTop,0,0],unbreakable:true});
+      }
+    }
+  }
   // page 2
   c.push({pageBreak:'before',columns:[{width:'auto',image:logoImg,fit:[240,20*k]},{width:'*',text:D.title+(D.subtitle?' · '+D.subtitle:''),font:'I4',fontSize:11*k,color:sec,alignment:'right',margin:[0,3,0,0]}]});
   c.push({canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,13.5,0,18]});
@@ -2861,33 +2887,7 @@ function buildQuoteDocDef(D, logoImg){
     {columns:[{width:'*',stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:140,y2:0,lineWidth:0.5,lineColor:ink}]},{text:L('NAAM','NAME'),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]},
       {width:'*',stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:140,y2:0,lineWidth:0.5,lineColor:ink}]},{text:L('HANDTEKENING','SIGNATURE'),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]},
       {width:130,stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:97,y2:0,lineWidth:0.5,lineColor:ink}]},{text:L('DATUM','DATE'),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]}],columnGap:24,margin:[0,48,0,0]}],margin:[0,40,0,0],unbreakable:true});
-  if((D.responsibilities&&D.responsibilities.length)||(D.excluded&&D.excluded.length)||(D.excludedImages&&D.excludedImages.length)){
-    var respTitle=D.nl?'Scope of work / verantwoordelijkheden':'Scope of work / responsibilities';
-    if(D.responsibilities&&D.responsibilities.length){
-      var rpb=[[{text:(D.nl?'Partij':'Party').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:(D.nl?'Verantwoordelijk voor':'Responsible for').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];
-      D.responsibilities.forEach(function(r){rpb.push([{text:r.party||'',font:'I6',fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:r.item||'',fontSize:13*k,color:body,lineHeight:1.5,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});
-      c.push({stack:[secHead(nxA(),respTitle),{table:{widths:[110,'*'],body:rpb},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(i){return i===0?12:0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,36,0,0],unbreakable:true});
-    } else {
-      c.push({stack:[secHead(nxA(),respTitle)],margin:[0,36,0,0]});
-    }
-    // Outside scope: point-by-point list, directly under the responsibilities table.
-    if(D.excluded&&D.excluded.length){
-      var exb=[{text:(D.nl?'Uitgesloten van deze offerte':'Outside scope').toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.12,11*k),margin:[0,0,0,7]}];
-      D.excluded.forEach(function(x,i){exb.push({columns:[{width:'auto',text:'·',color:muted,fontSize:13*k},{width:'*',text:x,fontSize:13*k,color:body,lineHeight:1.5}],columnGap:7,margin:[0,i?5:0,0,0]});});
-      c.push({stack:exb,margin:[0,(D.responsibilities&&D.responsibilities.length)?18:12,0,0],unbreakable:true});
-    }
-    // Images: two per row, equal-width columns, top-aligned, caption under each.
-    if(D.excludedImages&&D.excludedImages.length){
-      var iw=(CW-18)/2;
-      var imgTop=((D.responsibilities&&D.responsibilities.length)||(D.excluded&&D.excluded.length))?18:14;
-      for(var _i=0;_i<D.excludedImages.length;_i+=2){
-        var pair=D.excludedImages.slice(_i,_i+2);
-        var cols=pair.map(function(im){return {width:'*',stack:[{image:im.src,fit:[iw,190]},im.caption?{text:im.caption,fontSize:11*k,color:muted,margin:[0,5,0,0],lineHeight:1.4}:{text:''}]};});
-        if(cols.length===1)cols.push({width:'*',text:''});
-        c.push({columns:cols,columnGap:18,margin:[0,_i>0?12:imgTop,0,0],unbreakable:true});
-      }
-    }
-  }
+  // (Scope of work / responsibilities now renders above, directly under the scope section.)
   if(D.meerwerkClause)c.push({stack:[secHead(nxA(),D.nl?'Meerwerk':'Additional work'),paras(D.meerwerkClause,14*k)],margin:[0,36,0,0],unbreakable:true});
   if(D.rateCard&&D.rateCard.length){var rcb=[[{text:(D.nl?'Activiteit':'Activity').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:(D.nl?'Tarief (excl. btw)':'Rate (ex VAT)').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];D.rateCard.forEach(function(r){rcb.push([{text:r.label,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:[{text:(r.rate||''),font:'I5',color:ink},{text:(r.unit?'  '+r.unit:''),color:muted,fontSize:11*k}],fontSize:13*k,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});c.push({stack:[secHead(nxA(),D.nl?'Tarievenkaart':'Rate card'),{table:{widths:['*','auto'],body:rcb},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,36,0,0],unbreakable:true});}
   return {pageSize:'A4',pageMargins:[ML,MT,ML,MT],
