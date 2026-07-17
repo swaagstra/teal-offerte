@@ -457,7 +457,7 @@ function createProject(type){
     v:3,type,lang:'nl',
     ref:genRef(type),
     project:{name:'',subtitle:'',preparedBy:'Erik Swaagstra',phaseLabel:'',date:new Date().toISOString().slice(0,10),location:'',
-      description:{nl:'',en:''},tealRole:{nl:'',en:''},exclusions:{nl:'',en:''}},
+      description:{nl:'',en:''},tealRole:{nl:'',en:''},exclusions:{nl:'',en:''},exclusionItems:[],exclusionImages:[]},
     client:{name:'',contact:'',email:'',addr:'',zip:'',city:''},
     phases,
     procOTS:[],
@@ -495,6 +495,16 @@ function migrateConds(d){
   if(d.annexes&&d.annexes.rateCard&&(d.annexes.rateCard.rows||[]).length&&(d.annexes.rateCard.rows||[]).every(r=>!String(r.rate||'').trim())){d={...d,annexes:{...d.annexes,rateCard:{...d.annexes.rateCard,rows:defaultAnnexes().rateCard.rows}}};ch=true;}
   if(c.meerwerk===undefined){c.meerwerk={nl:I.nl.meerwerkTekst,en:I.en.meerwerkTekst,_ensrc:I.nl.meerwerkTekst};if(c.meerwerkEnabled===undefined)c.meerwerkEnabled=true;ch=true;}
   if(c.akkoord===undefined){c.akkoord={nl:I.nl.akkoordTekst,en:I.en.akkoordTekst,_ensrc:I.nl.akkoordTekst};if(c.akkoordEnabled===undefined)c.akkoordEnabled=true;ch=true;}
+  // Exclusions: split the old single text field into point-by-point items.
+  if(d.project&&d.project.exclusionItems===undefined){
+    const ex=d.project.exclusions;
+    const spl=(s)=>String(s||'').split(/\n+/).map(x=>x.trim()).filter(Boolean);
+    const nlL=spl(t(ex,'nl')),enL=spl(t(ex,'en'));
+    const base=nlL.length?nlL:enL;
+    const items=base.map((_,i)=>({nl:nlL[i]||'',en:enL[i]||''}));
+    d={...d,project:{...d.project,exclusionItems:items,exclusionImages:d.project.exclusionImages||[]}};
+    ch=true;
+  }
   return ch?{...d,conditions:c}:d;
 }
 
@@ -1293,7 +1303,7 @@ function generateOfferteMD(d){
   add('## ',ll.voorwaardenLabel);
   add('- ',ll.geldigheidVw,': ',cond.validity||30,' ',NL?'dagen':'days');
   add('- ',ll.betalingstermijn,': ',cond.paymentTerm||14,' ',NL?'dagen':'days');
-  if(t(proj.exclusions,L))add('- ',ll.exclusionsVw,': ',t(proj.exclusions,L));
+  {const exStr=(proj.exclusionItems||[]).map(it=>t(it,L)).filter(Boolean).join('; ');if(exStr)add('- ',ll.exclusionsVw,': ',exStr);}
   if(cond.warrantyEnabled!==false&&t(cond.warranty,L))add('- ',ll.garantieLabel,': ',t(cond.warranty,L));
   if(cond.meerwerkEnabled!==false&&t(cond.meerwerk,L))add('- ',t(cond.meerwerk,L));
   if(cond.avNL||cond.avEN)add('- ',ll.avTekst);
@@ -1685,7 +1695,17 @@ function ScopeTab({data:d,set}){
   const ax=d.annexes||{};
   const exclEnabled=(d.conditions&&d.conditions.exclusionsEnabled)!==false;
   const setExclEnabled=(v)=>set({...d,conditions:{...d.conditions,exclusionsEnabled:v}});
-  const setExclText=(v)=>{const o=d.project.exclusions;const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=v;set({...d,project:{...d.project,exclusions:nn}});};
+  const exclItems=d.project.exclusionItems||[];
+  const setExclItem=(i,val)=>{const items=exclItems.slice();const o=items[i]||{nl:'',en:''};const nn=typeof o==='string'?{nl:o,en:o}:{...o};nn[L]=val;items[i]=nn;set({...d,project:{...d.project,exclusionItems:items}});};
+  const addExclItem=()=>set({...d,project:{...d.project,exclusionItems:[...exclItems,{nl:'',en:''}]}});
+  const delExclItem=(i)=>set({...d,project:{...d.project,exclusionItems:exclItems.filter((_,j)=>j!==i)}});
+  const exclImgs=d.project.exclusionImages||[];
+  const addExclImg=(src)=>set({...d,project:{...d.project,exclusionImages:[...exclImgs,{src,caption:{nl:'',en:''}}]}});
+  const setExclCaption=(i,val)=>{const imgs=exclImgs.slice();const o=imgs[i]||{src:'',caption:{nl:'',en:''}};imgs[i]={...o,caption:{...(o.caption||{nl:'',en:''}),[L]:val}};set({...d,project:{...d.project,exclusionImages:imgs}});};
+  const delExclImg=(i)=>set({...d,project:{...d.project,exclusionImages:exclImgs.filter((_,j)=>j!==i)}});
+  const onPickExclImg=(e)=>{const f=e.target.files&&e.target.files[0];if(f)imgToDataUrlFree(f).then(u=>addExclImg(u));e.target.value='';};
+  const onPasteExclImg=(e)=>{const items=(e.clipboardData&&e.clipboardData.items)||[];for(const it of items){if(/^image\//.test(it.type)){const f=it.getAsFile();if(f){e.preventDefault();imgToDataUrlFree(f).then(u=>addExclImg(u));break;}}}};
+  const onDropExclImg=(e)=>{e.preventDefault();const f=[...((e.dataTransfer&&e.dataTransfer.files)||[])].find(x=>/^image\//.test(x.type));if(f)imgToDataUrlFree(f).then(u=>addExclImg(u));};
   const assump=ax.assumptions||{enabled:false,items:[]};
   const setAssumpEnabled=(v)=>set({...d,annexes:{...ax,assumptions:{...assump,enabled:v}}});
   const setAssumpItem=(i,val)=>{const items=(assump.items||[]).slice();const o=items[i]||{nl:'',en:''};const nn=typeof o==='string'?{nl:o,en:o}:{...o};nn[L]=val;items[i]=nn;set({...d,annexes:{...ax,assumptions:{...assump,items}}});};
@@ -1723,7 +1743,26 @@ function ScopeTab({data:d,set}){
     <p className="sm muted mb16">{L==='nl'?'Twee optionele blokken die direct onder de fases in de offerte verschijnen. Zet ze aan met het vinkje.':'Two optional blocks that appear directly under the phases in the quotation. Toggle each on with its checkbox.'}</p>
     <div style={{marginBottom:22}}>
       <label className="flex g8" style={{alignItems:'center',fontWeight:600,marginBottom:8,cursor:'pointer'}}><input type="checkbox" checked={exclEnabled} onChange={e=>setExclEnabled(e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/> {L==='nl'?'Uitgesloten van deze offerte':'Outside scope'}</label>
-      <textarea value={t(d.project.exclusions,L)} onChange={e=>setExclText(e.target.value)} rows={3} disabled={!exclEnabled} placeholder={L==='nl'?'Eén uitsluiting per regel (bijv. vergunningen, grondwerk, stroomvoorziening).':'One exclusion per line (e.g. permits, groundwork, power supply).'} style={{width:'100%',opacity:exclEnabled?1:.5}}/>
+      <div style={{opacity:exclEnabled?1:.5}}>
+        {exclItems.map((it,i)=><div key={i} className="flex g8" style={{marginBottom:8,alignItems:'flex-start'}}>
+          <textarea style={{flex:1,minHeight:44}} value={t(it,L)} onChange={e=>setExclItem(i,e.target.value)} disabled={!exclEnabled} placeholder={L==='nl'?'Eén uitsluiting (bijv. vergunningen, grondwerk, stroomvoorziening).':'One exclusion (e.g. permits, groundwork, power supply).'}/>
+          <button className="btn btn-sm btn-g" onClick={()=>delExclItem(i)} disabled={!exclEnabled}>×</button></div>)}
+        <button className="btn btn-sm btn-g" onClick={addExclItem} disabled={!exclEnabled}>+ {L==='nl'?'Uitsluiting':'Exclusion'}</button>
+        <div style={{marginTop:14}}>
+          <div className="sm muted" style={{marginBottom:6}}>{L==='nl'?'Afbeeldingen (optioneel, met bijschrift)':'Images (optional, with caption)'}</div>
+          <div className="flex" style={{gap:12,flexWrap:'wrap'}}>
+            {exclImgs.map((im,i)=><div key={i} style={{width:180}}>
+              <img src={im.src} style={{width:'100%',borderRadius:4,display:'block',border:'1px solid #e0e0de'}}/>
+              <input value={t(im.caption,L)} onChange={e=>setExclCaption(i,e.target.value)} disabled={!exclEnabled} placeholder={L==='nl'?'Bijschrift':'Caption'} style={{width:'100%',marginTop:4,fontSize:12}}/>
+              <button className="btn btn-sm btn-g" onClick={()=>delExclImg(i)} disabled={!exclEnabled} style={{marginTop:4}}>× {L==='nl'?'Verwijder':'Remove'}</button>
+            </div>)}
+          </div>
+          <label className="btn btn-sm btn-g" style={{marginTop:8,display:'inline-block',cursor:exclEnabled?'pointer':'default'}} onPaste={onPasteExclImg} onDrop={onDropExclImg} onDragOver={e=>e.preventDefault()} title={L==='nl'?'Kies, plak of sleep een afbeelding':'Pick, paste or drop an image'}>
+            + {L==='nl'?'Afbeelding':'Image'}
+            <input type="file" accept="image/*" onChange={onPickExclImg} disabled={!exclEnabled} style={{display:'none'}}/>
+          </label>
+        </div>
+      </div>
     </div>
     <div>
       <label className="flex g8" style={{alignItems:'center',fontWeight:600,marginBottom:8,cursor:'pointer'}}><input type="checkbox" checked={!!assump.enabled} onChange={e=>setAssumpEnabled(e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/> {L==='nl'?'Aannames':'Assumptions'}</label>
@@ -2277,6 +2316,22 @@ function imgToDataUrl(blob){
     r.onerror=function(){rej(new Error('read fail'));};r.readAsDataURL(blob);
   });
 }
+// Downscale an image while preserving its aspect ratio (for out-of-scope illustrations).
+function imgToDataUrlFree(blob,maxW){
+  maxW=maxW||1200;
+  return new Promise(function(res,rej){
+    var r=new FileReader();
+    r.onload=function(){var img=new Image();img.onload=function(){
+      try{
+        var w=img.width,h=img.height,outW=Math.min(maxW,w),outH=Math.round(outW*h/w);
+        var cv=document.createElement('canvas');cv.width=outW;cv.height=outH;
+        cv.getContext('2d').drawImage(img,0,0,outW,outH);
+        res(cv.toDataURL('image/jpeg',0.82));
+      }catch(e){res(String(r.result));}
+    };img.onerror=function(){rej(new Error('bad image'));};img.src=String(r.result);};
+    r.onerror=function(){rej(new Error('read fail'));};r.readAsDataURL(blob);
+  });
+}
 function DeliverablesTab({data:d,set}){
   const L=d.lang,NL=L==='nl';
   const list=d.deliverables||[];
@@ -2451,9 +2506,15 @@ function PreviewTab({data:d}){
         <SecHead n={pn()} title={NL?'Werkzaamheden & planning':'Scope of work & timeline'}/>
         {T.scope.map((s,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0}}><strong style={{fontWeight:600}}>{s.lead} </strong>{s.body}</div>)}
         {(T.delivery||T.effort)&&<div style={{fontSize:13,color:sec,marginTop:10}}>{(NL?'Oplevering: ':'Expected delivery: ')+(T.delivery||'')+(T.effort?', '+T.effort:'')}</div>}
-        {T.excluded&&T.excluded.length>0&&<div style={{marginTop:26,background:'#efeee9',borderRadius:6,padding:'15px 20px'}}>
+        {((T.excluded&&T.excluded.length>0)||(T.excludedImages&&T.excludedImages.length>0))&&<div style={{marginTop:26,background:'#efeee9',borderRadius:6,padding:'15px 20px'}}>
           <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.12em',color:ink,marginBottom:8}}>{NL?'Uitgesloten van deze offerte':'Outside scope'}</div>
-          {T.excluded.map((x,i)=><div key={i} style={{display:'flex',gap:10,fontSize:13.5,lineHeight:1.55,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{x}</span></div>)}
+          {(T.excluded||[]).map((x,i)=><div key={i} style={{display:'flex',gap:10,fontSize:13.5,lineHeight:1.55,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{x}</span></div>)}
+          {T.excludedImages&&T.excludedImages.length>0&&<div style={{marginTop:T.excluded&&T.excluded.length?12:0,display:'flex',flexWrap:'wrap',gap:16}}>
+            {T.excludedImages.map((im,i)=><figure key={i} style={{margin:0,width:220}}>
+              <img src={im.src} style={{width:'100%',borderRadius:4,display:'block'}}/>
+              {im.caption&&<figcaption style={{fontSize:12,color:muted,marginTop:5,lineHeight:1.4}}>{im.caption}</figcaption>}
+            </figure>)}
+          </div>}
         </div>}
         {T.assumptions&&T.assumptions.length>0&&<div style={{marginTop:16,background:'#efeee9',borderRadius:6,padding:'15px 20px'}}>
           <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.12em',color:ink,marginBottom:8}}>{NL?'Aannames':'Assumptions'}</div>
@@ -2775,7 +2836,10 @@ function buildQuoteDocDef(D, logoImg){
   if(D.delivery||D.effort)sc.push({text:L('Oplevering: ','Expected delivery: ')+(D.delivery||'')+(D.effort?', '+D.effort:''),fontSize:13*k,color:sec,margin:[0,6,0,0]});
   c.push({stack:sc,margin:[0,26,0,0],unbreakable:true});
   // Exclusions + assumptions belong with the scope: render them above the timeline.
-  if(D.excluded&&D.excluded.length)c.push(hardBlock(D.nl?'Uitgesloten van deze offerte':'Outside scope',D.excluded));
+  var exTitle=D.nl?'Uitgesloten van deze offerte':'Outside scope';
+  if(D.excluded&&D.excluded.length)c.push(hardBlock(exTitle,D.excluded));
+  else if(D.excludedImages&&D.excludedImages.length)c.push({text:exTitle.toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.12,11*k),margin:[0,24,0,0]});
+  if(D.excludedImages&&D.excludedImages.length)D.excludedImages.forEach(function(im){c.push({stack:[{image:im.src,width:CW*0.55},im.caption?{text:im.caption,fontSize:11*k,color:muted,margin:[0,5,0,0]}:{text:''}],margin:[0,12,0,0],unbreakable:true});});
   if(D.assumptions&&D.assumptions.length)c.push(hardBlock(D.nl?'Aannames':'Assumptions',D.assumptions));
   if(D.tasks&&D.tasks.length)c.push({stack:[eyebrow(L('Indicatieve planning','Indicative timeline'),9),{svg:timelineSVG(),width:CW}],margin:[0,24,0,0],unbreakable:true});
   // page 2
@@ -2825,7 +2889,9 @@ function mapQuoteToTokens(d){
   const payment=[];
   d.payment.milestones.forEach((ms,i)=>{const amt=fmtE(grand*(ms.pct||0)/100);const mo=msISOs[i]?fmtMonthY(msISOs[i]):'';payment.push(t(ms.name,L)+': '+ms.pct+'% ('+amt+')'+(mo?', '+mo:'')+'.');});
   payment.push((NL?'Betaling binnen ':'Payment is due within ')+(d.conditions.paymentTerm||14)+(NL?' dagen na factuurdatum.':' days of the invoice date.'));
-  const excluded=((d.conditions&&d.conditions.exclusionsEnabled)!==false&&t(d.project.exclusions,L))?t(d.project.exclusions,L).split(/\n+/).map(s=>s.trim()).filter(Boolean):[];
+  const exclOn=(d.conditions&&d.conditions.exclusionsEnabled)!==false;
+  const excluded=exclOn?((d.project.exclusionItems||[]).map(it=>t(it,L)).filter(Boolean)):[];
+  const excludedImages=exclOn?((d.project.exclusionImages||[]).filter(im=>im&&im.src).map(im=>({src:im.src,caption:t(im.caption,L)}))):[];
   const conditions=[];
   if(d.conditions.warrantyEnabled!==false&&t(d.conditions.warranty,L))conditions.push((NL?'Garantie: ':'Warranty: ')+t(d.conditions.warranty,L));
   if(d.conditions.meerwerkEnabled!==false&&t(d.conditions.meerwerk,L))conditions.push(t(d.conditions.meerwerk,L));
@@ -2843,7 +2909,7 @@ function mapQuoteToTokens(d){
     location:d.project.location||'',phase:d.project.phaseLabel||'',delivery,
     description:t(d.project.description,L),teal_role:t(d.project.tealRole,L),
     scope,effort,cost_items,total:fmtE(grand),payment,conditions,accepted_by:d.client.name||'',sign_line,weeks,tasks,
-    assumptions,excluded,meerwerkClause,rateCard,responsibilities,nl:NL};
+    assumptions,excluded,excludedImages,meerwerkClause,rateCard,responsibilities,nl:NL};
 }
 
 // ── PDF ──
