@@ -714,6 +714,20 @@ function archiveBumpVersion(id,note){const all=loadArchive();const idx=all.findI
 function clientLabel(e){const c=(e&&e.data&&e.data.client)||{};return (c.name||c.company||c.contact||'').trim();}
 function lastExportOf(e){try{const cl=(e&&e.changelog)||[];for(let i=cl.length-1;i>=0;i--){if(cl[i].action==='pdf_exported')return cl[i].date;}return null;}catch(_e){return null;}}
 function daysUntilExpiry(e){try{const ex=quoteExpiry(e&&e.data);if(!ex)return null;return Math.ceil((ex-new Date())/86400000);}catch(_e){return null;}}
+// Follow-up: a verstuurd/verlopen quote worth chasing — 7+ days silent, or within 5 days of expiry (incl. expired).
+const FOLLOWUP_SENT_DAYS=7, FOLLOWUP_EXPIRY_DAYS=5;
+function needsFollowUp(e){
+  try{
+    const st=effectiveStatus(e);
+    if(st!=='verstuurd'&&st!=='verlopen')return false;
+    const kind=(e&&(e.kind||(e.data&&e.data.kind)))||'quote';
+    if(kind==='delivery')return false;
+    const sentAt=e.statusAt||e.updatedAt;
+    const daysSince=sentAt?Math.floor((new Date()-new Date(sentAt))/86400000):0;
+    const du=daysUntilExpiry(e);
+    return daysSince>=FOLLOWUP_SENT_DAYS||(du!=null&&du<=FOLLOWUP_EXPIRY_DAYS);
+  }catch(_e){return false;}
+}
 function fmtDate(iso){if(!iso)return'';try{return new Date(iso).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'});}catch(_e){return'';}}
 // Days between two ISO dates (b-a) in whole days.
 function daysBetween(a,b){try{return Math.round((new Date(b)-new Date(a))/86400000);}catch(_e){return null;}}
@@ -2512,30 +2526,7 @@ function PreviewTab({data:d}){
         <SecHead n={pn()} title={NL?'Werkzaamheden':'Scope of work'}/>
         {T.scope.map((s,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0}}><strong style={{fontWeight:600}}>{s.lead} </strong>{s.body}</div>)}
         {(T.delivery||T.effort)&&<div style={{fontSize:13,color:sec,marginTop:10}}>{(NL?'Oplevering: ':'Expected delivery: ')+(T.delivery||'')+(T.effort?', '+T.effort:'')}</div>}
-        {T.assumptions&&T.assumptions.length>0&&<div style={{marginTop:26,background:'#efeee9',borderRadius:6,padding:'15px 20px'}}>
-          <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.12em',color:ink,marginBottom:8}}>{NL?'Aannames':'Assumptions'}</div>
-          {T.assumptions.map((a,i)=><div key={i} style={{display:'flex',gap:10,fontSize:13.5,lineHeight:1.55,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{a}</span></div>)}
-        </div>}
       </div>
-      {((T.responsibilities&&T.responsibilities.length>0)||(T.excluded&&T.excluded.length>0)||(T.excludedImages&&T.excludedImages.length>0))&&<div style={{marginTop:48}}>
-        <SecHead n={pn()} title={NL?'Verantwoordelijkheden & uitsluitingen':'Responsibilities & exclusions'}/>
-        {T.responsibilities&&T.responsibilities.length>0&&<React.Fragment>
-        <div style={{display:'flex',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
-          <div style={{width:150}}>{NL?'Partij':'Party'}</div><div style={{flex:1}}>{NL?'Verantwoordelijk voor':'Responsible for'}</div></div>
-        {T.responsibilities.map((r,i)=><div key={i} style={{display:'flex',alignItems:'flex-start',padding:'11px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
-          <div style={{width:150,fontWeight:600,color:ink,paddingRight:12}}>{r.party||''}</div><div style={{flex:1,color:body,lineHeight:1.55}}>{r.item}</div></div>)}
-        </React.Fragment>}
-        {T.excluded&&T.excluded.length>0&&<div style={{marginTop:T.responsibilities&&T.responsibilities.length?22:0}}>
-          <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.12em',color:ink,marginBottom:8}}>{NL?'Uitgesloten van deze offerte':'Outside scope'}</div>
-          {T.excluded.map((x,i)=><div key={i} style={{display:'flex',gap:10,fontSize:13.5,lineHeight:1.55,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{x}</span></div>)}
-        </div>}
-        {T.excludedImages&&T.excludedImages.length>0&&<div style={{marginTop:(T.responsibilities&&T.responsibilities.length)||(T.excluded&&T.excluded.length)?20:0,display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,alignItems:'start'}}>
-          {T.excludedImages.map((im,i)=><figure key={i} style={{margin:0}}>
-            <img src={im.src} style={{width:'100%',maxHeight:230,objectFit:'contain',objectPosition:'left top',borderRadius:4,display:'block'}}/>
-            {im.caption&&<figcaption style={{fontSize:12,color:muted,marginTop:6,lineHeight:1.4}}>{im.caption}</figcaption>}
-          </figure>)}
-        </div>}
-      </div>}
       {T.weeks.length>0&&<div style={{marginTop:48}}>
         <SecHead n={pn()} title={NL?'Planning':'Timeline'}/>
         <div style={{display:'flex',paddingLeft:172,marginBottom:8}}>
@@ -2548,6 +2539,29 @@ function PreviewTab({data:d}){
             <div style={{position:'absolute',top:0,height:26,left:(tk.left*100).toFixed(1)+'%',width:Math.max(tk.width*100,2).toFixed(1)+'%',background:tk.color,borderRadius:3,display:'flex',alignItems:'center',paddingLeft:12,fontFamily:mono,fontSize:10,letterSpacing:'0.04em',color:paper,overflow:'hidden',whiteSpace:'nowrap'}}>{tk.label}</div>
           </div>
         </div>)}
+      </div>}
+      {((T.responsibilities&&T.responsibilities.length>0)||(T.excluded&&T.excluded.length>0)||(T.assumptions&&T.assumptions.length>0)||(T.excludedImages&&T.excludedImages.length>0))&&<div style={{marginTop:48}}>
+        <SecHead n={pn()} title={NL?'Verantwoordelijkheden & uitsluitingen':'Responsibilities & exclusions'}/>
+        {T.responsibilities&&T.responsibilities.length>0&&<React.Fragment>
+        <div style={{display:'flex',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
+          <div style={{width:150}}>{NL?'Partij':'Party'}</div><div style={{flex:1}}>{NL?'Verantwoordelijk voor':'Responsible for'}</div></div>
+        {T.responsibilities.map((r,i)=><div key={i} style={{display:'flex',alignItems:'flex-start',padding:'11px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
+          <div style={{width:150,fontWeight:600,color:ink,paddingRight:12}}>{r.party||''}</div><div style={{flex:1,color:body,lineHeight:1.55}}>{r.item}</div></div>)}
+        </React.Fragment>}
+        {T.excluded&&T.excluded.length>0&&<div style={{marginTop:T.responsibilities&&T.responsibilities.length?22:0}}>
+          <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.12em',color:ink,marginBottom:8}}>{NL?'Uitgesloten van deze offerte':'Outside scope'}</div>
+          {T.excluded.map((x,i)=><div key={i} style={{display:'flex',gap:10,fontSize:13.5,lineHeight:1.55,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{x}</span></div>)}
+        </div>}
+        {T.assumptions&&T.assumptions.length>0&&<div style={{marginTop:(T.responsibilities&&T.responsibilities.length)||(T.excluded&&T.excluded.length)?22:0}}>
+          <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.12em',color:ink,marginBottom:8}}>{NL?'Aannames':'Assumptions'}</div>
+          {T.assumptions.map((a,i)=><div key={i} style={{display:'flex',gap:10,fontSize:13.5,lineHeight:1.55,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{a}</span></div>)}
+        </div>}
+        {T.excludedImages&&T.excludedImages.length>0&&<div style={{marginTop:(T.responsibilities&&T.responsibilities.length)||(T.excluded&&T.excluded.length)||(T.assumptions&&T.assumptions.length)?20:0,display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,alignItems:'start'}}>
+          {T.excludedImages.map((im,i)=><figure key={i} style={{margin:0}}>
+            <img src={im.src} style={{width:'100%',maxHeight:230,objectFit:'contain',objectPosition:'left top',borderRadius:4,display:'block'}}/>
+            {im.caption&&<figcaption style={{fontSize:12,color:muted,marginTop:6,lineHeight:1.4}}>{im.caption}</figcaption>}
+          </figure>)}
+        </div>}
       </div>}
       <div style={{flex:1}}/>
       <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:30,display:'flex',justifyContent:'space-between'}}>
@@ -2843,11 +2857,10 @@ function buildQuoteDocDef(D, logoImg){
   (D.scope||[]).forEach(function(s,i){sc.push({text:[{text:(s.lead?s.lead+' ':''),font:'I6',color:body},{text:s.body||'',color:body}],fontSize:14*k,lineHeight:1.65,margin:[0,i?6:0,0,0]});});
   if(D.delivery||D.effort)sc.push({text:L('Oplevering: ','Expected delivery: ')+(D.delivery||'')+(D.effort?', '+D.effort:''),fontSize:13*k,color:sec,margin:[0,6,0,0]});
   c.push({stack:sc,margin:[0,26,0,0],unbreakable:true});
-  // Assumptions belong with the scope: render above the timeline. (Outside scope
-  // is retired; its images now sit under Scope of work / responsibilities.)
-  if(D.assumptions&&D.assumptions.length)c.push(hardBlock(D.nl?'Aannames':'Assumptions',D.assumptions));
-  // Responsibilities & exclusions: numbered section directly under the scope.
-  if((D.responsibilities&&D.responsibilities.length)||(D.excluded&&D.excluded.length)||(D.excludedImages&&D.excludedImages.length)){
+  // Timeline directly after the scope of work — "what" + "when" together.
+  if(D.tasks&&D.tasks.length)c.push({stack:[secHead(nx(),L('Planning','Timeline')),{svg:timelineSVG(),width:CW,margin:[0,4,0,0]}],margin:[0,36,0,0],unbreakable:true});
+  // Responsibilities, exclusions & assumptions: expectation-management block after the scope + timeline.
+  if((D.responsibilities&&D.responsibilities.length)||(D.excluded&&D.excluded.length)||(D.assumptions&&D.assumptions.length)||(D.excludedImages&&D.excludedImages.length)){
     var respTitle=D.nl?'Verantwoordelijkheden & uitsluitingen':'Responsibilities & exclusions';
     if(D.responsibilities&&D.responsibilities.length){
       var rpb=[[{text:(D.nl?'Partij':'Party').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:(D.nl?'Verantwoordelijk voor':'Responsible for').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];
@@ -2861,9 +2874,14 @@ function buildQuoteDocDef(D, logoImg){
       D.excluded.forEach(function(x,i){exb.push({columns:[{width:'auto',text:'·',color:muted,fontSize:13*k},{width:'*',text:x,fontSize:13*k,color:body,lineHeight:1.5}],columnGap:7,margin:[0,i?5:0,0,0]});});
       c.push({stack:exb,margin:[0,(D.responsibilities&&D.responsibilities.length)?18:12,0,0],unbreakable:true});
     }
+    if(D.assumptions&&D.assumptions.length){
+      var asb=[{text:(D.nl?'Aannames':'Assumptions').toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.12,11*k),margin:[0,0,0,7]}];
+      D.assumptions.forEach(function(x,i){asb.push({columns:[{width:'auto',text:'·',color:muted,fontSize:13*k},{width:'*',text:x,fontSize:13*k,color:body,lineHeight:1.5}],columnGap:7,margin:[0,i?5:0,0,0]});});
+      c.push({stack:asb,margin:[0,((D.responsibilities&&D.responsibilities.length)||(D.excluded&&D.excluded.length))?18:12,0,0],unbreakable:true});
+    }
     if(D.excludedImages&&D.excludedImages.length){
       var iw=(CW-18)/2;
-      var imgTop=((D.responsibilities&&D.responsibilities.length)||(D.excluded&&D.excluded.length))?18:14;
+      var imgTop=((D.responsibilities&&D.responsibilities.length)||(D.excluded&&D.excluded.length)||(D.assumptions&&D.assumptions.length))?18:14;
       for(var _i=0;_i<D.excludedImages.length;_i+=2){
         var pair=D.excludedImages.slice(_i,_i+2);
         var cols=pair.map(function(im){return {width:'*',stack:[{image:im.src,fit:[iw,190]},im.caption?{text:im.caption,fontSize:11*k,color:muted,margin:[0,5,0,0],lineHeight:1.4}:{text:''}]};});
@@ -2872,7 +2890,6 @@ function buildQuoteDocDef(D, logoImg){
       }
     }
   }
-  if(D.tasks&&D.tasks.length)c.push({stack:[secHead(nx(),L('Planning','Timeline')),{svg:timelineSVG(),width:CW,margin:[0,4,0,0]}],margin:[0,36,0,0],unbreakable:true});
   // page 2
   c.push({pageBreak:'before',columns:[{width:'auto',image:logoImg,fit:[240,20*k]},{width:'*',text:D.title+(D.subtitle?' · '+D.subtitle:''),font:'I4',fontSize:11*k,color:sec,alignment:'right',margin:[0,3,0,0]}]});
   c.push({canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,13.5,0,18]});
@@ -2975,18 +2992,21 @@ function exportPDF(d,setData){
 }
 // Compose an email with the quotation PDF attached: native share (macOS/iOS → Mail) with a
 // Gmail-compose + download fallback. Sender is the user's own account (erik@teamteal.nl).
-function emailQuote(d){
+function emailQuote(d,followUp){
   const NL=d.lang==='nl';
   const ref=d.ref||'';
   const proj=(d.project&&d.project.name)||(NL?'ons project':'our project');
   const to=(d.client&&d.client.email)||'';
   const contact=(d.client&&d.client.contact)||(d.client&&d.client.name)||'';
   const filename=`Offerte ${ref||'Draft'} - TEAL.pdf`;
-  const subject=(NL?'Offerte':'Quotation')+(ref?' '+ref:'')+(proj?' – '+proj:'');
+  const subject=(followUp?(NL?'Herinnering: offerte':'Reminder: quotation'):(NL?'Offerte':'Quotation'))+(ref?' '+ref:'')+(proj?' – '+proj:'');
   const greet=contact?(NL?'Beste '+contact+',':'Dear '+contact+','):(NL?'Beste,':'Hello,');
-  const body=NL
+  const body=followUp?(NL
+    ? greet+'\n\nEven een korte herinnering aan onze offerte voor '+proj+' (ref. '+ref+'). Ik ben benieuwd of je er al naar hebt kunnen kijken.\n\nHeb je vragen of wil je iets aanpassen? Ik denk graag mee. Voor de zekerheid zit de offerte nogmaals in de bijlage.\n\nMet vriendelijke groet,\nErik Swaagstra\nTEAL · teamteal.nl\nerik@teamteal.nl'
+    : greet+'\n\nJust a quick reminder about our quotation for '+proj+' (ref. '+ref+'). I was wondering whether you had a chance to review it.\n\nAny questions or changes? Happy to help. I have attached the quotation again for your convenience.\n\nKind regards,\nErik Swaagstra\nTEAL · teamteal.nl\nerik@teamteal.nl')
+    :(NL
     ? greet+'\n\nBij deze onze offerte voor '+proj+'. Je vindt de PDF in de bijlage.\n\nWe denken graag met je mee, dus laat het vooral weten als je vragen hebt of iets wilt aanpassen.\n\nMet vriendelijke groet,\nErik Swaagstra\nTEAL · teamteal.nl\nerik@teamteal.nl'
-    : greet+'\n\nPlease find our quotation for '+proj+' attached as a PDF.\n\nHappy to talk it through, so just let me know if you have any questions or would like to adjust anything.\n\nKind regards,\nErik Swaagstra\nTEAL · teamteal.nl\nerik@teamteal.nl';
+    : greet+'\n\nPlease find our quotation for '+proj+' attached as a PDF.\n\nHappy to talk it through, so just let me know if you have any questions or would like to adjust anything.\n\nKind regards,\nErik Swaagstra\nTEAL · teamteal.nl\nerik@teamteal.nl');
   quotePdfBytes(d,function(bytes){
     const blob=new Blob([bytes],{type:'application/pdf'});
     const file=new File([blob],filename,{type:'application/pdf'});
@@ -3339,7 +3359,7 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onImport,on
   Object.keys(projMap).forEach(k=>(projMap[k].loose||[]).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt)));
   // Filters (doc-type + status)
   const matchType=e=>{if(typeFilter==='alle')return true;const k=kindOf(e);if(typeFilter==='offertes')return k!=='change_order'&&k!=='delivery';if(typeFilter==='change_orders')return k==='change_order';if(typeFilter==='deliveries')return k==='delivery';return true;};
-  const matchStatus=e=>filter==='alle'?true:effectiveStatus(e)===filter;
+  const matchStatus=e=>filter==='alle'?true:filter==='opvolgen'?needsFollowUp(e):effectiveStatus(e)===filter;
   const qn=q.trim().toLowerCase();
   const matchQ=e=>{if(!qn)return true;const hay=[(e.projectName||''),clientLabel(e),(e.ref||''),(e.data&&e.data.project&&(e.data.project.subtitle||e.data.project.phaseLabel))||''].join(' ').toLowerCase();return hay.includes(qn);};
   const docVisible=e=>matchType(e)&&matchStatus(e)&&matchQ(e);
@@ -3352,6 +3372,7 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onImport,on
     if(st==='afgewezen')rej++;});
   const winRate=(acc+rej)>0?Math.round(acc/(acc+rej)*100):null;
   const counts={alle:archive.length};STATUS_ORDER.concat('verlopen').forEach(s=>{counts[s]=archive.filter(e=>effectiveStatus(e)===s).length;});
+  counts.opvolgen=archive.filter(needsFollowUp).length;
   const typeCounts={alle:archive.length,offertes:archive.filter(e=>kindOf(e)!=='change_order'&&kindOf(e)!=='delivery').length,change_orders:archive.filter(e=>kindOf(e)==='change_order').length,deliveries:archive.filter(e=>kindOf(e)==='delivery').length};
   // Build visible project groups (an offerte shows if it or any of its children matches the filters)
   const groups=projOrder.map(key=>{const g=projMap[key];const rows=[];g.offertes.forEach(off=>{const kids=childrenByParent[off.id]||[];const visKids=kids.filter(docVisible);if(docVisible(off)||visKids.length){rows.push({e:off,child:false});visKids.forEach(c=>rows.push({e:c,child:true}));}});(g.loose||[]).filter(docVisible).forEach(c=>rows.push({e:c,child:false}));const src=g.first||{projectName:g.name,type:'build',data:{client:((g.loose&&g.loose[0]&&g.loose[0].data&&g.loose[0].data.client)||{})}};return {key,name:g.name,src,external:!g.first,rows};}).filter(g=>g.rows.length);
@@ -3381,6 +3402,7 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onImport,on
     const d2x=(!isCO&&!isDel&&eStat==='verstuurd')?daysUntilExpiry(item):null;
     const expChip=d2x!=null?(d2x<=7?{c:'#8a6d00',bg:'#fff6e0',t:'verloopt over '+d2x+'d'}:{c:'#9a9f9d',bg:'transparent',t:'nog '+d2x+' dagen geldig'}):null;
     const lastExp=lastExportOf(item);
+    const followUp=needsFollowUp(item);
     return <div key={item.id} style={{borderTop:'1px solid #f1f0ec'}}>
       <div onClick={()=>setExpandedId(isExpanded?null:item.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 16px',paddingLeft:indent?44:16,cursor:'pointer',borderLeft:'3px solid '+badge.c,background:isExpanded?'#faf9f6':'transparent'}}>
         <span title={badge.label} style={{flexShrink:0,minWidth:24,height:19,padding:'0 5px',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,letterSpacing:.5,color:'#fff',background:badge.c,borderRadius:3}}>{badge.t}</span>
@@ -3392,6 +3414,7 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onImport,on
           <div style={{marginTop:2,fontSize:12,color:'#9a9a94'}}>{cl?cl+' · ':''}{sub} · {fmtDt(item.updatedAt)}{indent&&item.parentRef?' · bij '+item.parentRef:''}</div>
         </div>
         {expChip&&<span title="Geldigheid offerte" style={{flexShrink:0,fontSize:11,fontWeight:600,color:expChip.c,background:expChip.bg,padding:expChip.bg==='transparent'?0:'2px 7px',borderRadius:10,whiteSpace:'nowrap'}}>{expChip.t}</span>}
+        {followUp&&<span title="Verstuurd en verdient opvolging" style={{flexShrink:0,fontSize:11,fontWeight:700,color:'#fff',background:'#d97706',padding:'2px 8px',borderRadius:10,whiteSpace:'nowrap'}}>⏰ Opvolgen</span>}
         <span style={{display:'flex',alignItems:'center',gap:6,flexShrink:0,fontSize:12,fontWeight:600,color:meta.color}}><span style={{width:7,height:7,borderRadius:7,background:meta.color,flexShrink:0}}/>{meta.label}</span>
         <span style={{fontSize:15,color:'#ccc',flexShrink:0,transform:isExpanded?'rotate(180deg)':'',transition:'.15s'}}>▾</span>
       </div>
@@ -3418,6 +3441,7 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onImport,on
           <button className="btn btn-sm btn-g" onClick={()=>setDupFor(item)}>Dupliceren ▾</button>
           {!isCO&&!isDel&&<button className="btn btn-sm btn-g" onClick={()=>{onBumpVersion(item.id);refresh();}}>Nieuwe versie</button>}
           {!isDel&&<button className="btn btn-sm btn-g" title={((item.data&&item.data.payment&&item.data.payment.milestones||[]).length>1)?'Concept-facturen per termijn in TEAL Odoo':'Concept-factuur in TEAL Odoo'} onClick={()=>{pushToOdoo(item).then(refresh);}}>Naar Odoo</button>}
+          {!isCO&&!isDel&&(eStat==='verstuurd'||eStat==='verlopen')&&<button className="btn btn-sm btn-g" style={followUp?{color:'#b45309',borderColor:'#f0d9b5'}:null} title="Stel een follow-up e-mail op voor de klant" onClick={()=>emailQuote(item.data,true)}>Follow-up mail</button>}
           <div style={{flex:1,minWidth:12}}/>
           <button className="btn btn-sm btn-g" style={{color:'var(--red)',borderColor:'#e8cfcd'}} onClick={()=>{if(confirm('"'+title+'" verwijderen?')){onDelete(item.id);refresh();}}}>Verwijderen</button>
         </div>
@@ -3537,8 +3561,8 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onImport,on
 
     {/* Status filter */}
     <div className="flex g8" style={{marginBottom:16,flexWrap:'wrap'}}>
-      {[['alle','Alle']].concat(STATUS_ORDER.concat('verlopen').map(s=>[s,statusMeta[s].label])).map(([id,lab])=>{
-        const on=filter===id;const c=id==='alle'?'#071412':statusMeta[id].color;
+      {[['alle','Alle']].concat(STATUS_ORDER.concat('verlopen').map(s=>[s,statusMeta[s].label])).concat([['opvolgen','⏰ Opvolgen']]).map(([id,lab])=>{
+        const on=filter===id;const c=id==='alle'?'#071412':id==='opvolgen'?'#d97706':statusMeta[id].color;
         return <button key={id} className="btn btn-sm" onClick={()=>setFilter(id)} style={{border:'1px solid '+(on?c:'#d0d0ce'),background:on?c:'#fff',color:on?'#fff':'#555',fontWeight:on?700:600}}>{lab} <span style={{opacity:.7}}>({counts[id]||0})</span></button>;
       })}
     </div>
