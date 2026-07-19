@@ -2522,11 +2522,11 @@ function PreviewTab({data:d}){
         {T.description&&<Para text={T.description}/>}
         {T.teal_role&&<div style={{marginTop:16}}><Eyebrow mb={6}>{NL?"TEAL's rol":"TEAL's role"}</Eyebrow><Para text={T.teal_role}/></div>}
       </div>}
-      <div style={{marginTop:48}}>
+      {((T.scope&&T.scope.length>0)||T.effort)&&<div style={{marginTop:48}}>
         <SecHead n={pn()} title={NL?'Werkzaamheden':'Scope of work'}/>
         {T.scope.map((s,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0}}><strong style={{fontWeight:600}}>{s.lead} </strong>{s.body}</div>)}
         {T.effort&&<div style={{fontSize:13,color:sec,marginTop:10}}>{(NL?'Inzet: ':'Effort: ')+T.effort}</div>}
-      </div>
+      </div>}
       {T.weeks.length>0&&<div style={{marginTop:48}}>
         <SecHead n={pn()} title={NL?'Planning':'Timeline'}/>
         <div style={{display:'flex',paddingLeft:172,marginBottom:8}}>
@@ -2853,10 +2853,12 @@ function buildQuoteDocDef(D, logoImg){
     c.push({stack:ds,margin:[0,26,0,0],unbreakable:true});
   }
   function hardBlock(title,items){var rows=[{text:String(title).toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.12,11*k),margin:[0,0,0,7]}];items.forEach(function(x,i){rows.push({columns:[{width:'auto',text:'·',color:muted,fontSize:13*k},{width:'*',text:x,fontSize:13*k,color:body,lineHeight:1.5}],columnGap:7,margin:[0,i?5:0,0,0]});});return {table:{widths:['*'],body:[[{stack:rows,fillColor:'#efeee9'}]]},layout:{defaultBorder:false,paddingLeft:function(){return 16;},paddingRight:function(){return 16;},paddingTop:function(){return 13;},paddingBottom:function(){return 13;}},margin:[0,24,0,0],unbreakable:true};}
-  var sc=[secHead(nx(),L('Werkzaamheden','Scope of work'))];
-  (D.scope||[]).forEach(function(s,i){sc.push({text:[{text:(s.lead?s.lead+' ':''),font:'I6',color:body},{text:s.body||'',color:body}],fontSize:14*k,lineHeight:1.65,margin:[0,i?6:0,0,0]});});
-  if(D.effort)sc.push({text:L('Inzet: ','Effort: ')+D.effort,fontSize:13*k,color:sec,margin:[0,6,0,0]});
-  c.push({stack:sc,margin:[0,26,0,0],unbreakable:true});
+  if((D.scope&&D.scope.length)||D.effort){
+    var sc=[secHead(nx(),L('Werkzaamheden','Scope of work'))];
+    (D.scope||[]).forEach(function(s,i){sc.push({text:[{text:(s.lead?s.lead+' ':''),font:'I6',color:body},{text:s.body||'',color:body}],fontSize:14*k,lineHeight:1.65,margin:[0,i?6:0,0,0]});});
+    if(D.effort)sc.push({text:L('Inzet: ','Effort: ')+D.effort,fontSize:13*k,color:sec,margin:[0,6,0,0]});
+    c.push({stack:sc,margin:[0,26,0,0],unbreakable:true});
+  }
   // Timeline directly after the scope of work — "what" + "when" together.
   if(D.tasks&&D.tasks.length)c.push({stack:[secHead(nx(),L('Planning','Timeline')),{svg:timelineSVG(),width:CW,margin:[0,4,0,0]}],margin:[0,36,0,0],unbreakable:true});
   // Responsibilities, exclusions & assumptions: expectation-management block after the scope + timeline.
@@ -2890,9 +2892,8 @@ function buildQuoteDocDef(D, logoImg){
       }
     }
   }
-  // page 2
-  c.push({pageBreak:'before',columns:[{width:'auto',image:logoImg,fit:[240,20*k]},{width:'*',text:D.title+(D.subtitle?' · '+D.subtitle:''),font:'I4',fontSize:11*k,color:sec,alignment:'right',margin:[0,3,0,0]}]});
-  c.push({canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,13.5,0,18]});
+  // Costs onward flow naturally after the scope — no forced page break. Continuation
+  // pages carry a running header (see header:() in the docDefinition below).
   var cr=[[{text:L('OMSCHRIJVING','DESCRIPTION'),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:L('BEDRAG','AMOUNT'),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];
   (D.cost_items||[]).forEach(function(it){cr.push([{text:it.d,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:it.a,font:'I5',fontSize:13*k,color:ink,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});
   c.push({stack:[secHead(nx(),L('Kosten','Costs')),{table:{widths:['*',105],body:cr},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}},
@@ -2908,7 +2909,8 @@ function buildQuoteDocDef(D, logoImg){
   if(D.meerwerkClause)c.push({stack:[secHead(nxA(),D.nl?'Meerwerk':'Additional work'),paras(D.meerwerkClause,14*k)],margin:[0,36,0,0],unbreakable:true});
   if(D.rateCard&&D.rateCard.length){var rcb=[[{text:(D.nl?'Activiteit':'Activity').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:(D.nl?'Tarief (excl. btw)':'Rate (ex VAT)').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];D.rateCard.forEach(function(r){rcb.push([{text:r.label,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:[{text:(r.rate||''),font:'I5',color:ink},{text:(r.unit?'  '+r.unit:''),color:muted,fontSize:11*k}],fontSize:13*k,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});c.push({stack:[secHead(nxA(),D.nl?'Tarievenkaart':'Rate card'),{table:{widths:['*','auto'],body:rcb},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,36,0,0],unbreakable:true});}
   return {pageSize:'A4',pageMargins:[ML,MT,ML,MT],
-    background:function(cp,ps){return {canvas:[{type:'rect',x:0,y:0,w:ps.width,h:ps.height,color:'#ffffff'}]};},
+    background:function(cp,ps){return {canvas:[{type:'rect',x:0,y:0,w:ps.width,h:ps.height,color:paper}]};},
+    header:function(cp){if(cp===1)return null;return {margin:[ML,20,ML,0],columns:[{width:'auto',image:logoImg,fit:[150,12]},{width:'*',text:D.title+(D.subtitle?' · '+D.subtitle:''),font:'I4',fontSize:10*k,color:sec,alignment:'right',margin:[0,1,0,0]}]};},
     footer:function(cp,pc){return {margin:[ML,8,ML,0],columns:[{width:'*',text:''},{width:'auto',text:L('Offerte ','Quotation ')+D.number+' · '+cp+' / '+pc,font:'M4',fontSize:10*k,color:muted,characterSpacing:lsf(0.03,10*k)}]};},
     content:c, defaultStyle:{font:'I4',color:body}};
 }
