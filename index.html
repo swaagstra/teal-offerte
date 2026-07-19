@@ -2525,7 +2525,7 @@ function PreviewTab({data:d}){
       <div style={{marginTop:48}}>
         <SecHead n={pn()} title={NL?'Werkzaamheden':'Scope of work'}/>
         {T.scope.map((s,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0}}><strong style={{fontWeight:600}}>{s.lead} </strong>{s.body}</div>)}
-        {(T.delivery||T.effort)&&<div style={{fontSize:13,color:sec,marginTop:10}}>{(NL?'Oplevering: ':'Expected delivery: ')+(T.delivery||'')+(T.effort?', '+T.effort:'')}</div>}
+        {T.effort&&<div style={{fontSize:13,color:sec,marginTop:10}}>{(NL?'Inzet: ':'Effort: ')+T.effort}</div>}
       </div>
       {T.weeks.length>0&&<div style={{marginTop:48}}>
         <SecHead n={pn()} title={NL?'Planning':'Timeline'}/>
@@ -2855,7 +2855,7 @@ function buildQuoteDocDef(D, logoImg){
   function hardBlock(title,items){var rows=[{text:String(title).toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.12,11*k),margin:[0,0,0,7]}];items.forEach(function(x,i){rows.push({columns:[{width:'auto',text:'·',color:muted,fontSize:13*k},{width:'*',text:x,fontSize:13*k,color:body,lineHeight:1.5}],columnGap:7,margin:[0,i?5:0,0,0]});});return {table:{widths:['*'],body:[[{stack:rows,fillColor:'#efeee9'}]]},layout:{defaultBorder:false,paddingLeft:function(){return 16;},paddingRight:function(){return 16;},paddingTop:function(){return 13;},paddingBottom:function(){return 13;}},margin:[0,24,0,0],unbreakable:true};}
   var sc=[secHead(nx(),L('Werkzaamheden','Scope of work'))];
   (D.scope||[]).forEach(function(s,i){sc.push({text:[{text:(s.lead?s.lead+' ':''),font:'I6',color:body},{text:s.body||'',color:body}],fontSize:14*k,lineHeight:1.65,margin:[0,i?6:0,0,0]});});
-  if(D.delivery||D.effort)sc.push({text:L('Oplevering: ','Expected delivery: ')+(D.delivery||'')+(D.effort?', '+D.effort:''),fontSize:13*k,color:sec,margin:[0,6,0,0]});
+  if(D.effort)sc.push({text:L('Inzet: ','Effort: ')+D.effort,fontSize:13*k,color:sec,margin:[0,6,0,0]});
   c.push({stack:sc,margin:[0,26,0,0],unbreakable:true});
   // Timeline directly after the scope of work — "what" + "when" together.
   if(D.tasks&&D.tasks.length)c.push({stack:[secHead(nx(),L('Planning','Timeline')),{svg:timelineSVG(),width:CW,margin:[0,4,0,0]}],margin:[0,36,0,0],unbreakable:true});
