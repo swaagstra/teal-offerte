@@ -2844,11 +2844,16 @@ function buildQuoteDocDef(D, logoImg){
     c.push({stack:ds,margin:[0,26,0,0],unbreakable:true});
   }
   function hardBlock(title,items){var rows=[{text:String(title).toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.12,11*k),margin:[0,0,0,7]}];items.forEach(function(x,i){rows.push({columns:[{width:'auto',text:'·',color:muted,fontSize:13*k},{width:'*',text:x,fontSize:13*k,color:body,lineHeight:1.5}],columnGap:7,margin:[0,i?5:0,0,0]});});return {table:{widths:['*'],body:[[{stack:rows,fillColor:'#efeee9'}]]},layout:{defaultBorder:false,paddingLeft:function(){return 16;},paddingRight:function(){return 16;},paddingTop:function(){return 13;},paddingBottom:function(){return 13;}},margin:[0,24,0,0],unbreakable:true};}
-  var sc=[secHead(nx(),L('Werkzaamheden','Scope of work'))];
-  if(D.scope&&D.scope.length)(D.scope||[]).forEach(function(s,i){sc.push({text:[{text:(s.lead?s.lead+' ':''),font:'I6',color:body},{text:s.body||'',color:body}],fontSize:14*k,lineHeight:1.65,margin:[0,i?6:0,0,0]});});
-  else if(D.phaseNames&&D.phaseNames.length)D.phaseNames.forEach(function(nm,i){sc.push({columns:[{width:'auto',text:'·',color:muted,fontSize:14*k},{width:'*',text:nm,fontSize:14*k,color:body,lineHeight:1.6}],columnGap:7.5,margin:[0,i?4:0,0,0]});});
-  if(D.effort)sc.push({text:L('Inzet: ','Effort: ')+D.effort,fontSize:13*k,color:sec,margin:[0,6,0,0]});
-  c.push({stack:sc,margin:[0,26,0,0],unbreakable:true});
+  // Header + items are pushed as separate, individually-unbreakable pieces (like the
+  // responsibilities block below) rather than one giant unbreakable stack. With many phases
+  // and long descriptions, a single unbreakable stack for the whole section can exceed a
+  // full page's height — pdfmake then silently drops it instead of breaking it, making the
+  // entire section vanish. Chunking keeps each phase's text intact while letting the set as
+  // a whole flow across pages.
+  c.push({stack:[secHead(nx(),L('Werkzaamheden','Scope of work'))],margin:[0,26,0,0]});
+  if(D.scope&&D.scope.length)(D.scope||[]).forEach(function(s,i){c.push({text:[{text:(s.lead?s.lead+' ':''),font:'I6',color:body},{text:s.body||'',color:body}],fontSize:14*k,lineHeight:1.65,margin:[0,i?6:2,0,0],unbreakable:true});});
+  else if(D.phaseNames&&D.phaseNames.length)D.phaseNames.forEach(function(nm,i){c.push({columns:[{width:'auto',text:'·',color:muted,fontSize:14*k},{width:'*',text:nm,fontSize:14*k,color:body,lineHeight:1.6}],columnGap:7.5,margin:[0,i?4:2,0,0],unbreakable:true});});
+  if(D.effort)c.push({text:L('Inzet: ','Effort: ')+D.effort,fontSize:13*k,color:sec,margin:[0,6,0,0]});
   // Timeline directly after the scope of work — "what" + "when" together.
   if(D.tasks&&D.tasks.length)c.push({stack:[secHead(nx(),L('Planning','Timeline')),{svg:timelineSVG(),width:CW,margin:[0,4,0,0]}],margin:[0,36,0,0],unbreakable:true});
   // Responsibilities, exclusions & assumptions: expectation-management block after the scope + timeline.
