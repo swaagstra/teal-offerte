@@ -2934,7 +2934,9 @@ function mapQuoteToTokens(d){
   if(d.conditions&&d.conditions.timelineEnabled===false){weeks.length=0;tasks.length=0;}
   let delivery=d.project.deliveryDate?fmtMonthY(d.project.deliveryDate):(d.project.date?fmtMonthY(addDays(d.project.date,totalWeeks*7)):'');
   const scope=active.filter(ph=>t(ph.description,L)).map(ph=>({lead:(ph.customName||t(ph.name,L))+'.',body:t(ph.description,L)}));
-  const phaseNames=active.map(ph=>ph.customName||t(ph.name,L)).filter(Boolean);
+  // Fallback list for the scope section when phases have no written description:
+  // the actual work items, drawn from both the phases and any custom timeline steps.
+  const phaseNames=[...active.map(ph=>ph.customName||t(ph.name,L)),...steps.map(sx=>t(sx.name,L))].filter(Boolean);
   const effort=(active.find(ph=>ph.effort)||{}).effort||'';
   const cost_items=finLines.map(ln=>({d:ln.desc||'',a:fmtE(ln.total)}));
   const msISOs=d.payment.milestones.map((ms,i)=>ms.date||(d.project.date?addDays(d.project.date,Math.round(totalWeeks*(i+1)/Math.max(1,d.payment.milestones.length))*7):''));
