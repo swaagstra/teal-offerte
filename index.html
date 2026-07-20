@@ -2565,18 +2565,7 @@ function PreviewTab({data:d}){
           </figure>)}
         </div>}
       </div>}
-      <div style={{flex:1}}/>
-      <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:30,display:'flex',justifyContent:'space-between'}}>
-        <span></span><span>{word} {T.number} · 1 / 2</span>
-      </div>
-    </Sheet>
-
-    {/* ===== PAGE 2 ===== */}
-    <Sheet>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid '+hair,paddingBottom:18}}>
-        <Logo color={ink} h={20}/>
-        <div style={{fontFamily:mono,fontSize:11,color:sec}}>{runHdr}</div>
-      </div>
+      {/* one continuous document — no fake page break; the PDF handles real pagination */}
       <div style={{marginTop:48}}>
         <SecHead n={pn()} title={NL?'Kosten':'Costs'}/>
         <div style={{display:'flex',alignItems:'baseline',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
@@ -2621,8 +2610,8 @@ function PreviewTab({data:d}){
         {T.rateCard.map((r,i)=><div key={i} style={{display:'flex',alignItems:'baseline',padding:'11px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
           <div style={{flex:1,color:ink}}>{r.label}</div><div style={{textAlign:'right'}}><span style={{fontWeight:500}}>{r.rate||''}</span>{r.unit?<span style={{color:muted,fontSize:11,marginLeft:6}}>{r.unit}</span>:null}</div></div>)}
       </div>}
-      <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:30,display:'flex',justifyContent:'space-between'}}>
-        <span></span><span>{word} {T.number} · 2 / 2</span>
+      <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:40,display:'flex',justifyContent:'flex-end'}}>
+        <span>{word} {T.number}</span>
       </div>
     </Sheet>
   </div>;
