@@ -47,7 +47,7 @@
   .btn-g{background:0;color:var(--dark-grey);border:1px solid #d0d0ce}.btn-g:hover{background:var(--warm-grey)}
   .btn-sm{padding:4px 10px;font-size:12px}
   .btn-xs{padding:3px 8px;font-size:11px;border-radius:5px}
-  .tbl-scroll{overflow-x:auto;margin:0 -24px;padding:0 24px}
+  .tbl-scroll{overflow-x:auto;margin:0 -24px;padding:0 24px;-webkit-overflow-scrolling:touch}
   .bt{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
   .bt th{text-align:left;padding:8px 12px;background:var(--warm-grey);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dark-grey);border-bottom:2px solid #d0d0ce}
   .bt td{padding:6px 12px;border-bottom:1px solid #eee;vertical-align:middle}
@@ -86,6 +86,13 @@
   .tr{text-align:right}.mono{font-size:12px}.sm{font-size:12px}.muted{color:var(--mid-grey)}
   @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   @media(max-width:768px){.row,.row3,.row4{grid-template-columns:1fr}.tsel{flex-direction:column}.main{padding:16px}.hdr{padding:12px 16px}.tabs{padding:0 16px}.prev{padding:24px}}
+  /* Touch devices (iPad, etc.): enlarge the smallest tap targets — checkboxes and .btn-sm
+     (×/+ row buttons) are sized for mouse precision and are hard to hit with a finger.
+     pointer:coarse (not a width breakpoint) so this also applies in iPad landscape. */
+  @media(pointer:coarse){
+    input[type=checkbox]{width:20px!important;height:20px!important}
+    .btn-sm{padding:8px 12px;min-height:36px}
+  }
 </style>
 </head>
 <body>
@@ -2480,7 +2487,7 @@ function PreviewTab({data:d}){
   // ── House-style preview (mirrors the PDF / approved design 1:1) ──
   const T=mapQuoteToTokens(d);
   const ink='#05100e',body='#2b302f',sec='#4a4f4e',muted='#7a807e',faint='#9aa09e',hair='#e5e4e0',paper='#f6f5f1',track='#ecebe6',grid='#dedcd5',mono="'JetBrains Mono',monospace";
-  const Sheet=({children})=><div style={{width:794,minHeight:1123,background:paper,boxSizing:'border-box',padding:'62px 58px',color:ink,display:'flex',flexDirection:'column',boxShadow:'0 1px 3px rgba(5,16,14,.16)'}}>{children}</div>;
+  const Sheet=({children})=><div style={{width:794,minHeight:1123,flexShrink:0,background:paper,boxSizing:'border-box',padding:'62px 58px',color:ink,display:'flex',flexDirection:'column',boxShadow:'0 1px 3px rgba(5,16,14,.16)'}}>{children}</div>;
   const SecHead=({n,title})=><div style={{display:'flex',alignItems:'baseline',gap:12,marginBottom:14}}><span style={{fontFamily:mono,fontSize:13,color:muted}}>{n}</span><span style={{fontSize:13,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:ink}}>{title}</span></div>;
   const Eyebrow=({children,mb})=><div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:600,color:ink,marginBottom:mb||0}}>{children}</div>;
   const Para=({text})=>{const ps=String(text||'').split(/\n\s*\n+/).map(s=>s.trim()).filter(Boolean);return <React.Fragment>{ps.map((p,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0,whiteSpace:'pre-wrap'}}>{p}</div>)}</React.Fragment>;};
@@ -2488,7 +2495,7 @@ function PreviewTab({data:d}){
   const word=(ll.offerte||'Quotation');
   let _pn=2;const pn=()=>String(++_pn).padStart(2,'0');let _pa=0;const pa=()=>String.fromCharCode(65+_pa++);
 
-  return <div style={{background:'#d8d6cf',padding:28,display:'flex',flexDirection:'column',alignItems:'center',gap:28,borderRadius:8}} id="offerte-preview">
+  return <div style={{background:'#d8d6cf',padding:28,display:'flex',flexDirection:'column',alignItems:'center',gap:28,borderRadius:8,overflowX:'auto',WebkitOverflowScrolling:'touch'}} id="offerte-preview">
     {/* ===== PAGE 1 ===== */}
     <Sheet>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -3768,8 +3775,8 @@ function ChangeOrderPreview({data:co}){
   const Eyebrow=({children,mb})=><div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:600,color:ink,marginBottom:mb||0}}>{children}</div>;
   const Para=({text})=>{const ps=String(text||'').split(/\n\s*\n+/).map(s=>s.trim()).filter(Boolean);return <React.Fragment>{ps.map((p,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0,whiteSpace:'pre-wrap'}}>{p}</div>)}</React.Fragment>;};
   const field=(label,val)=><div style={{fontSize:13,lineHeight:1.45,color:body}}><span style={{color:muted}}>{label}</span>{'  '}{val}</div>;
-  return <div style={{background:'#d8d6cf',padding:28,display:'flex',justifyContent:'center',borderRadius:8}}>
-    <div style={{width:794,minHeight:1123,background:paper,boxSizing:'border-box',padding:'62px 58px',color:ink,display:'flex',flexDirection:'column',boxShadow:'0 1px 3px rgba(5,16,14,.16)'}}>
+  return <div style={{background:'#d8d6cf',padding:28,display:'flex',justifyContent:'center',borderRadius:8,overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
+    <div style={{width:794,minHeight:1123,flexShrink:0,background:paper,boxSizing:'border-box',padding:'62px 58px',color:ink,display:'flex',flexDirection:'column',boxShadow:'0 1px 3px rgba(5,16,14,.16)'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
         <Logo color={ink} h={34}/>
         <div style={{fontSize:26,lineHeight:1,letterSpacing:'0.04em',textTransform:'uppercase',fontWeight:700,color:'#000'}}>CHANGE ORDER</div>
