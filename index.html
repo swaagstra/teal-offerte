@@ -3173,7 +3173,7 @@ function quotePdfBytes(d,cb){
   });
 }
 function exportPDF(d,setData){
-  const pdfFilename=`Offerte ${d.ref||'Draft'} - TEAL.pdf`;
+  const pdfFilename=`${d.lang==='en'?'Quotation':'Offerte'} ${d.ref||'Draft'} - TEAL.pdf`;
   quotePdfBytes(d,function(bytes){const blob=new Blob([bytes],{type:'application/pdf'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=pdfFilename;a.click();URL.revokeObjectURL(url);});
 }
 // Compose an email with the quotation PDF attached: native share (macOS/iOS → Mail) with a
@@ -3184,7 +3184,7 @@ function emailQuote(d,followUp){
   const proj=(d.project&&d.project.name)||(NL?'ons project':'our project');
   const to=(d.client&&d.client.email)||'';
   const contact=(d.client&&d.client.contact)||(d.client&&d.client.name)||'';
-  const filename=`Offerte ${ref||'Draft'} - TEAL.pdf`;
+  const filename=`${NL?'Offerte':'Quotation'} ${ref||'Draft'} - TEAL.pdf`;
   const subject=(followUp?(NL?'Herinnering: offerte':'Reminder: quotation'):(NL?'Offerte':'Quotation'))+(ref?' '+ref:'')+(proj?' – '+proj:'');
   const greet=contact?(NL?'Beste '+contact+',':'Dear '+contact+','):(NL?'Beste,':'Hello,');
   const body=followUp?(NL
