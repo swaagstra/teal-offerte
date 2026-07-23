@@ -2614,7 +2614,7 @@ function PreviewTab({data:d}){
           </div>)}
           <div style={{display:'flex',justifyContent:'flex-end'}}>
             <div style={{width:300}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:16,fontWeight:500,color:ink,padding:'14px 0 0',borderTop:'1px solid '+ink}}><span>{NL?'Totaal ':'Total '}<span style={{fontSize:11,color:muted,fontWeight:400}}>{NL?'(excl. btw)':'(excl. VAT)'}</span></span><span style={{fontVariantNumeric:'tabular-nums'}}>{opt.total}</span></div>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:16,fontWeight:500,color:ink,padding:'14px 0 0',borderTop:'1px solid '+ink}}><span>{(NL?'Totaal ':'Total ')+(opt.title?opt.title+' ':'')}<span style={{fontSize:11,color:muted,fontWeight:400}}>{NL?'(excl. btw)':'(excl. VAT)'}</span></span><span style={{fontVariantNumeric:'tabular-nums'}}>{opt.total}</span></div>
             </div>
           </div>
         </div>)}
@@ -2941,17 +2941,22 @@ function buildQuoteDocDef(D, logoImg){
   // Header + each option's [subtitle, table, total] are separate pushes (table not forced
   // unbreakable) so a long cost list flows across pages instead of risking the same
   // vanishing-block bug as the scope section, per the lesson above.
-  function costTable(items,totalFmt){
+  function costTable(items,totalFmt,label){
+    // `label` (an option title) is folded into the "Totaal" text itself — not just shown in a
+    // heading above the table — because the table can break across a page (intentionally, see
+    // above) and land the total row alone at the top of the next page, out of sight of that
+    // heading. A self-labelling total ("Totaal Optie B") stays unambiguous wherever it lands.
+    var totalLabel=label?(L('Totaal ','Total ')+label+' '):L('Totaal ','Total ');
     var cr=[[{text:L('OMSCHRIJVING','DESCRIPTION'),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:L('BEDRAG','AMOUNT'),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];
     (items||[]).forEach(function(it){cr.push([{text:it.d,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:it.a,font:'I5',fontSize:13*k,color:ink,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});
     c.push({table:{widths:['*',105],body:cr},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}});
-    c.push({columns:[{width:'*',text:''},{width:225,table:{widths:['*','auto'],body:[[{text:[{text:L('Totaal ','Total '),font:'I5'},{text:L('(excl. btw)','(excl. VAT)'),fontSize:11*k,color:muted}],fontSize:16*k,color:ink,border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]},{text:totalFmt,font:'I5',fontSize:16*k,color:ink,alignment:'right',border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]}]]},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,0,0,0],unbreakable:true});
+    c.push({columns:[{width:'*',text:''},{width:225,table:{widths:['*','auto'],body:[[{text:[{text:totalLabel,font:'I5'},{text:L('(excl. btw)','(excl. VAT)'),fontSize:11*k,color:muted}],fontSize:16*k,color:ink,border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]},{text:totalFmt,font:'I5',fontSize:16*k,color:ink,alignment:'right',border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]}]]},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,0,0,0],unbreakable:true});
   }
   c.push({stack:[secHead(nx(),L('Kosten','Costs'))],margin:[0,36,0,0]});
   if(D.isMulti&&D.options&&D.options.length>1){
     D.options.forEach(function(opt,oi){
       c.push({text:opt.title.toUpperCase(),font:'I6',fontSize:12*k,color:ink,characterSpacing:lsf(0.08,12*k),margin:[0,oi?22:0,0,8],unbreakable:true});
-      costTable(opt.cost_items,opt.total);
+      costTable(opt.cost_items,opt.total,opt.title);
     });
   } else {
     costTable(D.cost_items,D.total);
