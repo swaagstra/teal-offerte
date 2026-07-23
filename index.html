@@ -1920,6 +1920,16 @@ function BudgetTab({data:d,set}){
   // Build ISO date strings from local Y/M/D components — not toISOString(), which converts to
   // UTC and can silently shift the date by a day depending on the browser's timezone.
   const calDateList=(()=>{const out=[];const base=new Date(calStart+'T00:00:00');for(let i=0;i<calDays;i++){const dt=new Date(base);dt.setDate(dt.getDate()+i);const y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,'0'),dd=String(dt.getDate()).padStart(2,'0');out.push(y+'-'+m+'-'+dd);}return out;})();
+  // ── Calendar-derived helpers: turn each person's painted days into a human summary and into
+  // sensible hotel-night suggestions, so the rest of "Reis en verblijf" doesn't stay a black box.
+  const fmtCalD=(iso)=>new Date(iso+'T00:00:00').toLocaleDateString(L==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'short'});
+  const daysBetweenISO=(a,b)=>Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000);
+  const calStats=(cal)=>{const dates=Object.keys(cal||{}).sort();if(!dates.length)return null;const counts={travel:0,work:0,halfwork:0,standby:0};dates.forEach(dd=>{counts[cal[dd]]=(counts[cal[dd]]||0)+1;});const first=dates[0],last=dates[dates.length-1];return{first,last,nights:Math.max(0,daysBetweenISO(first,last)),counts,awayDays:dates.length};};
+  const crewCalSummaries=((d.install||{}).crew||[]).map((r,i)=>({i,label:INST_RES[r.res]||r.res||('#'+(i+1)),stats:calStats(r.cal)})).filter(x=>x.stats);
+  const anyCal=crewCalSummaries.length>0;
+  const suggestedHotelNights=crewCalSummaries.reduce((s,x)=>s+x.stats.nights,0); // total person-nights (rooms=1)
+  const applyHotelFromCal=()=>set({...d,install:{...INSTALL_DEFAULT,...(d.install||{}),hotelN:suggestedHotelNights,hotelR:1}});
+  const calSummaryLine=(x)=>{const s=x.stats,p=[];if(s.counts.work)p.push(s.counts.work+(L==='nl'?' werk':' work'));if(s.counts.halfwork)p.push(s.counts.halfwork+(L==='nl'?' ½ werk':' ½ work'));if(s.counts.travel)p.push(s.counts.travel+(L==='nl'?' reis':' travel'));if(s.counts.standby)p.push(s.counts.standby+(L==='nl'?' standby':' standby'));return fmtCalD(s.first)+'–'+fmtCalD(s.last)+' · '+p.join(' · ')+' · '+s.nights+(L==='nl'?' nacht(en)':' night(s)');};
 
   // Bouwblokken-bibliotheek
   const[libType,setLibType]=useState(null); // 'ots' | 'custom' | 'sub' → insert-modus
@@ -2069,8 +2079,14 @@ function BudgetTab({data:d,set}){
 
     {/* Installatie / reizen */}
     <div className="card">
-      <div className="card-h">{L==='nl'?'Installatie / reizen':'Installation / travel'}</div>
-      <label className="flex g8" style={{alignItems:'center',marginBottom:12,cursor:'pointer'}}>
+      <div className="between" style={{alignItems:'center'}}>
+        <div className="card-h" style={{border:0,padding:0,margin:0}}>{L==='nl'?'Installatie / reizen':'Installation / travel'}</div>
+        {d.install&&d.install.enabled&&inst.client>0&&<div style={{textAlign:'right'}}>
+          <span style={{fontSize:18,fontWeight:600,color:'var(--teal-dark)'}}>{fmtE(inst.client)}</span>
+          <span className="sm muted" style={{marginLeft:8}}>{(L==='nl'?'marge ':'margin ')+fmtE(inst.client-inst.cost)}</span>
+        </div>}
+      </div>
+      <label className="flex g8" style={{alignItems:'center',margin:'10px 0 12px',cursor:'pointer'}}>
         <input type="checkbox" checked={!!(d.install&&d.install.enabled)} onChange={e=>toggleInst(e.target.checked)} style={{width:14,height:14,cursor:'pointer'}}/>
         <span className="sm muted">{L==='nl'?'Installatie- en reisblok meenemen in deze offerte':'Include installation & travel block in this quote'}</span>
       </label>
@@ -2079,10 +2095,10 @@ function BudgetTab({data:d,set}){
           <thead><tr>
             <th style={{width:'12%'}}>{L==='nl'?'Rol':'Role'}</th>
             <th style={{width:'20%'}}>{L==='nl'?'Persoon':'Person'}</th>
-            <th style={{width:'9%'}}>{L==='nl'?'Werkdg':'Work d'}</th>
-            <th style={{width:'9%'}}>{L==='nl'?'Reisdg int.':'Travel d'}</th>
-            <th style={{width:'9%'}}>{L==='nl'?'½ reis NL':'½ NL'}</th>
-            <th style={{width:'8%'}}>{L==='nl'?'Overuren':'OT hrs'}</th>
+            <th style={{width:'9%'}} title={L==='nl'?'Werkdagen op locatie (installeren/deïnstalleren). Lead €900, crew €600 per dag.':'Work days on site (install/de-install). Lead €900, crew €600 per day.'}>{L==='nl'?'Werkdg':'Work d'}</th>
+            <th style={{width:'9%'}} title={L==='nl'?'Hele reisdagen (heen of terug). €550 per dag.':'Full travel days (out or back). €550 per day.'}>{L==='nl'?'Reisdg':'Travel d'}</th>
+            <th style={{width:'9%'}} title={L==='nl'?'Halve reisdag binnen NL. €275 per stuk.':'Half travel day within NL. €275 each.'}>{L==='nl'?'½ reis':'½ trip'}</th>
+            <th style={{width:'8%'}} title={L==='nl'?'Overuren. €130 per uur.':'Overtime hours. €130 per hour.'}>{L==='nl'?'Overuren':'OT hrs'}</th>
             <th style={{width:'11%'}}>{ll.klantprijs}</th>
             <th style={{width:'11%'}}>{ll.kostprijs}</th>
             <th style={{width:'4%'}}></th>
@@ -2142,7 +2158,15 @@ function BudgetTab({data:d,set}){
               </tbody>
             </table>
           </div>
-          <p className="sm muted" style={{marginTop:10}}>{L==='nl'?'Werkdg/Reisdg hierboven worden automatisch ingevuld per persoon. Standby-dagen en per diem-dagen tellen automatisch mee bovenaan bij "Standby" en "Reis en verblijf".':'Work/Travel days above fill in automatically per person. Standby days and per-diem days are automatically added to the "Standby" and "Travel & expenses" totals below.'}</p>
+          {anyCal&&<div style={{marginTop:12,padding:'10px 12px',background:'#fff',borderRadius:6,border:'1px solid #e0e0de'}}>
+            <div className="sm" style={{fontWeight:600,marginBottom:6}}>{L==='nl'?'Samenvatting per persoon':'Summary per person'}</div>
+            {crewCalSummaries.map(x=><div key={x.i} className="sm" style={{color:'#555',marginBottom:3}}><strong style={{color:'#071412'}}>{x.label}</strong> · {calSummaryLine(x)}</div>)}
+            <div className="flex g8" style={{alignItems:'center',flexWrap:'wrap',marginTop:8}}>
+              <span className="sm muted">{L==='nl'?'Hotel: '+suggestedHotelNights+' persoon-nacht(en) totaal':'Hotel: '+suggestedHotelNights+' person-night(s) total'}</span>
+              <button className="btn btn-sm btn-g" onClick={applyHotelFromCal} title={L==='nl'?'Zet hotelnachten op '+suggestedHotelNights+' en kamers op 1 (prijs/nacht vul je zelf)':'Set hotel nights to '+suggestedHotelNights+' and rooms to 1 (you set price/night)'}>{L==='nl'?'→ Overnemen als hotelnachten':'→ Use as hotel nights'}</button>
+            </div>
+          </div>}
+          <p className="sm muted" style={{marginTop:10}}>{L==='nl'?'Werkdg/Reisdg worden per persoon automatisch ingevuld. Standby- en per diem-dagen tellen automatisch mee bij "Standby" en "Reis en verblijf" hieronder. Vluchten, km en parkeren vul je zelf in — die kent de kalender niet.':'Work/Travel days fill in automatically per person. Standby and per-diem days are added to "Standby" and "Travel & expenses" below. Flights, km and parking you enter yourself — the calendar can’t know those.'}</p>
         </div>}
 
         <div className="flex g8" style={{alignItems:'center',marginTop:14}}>
@@ -2158,17 +2182,20 @@ function BudgetTab({data:d,set}){
           <div className="fg"><label>{L==='nl'?'Visum totaal (kost)':'Visa total (cost)'}</label><input type="number" value={(d.install||{}).visa||''} onChange={e=>upInst('visa',parseFloat(e.target.value)||0)}/></div>
         </div>
         <div className="row">
-          <div className="fg"><label>{L==='nl'?'Hotel, nachten':'Hotel, nights'}</label><input type="number" value={(d.install||{}).hotelN||''} onChange={e=>upInst('hotelN',parseFloat(e.target.value)||0)}/></div>
-          <div className="fg"><label>{L==='nl'?'Hotel, prijs/nacht':'Hotel, price/night'}</label><input type="number" value={(d.install||{}).hotelP||''} onChange={e=>upInst('hotelP',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"><label>{L==='nl'?'Hotel, nachten':'Hotel, nights'}</label><input type="number" value={(d.install||{}).hotelN||''} onChange={e=>upInst('hotelN',parseFloat(e.target.value)||0)}/>
+            {anyCal&&(+(d.install||{}).hotelN||0)!==suggestedHotelNights&&suggestedHotelNights>0&&<div className="sm" style={{marginTop:2}}><a onClick={applyHotelFromCal} style={{color:'var(--green)',cursor:'pointer'}}>{(L==='nl'?'kalender suggereert ':'calendar suggests ')+suggestedHotelNights}</a></div>}</div>
+          <div className="fg"><label>{L==='nl'?'Hotel, prijs/nacht':'Hotel, price/night'}</label><input type="number" value={(d.install||{}).hotelP||''} onChange={e=>upInst('hotelP',parseFloat(e.target.value)||0)}/>
+            {(()=>{const x=d.install||{};const h=(+x.hotelN||0)*(+x.hotelP||0)*(+x.hotelR!=null?+x.hotelR:1);return h>0?<div className="sm muted" style={{marginTop:2}}>= {fmtE(h)}</div>:null;})()}</div>
         </div>
         <div className="row">
           <div className="fg"><label>{L==='nl'?'Hotel, kamers':'Hotel, rooms'}</label><input type="number" value={(d.install||{}).hotelR!=null?d.install.hotelR:1} onChange={e=>upInst('hotelR',parseFloat(e.target.value)||0)}/></div>
-          <div className="fg"><label>{L==='nl'?'Reis NL, km retour':'Travel NL, km return'}</label><input type="number" value={(d.install||{}).kmNL||''} onChange={e=>upInst('kmNL',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"><label>{L==='nl'?'Reis NL, km retour':'Travel NL, km return'}</label><input type="number" value={(d.install||{}).kmNL||''} onChange={e=>upInst('kmNL',parseFloat(e.target.value)||0)}/>
+            {(+(d.install||{}).kmNL||0)>0&&<div className="sm muted" style={{marginTop:2}}>{'= '+fmtE((+(d.install||{}).kmNL||0)*INSTALL_RATES.kmPrice)+(L==='nl'?' (klant) · kost '+fmtE((+(d.install||{}).kmNL||0)*INSTALL_RATES.kmCost):' (client) · cost '+fmtE((+(d.install||{}).kmNL||0)*INSTALL_RATES.kmCost))}</div>}</div>
         </div>
         <div className="row">
           <div className="fg"><label>{L==='nl'?'Per diem, tarief p.p./dag':'Per diem, rate pp/day'}</label><input type="number" value={(d.install||{}).pdRate||''} onChange={e=>upInst('pdRate',parseFloat(e.target.value)||0)}/></div>
           <div className="fg"><label>{L==='nl'?'Per diem, persoon-dagen':'Per diem, person-days'}</label><input type="number" value={(d.install||{}).pdDays||''} onChange={e=>upInst('pdDays',parseFloat(e.target.value)||0)}/>
-            {inst.crewPdDays>0&&<div className="sm muted" style={{marginTop:2}}>{(L==='nl'?'+ ':'+ ')+inst.crewPdDays+(L==='nl'?' via kalender':' via calendar')}</div>}</div>
+            {(()=>{const x=d.install||{};const days=(+x.pdDays||0)+inst.crewPdDays;const pd=days*(+x.pdRate||0);return <div className="sm muted" style={{marginTop:2}}>{inst.crewPdDays>0?(L==='nl'?'+ '+inst.crewPdDays+' via kalender · ':'+ '+inst.crewPdDays+' via calendar · '):''}{pd>0?'= '+fmtE(pd):''}</div>;})()}</div>
         </div>
         <div className="row">
           <div className="fg"><label>{L==='nl'?'Parkeren / city access (kost)':'Parking / city access (cost)'}</label><input type="number" value={(d.install||{}).park||''} onChange={e=>upInst('park',parseFloat(e.target.value)||0)}/></div>
@@ -2191,8 +2218,8 @@ function BudgetTab({data:d,set}){
 
         <div className="card-h" style={{marginTop:20,fontSize:13}}>{L==='nl'?'Standby en risico':'Standby & risk'}</div>
         <div className="row">
-          <div className="fg"><label>{L==='nl'?'Standby-dagen (klantvertraging)':'Standby days (client delay)'}</label><input type="number" value={(d.install||{}).sbDays||''} onChange={e=>upInst('sbDays',parseFloat(e.target.value)||0)}/>
-            {inst.crewSbDays>0&&<div className="sm muted" style={{marginTop:2}}>{(L==='nl'?'+ ':'+ ')+inst.crewSbDays+(L==='nl'?' via kalender':' via calendar')}</div>}</div>
+          <div className="fg"><label title={L==='nl'?'Aanwezig maar niet actief werkend (bijv. wachten op de klant, of tussen installatie en deïnstallatie blijven). Per diem loopt door; zodra je werkt maak je er een (halve) werkdag van.':'Present but not actively working (e.g. waiting on the client, or staying between install and de-install). Per diem continues; the moment you work it becomes a (half) work day.'}>{L==='nl'?'Standby-dagen (aanwezig, niet actief)':'Standby days (present, not working)'}</label><input type="number" value={(d.install||{}).sbDays||''} onChange={e=>upInst('sbDays',parseFloat(e.target.value)||0)}/>
+            {(()=>{const x=d.install||{};const days=(+x.sbDays||0)+inst.crewSbDays;const sb=days*(+x.sbRate!=null?+x.sbRate:600);return <div className="sm muted" style={{marginTop:2}}>{inst.crewSbDays>0?(L==='nl'?'+ '+inst.crewSbDays+' via kalender · ':'+ '+inst.crewSbDays+' via calendar · '):''}{sb>0?'= '+fmtE(sb):''}</div>;})()}</div>
           <div className="fg"><label>{L==='nl'?'Standby-tarief/dag':'Standby rate/day'}</label><input type="number" value={(d.install||{}).sbRate!=null?d.install.sbRate:600} onChange={e=>upInst('sbRate',parseFloat(e.target.value)||0)}/></div>
         </div>
         <div className="row">
