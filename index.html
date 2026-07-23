@@ -487,6 +487,27 @@ function createProject(type){
     annexes:defaultAnnexes(),
   };
 }
+// ── Multi-option quotes ──
+// A quote can hold several full alternative scopes ("Optie A", "Optie B", …), each with its
+// own phases/procurement/install and therefore its own totals. calcTotals/calcInstall/
+// buildFinancialLines only ever read the bundle keys below (never client/project/annexes/…),
+// so any object shaped like one — including a plain option — works as a drop-in argument.
+const OPTION_BUNDLE_KEYS=['phases','procOTS','procCustom','subs','install'];
+function newOption(label,seedFrom){
+  const src=seedFrom||{};
+  return {
+    id:uid(),label,
+    title:{nl:'Optie '+label,en:'Option '+label},
+    phases:src.phases?JSON.parse(JSON.stringify(src.phases)):[],
+    procOTS:src.procOTS?JSON.parse(JSON.stringify(src.procOTS)):[],
+    procCustom:src.procCustom?JSON.parse(JSON.stringify(src.procCustom)):[],
+    subs:src.subs?JSON.parse(JSON.stringify(src.subs)):[],
+    install:src.install?JSON.parse(JSON.stringify(src.install)):{...INSTALL_DEFAULT},
+  };
+}
+// The bundle used for computations/rendering when a quote isn't (or no longer is) multi-option,
+// and as the fallback "primary" bundle (Option A) for shared parts (timeline, Odoo push, …).
+function primaryBundle(d){return (d.multiOption&&d.options&&d.options.length)?d.options[0]:d;}
 function defaultDelivery(){
   return {date:'',note:{
     nl:'Hierbij leveren we het onderstaande, afgeronde werk op. Elk item hieronder verwijst naar de bijbehorende deliverable, zoals tekeningen, documentatie, media of bestanden. Neem bij vragen over deze oplevering gerust contact met ons op.',
@@ -705,7 +726,7 @@ function archiveLogExport(d){archiveLogAction(d,'pdf_exported');bumpSent(d&&d._a
 // ── Status lifecycle ──
 const STATUS_ORDER=['concept','verstuurd','geaccepteerd','afgewezen'];
 function quoteExpiry(data){try{const base=(data&&data.project&&data.project.date)||(data&&data.date);const days=parseInt((data&&data.conditions&&data.conditions.validity)||(data&&data.validity))||0;if(!base||!days)return null;const dt=new Date(base);dt.setDate(dt.getDate()+days);return dt;}catch(e){return null;}}
-function entryTotal(e){try{const dt=e.data||{};if((e.kind==='delivery')||dt.kind==='delivery')return 0;if((e.kind==='change_order')||dt.kind==='change_order'){return (dt.costItems||[]).reduce((s,it)=>s+(+it.amount||0),0);}return calcTotals(dt).grandClient;}catch(_e){return 0;}}
+function entryTotal(e){try{const dt=e.data||{};if((e.kind==='delivery')||dt.kind==='delivery')return 0;if((e.kind==='change_order')||dt.kind==='change_order'){return (dt.costItems||[]).reduce((s,it)=>s+(+it.amount||0),0);}return calcTotals(primaryBundle(dt)).grandClient;}catch(_e){return 0;}}
 function effectiveStatus(entry){const s=(entry&&entry.status)||'concept';if(s==='verstuurd'){const ex=quoteExpiry(entry.data);if(ex&&ex<new Date())return 'verlopen';}return s;}
 function archiveSetStatus(id,status){if(!id)return;const all=loadArchive();const idx=all.findIndex(x=>x.id===id);if(idx>=0){const now=new Date().toISOString();all[idx].status=status;all[idx].statusAt=now;all[idx].updatedAt=now;all[idx].changelog.push({action:'status_'+status,date:now});saveArchive(all);}}
 function bumpSent(id){if(!id)return;const all=loadArchive();const i=all.findIndex(x=>x.id===id);if(i>=0&&((all[i].status||'concept')==='concept'))archiveSetStatus(id,'verstuurd');}
@@ -2531,10 +2552,18 @@ function PreviewTab({data:d}){
       </div>}
       <div style={{marginTop:48}}>
         <SecHead n={pn()} title={NL?'Werkzaamheden':'Scope of work'}/>
-        {T.scope.length>0
-          ?T.scope.map((s,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0}}><strong style={{fontWeight:600}}>{s.lead} </strong>{s.body}</div>)
-          :(T.phaseNames||[]).map((nm,i)=><div key={i} style={{display:'flex',gap:10,fontSize:14,lineHeight:1.6,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{nm}</span></div>)}
-        {T.effort&&<div style={{fontSize:13,color:sec,marginTop:10}}>{(NL?'Inzet: ':'Effort: ')+T.effort}</div>}
+        {T.isMulti&&T.options?T.options.map((opt,oi)=><div key={opt.label} style={{marginTop:oi?26:0}}>
+          <Eyebrow mb={10}>{opt.title}</Eyebrow>
+          {opt.scope.length>0
+            ?opt.scope.map((s,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0}}><strong style={{fontWeight:600}}>{s.lead} </strong>{s.body}</div>)
+            :(opt.phaseNames||[]).map((nm,i)=><div key={i} style={{display:'flex',gap:10,fontSize:14,lineHeight:1.6,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{nm}</span></div>)}
+          {opt.effort&&<div style={{fontSize:13,color:sec,marginTop:10}}>{(NL?'Inzet: ':'Effort: ')+opt.effort}</div>}
+        </div>):<>
+          {T.scope.length>0
+            ?T.scope.map((s,i)=><div key={i} style={{fontSize:14,lineHeight:1.65,color:body,marginTop:i?10:0}}><strong style={{fontWeight:600}}>{s.lead} </strong>{s.body}</div>)
+            :(T.phaseNames||[]).map((nm,i)=><div key={i} style={{display:'flex',gap:10,fontSize:14,lineHeight:1.6,color:body,marginTop:i?6:0}}><span style={{color:muted}}>·</span><span>{nm}</span></div>)}
+          {T.effort&&<div style={{fontSize:13,color:sec,marginTop:10}}>{(NL?'Inzet: ':'Effort: ')+T.effort}</div>}
+        </>}
       </div>
       {T.weeks.length>0&&<div style={{marginTop:48}}>
         <SecHead n={pn()} title={NL?'Planning':'Timeline'}/>
@@ -2575,17 +2604,20 @@ function PreviewTab({data:d}){
       {/* one continuous document — no fake page break; the PDF handles real pagination */}
       <div style={{marginTop:48}}>
         <SecHead n={pn()} title={NL?'Kosten':'Costs'}/>
-        <div style={{display:'flex',alignItems:'baseline',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
-          <div style={{flex:1}}>{NL?'Omschrijving':'Description'}</div><div style={{width:140,textAlign:'right'}}>{NL?'Bedrag':'Amount'}</div>
-        </div>
-        {T.cost_items.map((it,i)=><div key={i} style={{display:'flex',alignItems:'baseline',padding:'12px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
-          <div style={{flex:1,color:ink}}>{it.d}</div><div style={{width:140,textAlign:'right',fontWeight:500,fontVariantNumeric:'tabular-nums'}}>{it.a}</div>
-        </div>)}
-        <div style={{display:'flex',justifyContent:'flex-end'}}>
-          <div style={{width:300}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:16,fontWeight:500,color:ink,padding:'14px 0 0',borderTop:'1px solid '+ink}}><span>{NL?'Totaal ':'Total '}<span style={{fontSize:11,color:muted,fontWeight:400}}>{NL?'(excl. btw)':'(excl. VAT)'}</span></span><span style={{fontVariantNumeric:'tabular-nums'}}>{T.total}</span></div>
+        {(T.isMulti&&T.options?T.options:[{label:null,title:null,cost_items:T.cost_items,total:T.total}]).map((opt,oi)=><div key={opt.label||'x'} style={{marginTop:oi?26:0}}>
+          {opt.title&&<Eyebrow mb={10}>{opt.title}</Eyebrow>}
+          <div style={{display:'flex',alignItems:'baseline',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
+            <div style={{flex:1}}>{NL?'Omschrijving':'Description'}</div><div style={{width:140,textAlign:'right'}}>{NL?'Bedrag':'Amount'}</div>
           </div>
-        </div>
+          {opt.cost_items.map((it,i)=><div key={i} style={{display:'flex',alignItems:'baseline',padding:'12px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
+            <div style={{flex:1,color:ink}}>{it.d}</div><div style={{width:140,textAlign:'right',fontWeight:500,fontVariantNumeric:'tabular-nums'}}>{it.a}</div>
+          </div>)}
+          <div style={{display:'flex',justifyContent:'flex-end'}}>
+            <div style={{width:300}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:16,fontWeight:500,color:ink,padding:'14px 0 0',borderTop:'1px solid '+ink}}><span>{NL?'Totaal ':'Total '}<span style={{fontSize:11,color:muted,fontWeight:400}}>{NL?'(excl. btw)':'(excl. VAT)'}</span></span><span style={{fontVariantNumeric:'tabular-nums'}}>{opt.total}</span></div>
+            </div>
+          </div>
+        </div>)}
       </div>
       {T.payment.length>0&&<div style={{marginTop:48}}>
         <SecHead n={pn()} title={NL?'Betaling':'Payment'}/>
@@ -2858,9 +2890,19 @@ function buildQuoteDocDef(D, logoImg){
   // entire section vanish. Chunking keeps each phase's text intact while letting the set as
   // a whole flow across pages.
   c.push({stack:[secHead(nx(),L('Werkzaamheden','Scope of work'))],margin:[0,26,0,0]});
-  if(D.scope&&D.scope.length)(D.scope||[]).forEach(function(s,i){c.push({text:[{text:(s.lead?s.lead+' ':''),font:'I6',color:body},{text:s.body||'',color:body}],fontSize:14*k,lineHeight:1.65,margin:[0,i?6:2,0,0],unbreakable:true});});
-  else if(D.phaseNames&&D.phaseNames.length)D.phaseNames.forEach(function(nm,i){c.push({columns:[{width:'auto',text:'·',color:muted,fontSize:14*k},{width:'*',text:nm,fontSize:14*k,color:body,lineHeight:1.6}],columnGap:7.5,margin:[0,i?4:2,0,0],unbreakable:true});});
-  if(D.effort)c.push({text:L('Inzet: ','Effort: ')+D.effort,fontSize:13*k,color:sec,margin:[0,6,0,0]});
+  function scopeBlock(sc,phN,eff,topMargin){
+    if(sc&&sc.length)sc.forEach(function(s,i){c.push({text:[{text:(s.lead?s.lead+' ':''),font:'I6',color:body},{text:s.body||'',color:body}],fontSize:14*k,lineHeight:1.65,margin:[0,i?6:topMargin,0,0],unbreakable:true});});
+    else if(phN&&phN.length)phN.forEach(function(nm,i){c.push({columns:[{width:'auto',text:'·',color:muted,fontSize:14*k},{width:'*',text:nm,fontSize:14*k,color:body,lineHeight:1.6}],columnGap:7.5,margin:[0,i?4:topMargin,0,0],unbreakable:true});});
+    if(eff)c.push({text:L('Inzet: ','Effort: ')+eff,fontSize:13*k,color:sec,margin:[0,6,0,0]});
+  }
+  if(D.isMulti&&D.options&&D.options.length>1){
+    D.options.forEach(function(opt,oi){
+      c.push({text:opt.title.toUpperCase(),font:'I6',fontSize:12*k,color:ink,characterSpacing:lsf(0.08,12*k),margin:[0,oi?22:2,0,8],unbreakable:true});
+      scopeBlock(opt.scope,opt.phaseNames,opt.effort,0);
+    });
+  } else {
+    scopeBlock(D.scope,D.phaseNames,D.effort,2);
+  }
   // Timeline directly after the scope of work — "what" + "when" together.
   if(D.tasks&&D.tasks.length)c.push({stack:[secHead(nx(),L('Planning','Timeline')),{svg:timelineSVG(),width:CW,margin:[0,4,0,0]}],margin:[0,36,0,0],unbreakable:true});
   // Responsibilities, exclusions & assumptions: expectation-management block after the scope + timeline.
@@ -2896,10 +2938,24 @@ function buildQuoteDocDef(D, logoImg){
   }
   // Costs onward flow naturally after the scope — no forced page break. Continuation
   // pages carry a running header (see header:() in the docDefinition below).
-  var cr=[[{text:L('OMSCHRIJVING','DESCRIPTION'),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:L('BEDRAG','AMOUNT'),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];
-  (D.cost_items||[]).forEach(function(it){cr.push([{text:it.d,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:it.a,font:'I5',fontSize:13*k,color:ink,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});
-  c.push({stack:[secHead(nx(),L('Kosten','Costs')),{table:{widths:['*',105],body:cr},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}},
-    {columns:[{width:'*',text:''},{width:225,table:{widths:['*','auto'],body:[[{text:[{text:L('Totaal ','Total '),font:'I5'},{text:L('(excl. btw)','(excl. VAT)'),fontSize:11*k,color:muted}],fontSize:16*k,color:ink,border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]},{text:D.total,font:'I5',fontSize:16*k,color:ink,alignment:'right',border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]}]]},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}]}],margin:[0,36,0,0],unbreakable:true});
+  // Header + each option's [subtitle, table, total] are separate pushes (table not forced
+  // unbreakable) so a long cost list flows across pages instead of risking the same
+  // vanishing-block bug as the scope section, per the lesson above.
+  function costTable(items,totalFmt){
+    var cr=[[{text:L('OMSCHRIJVING','DESCRIPTION'),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:L('BEDRAG','AMOUNT'),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];
+    (items||[]).forEach(function(it){cr.push([{text:it.d,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:it.a,font:'I5',fontSize:13*k,color:ink,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});
+    c.push({table:{widths:['*',105],body:cr},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}});
+    c.push({columns:[{width:'*',text:''},{width:225,table:{widths:['*','auto'],body:[[{text:[{text:L('Totaal ','Total '),font:'I5'},{text:L('(excl. btw)','(excl. VAT)'),fontSize:11*k,color:muted}],fontSize:16*k,color:ink,border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]},{text:totalFmt,font:'I5',fontSize:16*k,color:ink,alignment:'right',border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]}]]},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,0,0,0],unbreakable:true});
+  }
+  c.push({stack:[secHead(nx(),L('Kosten','Costs'))],margin:[0,36,0,0]});
+  if(D.isMulti&&D.options&&D.options.length>1){
+    D.options.forEach(function(opt,oi){
+      c.push({text:opt.title.toUpperCase(),font:'I6',fontSize:12*k,color:ink,characterSpacing:lsf(0.08,12*k),margin:[0,oi?22:0,0,8],unbreakable:true});
+      costTable(opt.cost_items,opt.total);
+    });
+  } else {
+    costTable(D.cost_items,D.total);
+  }
   function bullets(arr){return (arr||[]).map(function(t){return {columns:[{width:'auto',text:'·',color:muted,fontSize:14*k},{width:'*',text:t,fontSize:14*k,color:body,lineHeight:1.6}],columnGap:7.5,margin:[0,0,0,6.75]};});}
   if(D.payment&&D.payment.length)c.push({stack:[secHead(nx(),L('Betaling','Payment'))].concat(bullets(D.payment)),margin:[0,36,0,0],unbreakable:true});
   if(D.conditions&&D.conditions.length)c.push({stack:[secHead(nx(),L('Voorwaarden','Terms & conditions'))].concat(bullets(D.conditions)),margin:[0,36,0,0],unbreakable:true});
@@ -2919,11 +2975,16 @@ function buildQuoteDocDef(D, logoImg){
 
 function mapQuoteToTokens(d){
   const L=d.lang, NL=L==='nl', ll=L_(L);
-  const totals=calcTotals(d), grand=totals.grandClient, finLines=buildFinancialLines(d,totals,L);
+  // Multi-option quotes: every scope/cost figure below is computed per option (see `options`
+  // at the end). The single-bundle fields (scope, cost_items, total, …) still get filled from
+  // the primary bundle (Option A) as a safe fallback for any renderer not yet option-aware.
+  const isMulti=!!(d.multiOption&&d.options&&d.options.length>1);
+  const bundle=primaryBundle(d);
+  const totals=calcTotals(bundle), grand=totals.grandClient, finLines=buildFinancialLines(bundle,totals,L);
   const fmtLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
   const fmtShort=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'short'}):'';
   const fmtMonthY=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{month:'long',year:'numeric'}):'';
-  const active=d.phases.filter(p=>p.enabled!==false);
+  const active=bundle.phases.filter(p=>p.enabled!==false);
   const steps=Array.isArray(d.timeline)?d.timeline:[];
   const totalWeeks=Math.max(1,...active.map(p=>(p.startWeek||0)+(p.durationWeeks||4)),...steps.map(s=>(s.startWeek||0)+(s.durationWeeks||1)));
   const addDays=(iso,dd)=>{const dt=new Date(iso);dt.setDate(dt.getDate()+dd);return dt.toISOString().slice(0,10);};
@@ -2934,15 +2995,27 @@ function mapQuoteToTokens(d){
   steps.forEach(sx=>{const sw=sx.startWeek||0,dw=sx.durationWeeks||1;tasks.push({name:t(sx.name,L),left:sw/totalWeeks,width:dw/totalWeeks,color:'#9aa09e',label:t(sx.barLabel,L)||''});});
   if(d.conditions&&d.conditions.timelineEnabled===false){weeks.length=0;tasks.length=0;}
   let delivery=d.project.deliveryDate?fmtMonthY(d.project.deliveryDate):(d.project.date?fmtMonthY(addDays(d.project.date,totalWeeks*7)):'');
-  const scope=active.filter(ph=>t(ph.description,L)).map(ph=>({lead:(ph.customName||t(ph.name,L))+'.',body:t(ph.description,L)}));
-  // Fallback list for the scope section when phases have no written description:
-  // the actual work items, drawn from both the phases and any custom timeline steps.
-  const phaseNames=[...active.map(ph=>ph.customName||t(ph.name,L)),...steps.map(sx=>t(sx.name,L))].filter(Boolean);
-  const effort=(active.find(ph=>ph.effort)||{}).effort||'';
-  const cost_items=finLines.map(ln=>({d:ln.desc||'',a:fmtE(ln.total)}));
+  // Per-bundle scope+cost tokens — used both for the single-option fallback and for each option.
+  const tokensForBundle=(bn)=>{
+    const bActive=bn.phases.filter(p=>p.enabled!==false);
+    const bScope=bActive.filter(ph=>t(ph.description,L)).map(ph=>({lead:(ph.customName||t(ph.name,L))+'.',body:t(ph.description,L)}));
+    const bPhaseNames=[...bActive.map(ph=>ph.customName||t(ph.name,L)),...steps.map(sx=>t(sx.name,L))].filter(Boolean);
+    const bEffort=(bActive.find(ph=>ph.effort)||{}).effort||'';
+    const bTotals=calcTotals(bn);
+    const bFinLines=buildFinancialLines(bn,bTotals,L);
+    const bCostItems=bFinLines.map(ln=>({d:ln.desc||'',a:fmtE(ln.total)}));
+    return {scope:bScope,phaseNames:bPhaseNames,effort:bEffort,cost_items:bCostItems,grandClient:bTotals.grandClient,total:fmtE(bTotals.grandClient)};
+  };
+  const base=tokensForBundle(bundle);
+  const scope=base.scope, phaseNames=base.phaseNames, effort=base.effort, cost_items=base.cost_items;
+  const options=isMulti?d.options.map(opt=>({label:opt.label,title:t(opt.title,L)||((NL?'Optie ':'Option ')+opt.label),...tokensForBundle(opt)})):null;
   const msISOs=d.payment.milestones.map((ms,i)=>ms.date||(d.project.date?addDays(d.project.date,Math.round(totalWeeks*(i+1)/Math.max(1,d.payment.milestones.length))*7):''));
   const payment=[];
-  d.payment.milestones.forEach((ms,i)=>{const amt=fmtE(grand*(ms.pct||0)/100);const mo=msISOs[i]?fmtMonthY(msISOs[i]):'';payment.push(t(ms.name,L)+': '+ms.pct+'% ('+amt+')'+(mo?', '+mo:'')+'.');});
+  d.payment.milestones.forEach((ms,i)=>{
+    const mo=msISOs[i]?fmtMonthY(msISOs[i]):'';
+    const amt=options?options.map(o=>o.title+': '+fmtE(o.grandClient*(ms.pct||0)/100)).join(' · '):fmtE(grand*(ms.pct||0)/100);
+    payment.push(t(ms.name,L)+': '+ms.pct+'% ('+amt+')'+(mo?', '+mo:'')+'.');
+  });
   payment.push((NL?'Betaling binnen ':'Payment is due within ')+(d.conditions.paymentTerm||14)+(NL?' dagen na factuurdatum.':' days of the invoice date.'));
   // Outside scope, exclusions text and images all live under Scope of work / responsibilities.
   const respOn=!!(d.annexes&&d.annexes.responsibilities&&d.annexes.responsibilities.enabled);
@@ -2965,7 +3038,8 @@ function mapQuoteToTokens(d){
     location:d.project.location||'',phase:d.project.phaseLabel||'',delivery,
     description:t(d.project.description,L),teal_role:t(d.project.tealRole,L),
     scope,effort,cost_items,total:fmtE(grand),payment,conditions,accepted_by:d.client.name||'',sign_line,weeks,tasks,
-    phaseNames,assumptions,excluded,excludedImages,meerwerkClause,rateCard,responsibilities,nl:NL};
+    phaseNames,assumptions,excluded,excludedImages,meerwerkClause,rateCard,responsibilities,nl:NL,
+    isMulti,options};
 }
 
 // ── PDF ──
@@ -3291,20 +3365,24 @@ function odooPayloadFromEntry(entry){
     return {type:'change_order',ref:d.ref,lang:L,client:{name:d.client?.name,email:d.client?.email,contact:d.client?.contact},
       note:(NL?'Change order ':'Change order ')+d.ref+(d.parentRef?(NL?' bij offerte ':' to quote ')+d.parentRef:''),lines};
   }
-  const totals=calcTotals(d);const grand=totals.grandClient;const fl=buildFinancialLines(d,totals,L);
+  // Multi-option quotes push Option A's numbers to Odoo (no single grand total exists until
+  // the client picks); the note below flags this so it's never mistaken for the full picture.
+  const bundle=primaryBundle(d);
+  const totals=calcTotals(bundle);const grand=totals.grandClient;const fl=buildFinancialLines(bundle,totals,L);
   const lines=fl.map(ln=>({name:ln.desc||'',price:+ln.total||0}));
   const msArr=(d.payment&&d.payment.milestones)||[];
   let milestones=[];
   if(msArr.length>1){
-    const active=d.phases.filter(p=>p.enabled!==false);
+    const active=bundle.phases.filter(p=>p.enabled!==false);
     const steps=Array.isArray(d.timeline)?d.timeline:[];
     const totalWeeks=Math.max(1,...active.map(p=>(p.startWeek||0)+(p.durationWeeks||4)),...steps.map(s=>(s.startWeek||0)+(s.durationWeeks||1)));
     const addDays=(iso,dd)=>{const dt=new Date(iso);dt.setDate(dt.getDate()+dd);return dt.toISOString().slice(0,10);};
     const n=msArr.length;let acc=0;
     milestones=msArr.map((m,i)=>{let amt=Math.round(grand*(m.pct||0)/100*100)/100;if(i===n-1)amt=Math.round((grand-acc)*100)/100;else acc+=amt;const date=m.date||(d.project.date?addDays(d.project.date,Math.round(totalWeeks*(i+1)/n)*7):'');return {name:t(m.name,L)||((NL?'Termijn ':'Instalment ')+(i+1)),pct:m.pct||0,amount:amt,date};});
   }
+  const multiNote=(d.multiOption&&d.options&&d.options.length>1)?(NL?' (Optie '+(bundle.label||'A')+')':' (Option '+(bundle.label||'A')+')'):'';
   return {type:'quote',ref:d.ref,lang:L,client:{name:d.client?.name,email:d.client?.email,contact:d.client?.contact},
-    note:(d.project?.name||'')+' · '+d.ref,lines,milestones};
+    note:(d.project?.name||'')+' · '+d.ref+multiNote,lines,milestones};
 }
 async function pushToOdoo(entry,opts={}){
   const payload=odooPayloadFromEntry(entry);
@@ -3910,6 +3988,8 @@ function App(){
   const[d,setD]=useState(null);
   const[tab,setTab]=useState('project');
   const[showDash,setShowDash]=useState(true);
+  const[activeOptIdx,setActiveOptIdx]=useState(0); // which option Scope/Budget currently edit
+  useEffect(()=>{setActiveOptIdx(0)},[d&&d._archiveId]); // reset when switching to a different quote
 
   useEffect(()=>{
     migrateDeliveryRefs();
@@ -3948,6 +4028,57 @@ function App(){
     const saved=archiveSave(copy,'created');archiveLogAction(data,'duplicated');return saved;};
   const deleteQuote=(id)=>{archiveDelete(id);if(d&&d._archiveId===id){setD(null);save(null);}};
   const goToDash=()=>{if(d)archiveSave(d,'updated');setShowDash(true);};
+
+  // ── Multi-option quotes: Scope/Budget/Planning read & write a single option's
+  // phases/procurement/install instead of the top-level fields, via this adapter. It hands
+  // those tabs a `d`-shaped object with the active option's bundle spliced in; on save it
+  // pulls the (possibly changed) bundle back into d.options[idx] and applies everything else
+  // in the tab's output (annexes, project, conditions, …) straight to the real d — so edits
+  // to shared data (e.g. exclusions on the Scope tab) are never dropped.
+  const scopedForOption=(idx)=>{
+    if(!d.options||!d.options[idx])return[d,setDWithArchive];
+    const activeOpt=d.options[idx];
+    const scoped={...d};OPTION_BUNDLE_KEYS.forEach(k=>{scoped[k]=activeOpt[k];});
+    const scopedSet=(newD)=>{
+      const opts=[...d.options];
+      const patch={};OPTION_BUNDLE_KEYS.forEach(k=>{patch[k]=newD[k];});
+      opts[idx]={...opts[idx],...patch};
+      const rest={...newD};OPTION_BUNDLE_KEYS.forEach(k=>delete rest[k]);
+      setDWithArchive({...d,...rest,options:opts});
+    };
+    return[scoped,scopedSet];
+  };
+  const enableMultiOption=()=>{
+    const opts=(d.options&&d.options.length)?d.options:[newOption('A',d)];
+    setActiveOptIdx(0);
+    setDWithArchive({...d,multiOption:true,options:opts});
+  };
+  const disableMultiOption=()=>{
+    const idx=Math.min(activeOptIdx,(d.options||[]).length-1);
+    const active=(d.options||[])[idx]||(d.options||[])[0];
+    if(!active){setDWithArchive({...d,multiOption:false});return;}
+    if(!confirm(d.lang==='nl'?'Terug naar één offerte? De opties blijven bewaard (je kunt later weer meerdere opties aanzetten) — de nu actieve optie ("'+(t(active.title,d.lang)||active.label)+'") wordt de hoofdofferte.':'Switch back to a single quote? Your options stay saved (you can turn multi-option back on later) — the currently active option ("'+(t(active.title,d.lang)||active.label)+'") becomes the main quote.'))return;
+    setDWithArchive({...d,multiOption:false,phases:active.phases,procOTS:active.procOTS,procCustom:active.procCustom,subs:active.subs,install:active.install});
+  };
+  const nextOptionLabel=(opts)=>{const used=new Set((opts||[]).map(o=>o.label));for(let i=0;i<26;i++){const l=String.fromCharCode(65+i);if(!used.has(l))return l;}return String((opts||[]).length+1);};
+  const addOption=()=>{
+    const seed=d.options[Math.min(activeOptIdx,d.options.length-1)]||d.options[0];
+    const opt=newOption(nextOptionLabel(d.options),seed);
+    setDWithArchive({...d,options:[...d.options,opt]});
+    setActiveOptIdx(d.options.length);
+  };
+  const removeOption=(idx)=>{
+    if(d.options.length<=1){alert(d.lang==='nl'?'Er moet minimaal 1 optie overblijven.':'At least 1 option must remain.');return;}
+    const opt=d.options[idx];
+    if(!confirm((d.lang==='nl'?'"':'"')+(t(opt.title,d.lang)||opt.label)+(d.lang==='nl'?'" verwijderen?':'" — remove this option?')))return;
+    const opts=d.options.filter((_,i)=>i!==idx);
+    setDWithArchive({...d,options:opts});
+    setActiveOptIdx(ai=>Math.min(ai,opts.length-1));
+  };
+  const renameOption=(idx,val)=>{
+    const opts=[...d.options];const o=opts[idx].title||{nl:'',en:''};const nn=typeof o==='string'?{nl:o,en:o}:{...o};nn[d.lang]=val;opts[idx]={...opts[idx],title:nn};
+    setDWithArchive({...d,options:opts});
+  };
 
   const handlePdf=()=>{exportPDF(d,setDWithArchive);archiveLogExport(d);};
 
@@ -3999,9 +4130,31 @@ function App(){
           <button className="btn btn-g btn-sm" onClick={()=>bumpVersion(d._archiveId)}>Nieuwe versie</button>
         </div>
         {tab==='project'&&<ProjectTab data={d} set={setDWithArchive}/>}
-        {tab==='scope'&&<ScopeTab data={d} set={setDWithArchive}/>}
-        {tab==='budget'&&<BudgetTab data={d} set={setDWithArchive}/>}
-        {tab==='planning'&&<PlanningTab data={d} set={setDWithArchive}/>}
+        {(tab==='scope'||tab==='budget')&&(()=>{
+          const optIdx=(d.multiOption&&d.options&&d.options.length)?Math.min(activeOptIdx,d.options.length-1):null;
+          return <div className="card" style={{padding:'12px 16px',marginBottom:16}}>
+            {optIdx==null?
+              <button className="btn btn-sm btn-g" onClick={enableMultiOption}>+ {d.lang==='nl'?'Meerdere opties (A/B) toevoegen':'Add multiple options (A/B)'}</button>
+            :<div className="flex g8" style={{alignItems:'center',flexWrap:'wrap'}}>
+              <span className="sm muted">{d.lang==='nl'?'Optie:':'Option:'}</span>
+              {d.options.map((opt,i)=>{
+                const isActive=i===optIdx;
+                return <div key={opt.id} onClick={()=>!isActive&&setActiveOptIdx(i)} className="flex g6" style={{alignItems:'center',cursor:isActive?'default':'pointer',background:isActive?'var(--teal-dark)':'#fff',border:'1px solid '+(isActive?'var(--teal-dark)':'#d0d0ce'),borderRadius:6,padding:'4px 8px'}}>
+                  {isActive?
+                    <input value={t(opt.title,d.lang)} onChange={e=>renameOption(i,e.target.value)} style={{border:0,background:'transparent',fontSize:13,fontWeight:600,width:130,color:'#fff',padding:0}}/>
+                    :<span style={{fontSize:13,fontWeight:600,color:'#071412'}}>{t(opt.title,d.lang)||opt.label}</span>}
+                  <span className="sm" style={{fontSize:11,color:isActive?'rgba(255,255,255,.7)':'#999'}}>{fmtE(calcTotals(opt).grandClient)}</span>
+                  {d.options.length>1&&<button onClick={e=>{e.stopPropagation();removeOption(i);}} style={{border:0,background:'transparent',color:isActive?'#fff':'#999',cursor:'pointer',fontSize:14,padding:0,marginLeft:2}}>×</button>}
+                </div>;
+              })}
+              <button className="btn btn-sm btn-g" onClick={addOption}>+ {d.lang==='nl'?'Optie':'Option'}</button>
+              <button className="btn btn-sm btn-g" style={{marginLeft:'auto'}} onClick={disableMultiOption}>{d.lang==='nl'?'Terug naar 1 optie':'Back to single option'}</button>
+            </div>}
+          </div>;
+        })()}
+        {tab==='scope'&&(()=>{const optIdx=(d.multiOption&&d.options&&d.options.length)?Math.min(activeOptIdx,d.options.length-1):null;const[sd,ss]=optIdx!=null?scopedForOption(optIdx):[d,setDWithArchive];return <ScopeTab data={sd} set={ss}/>;})()}
+        {tab==='budget'&&(()=>{const optIdx=(d.multiOption&&d.options&&d.options.length)?Math.min(activeOptIdx,d.options.length-1):null;const[sd,ss]=optIdx!=null?scopedForOption(optIdx):[d,setDWithArchive];return <BudgetTab data={sd} set={ss}/>;})()}
+        {tab==='planning'&&(()=>{const hasOpts=d.multiOption&&d.options&&d.options.length;const[sd,ss]=hasOpts?scopedForOption(0):[d,setDWithArchive];return <>{hasOpts&&<p className="sm muted mb16">{d.lang==='nl'?'De planning is gedeeld en volgt Optie '+(d.options[0].label)+'.':'The timeline is shared and follows Option '+(d.options[0].label)+'.'}</p>}<PlanningTab data={sd} set={ss}/></>;})()}
         {tab==='payment'&&<PaymentTab data={d} set={setDWithArchive}/>}
         {tab==='annexes'&&<AnnexesTab data={d} set={setDWithArchive}/>}
         {tab==='preview'&&<PreviewTab data={d}/>}
