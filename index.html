@@ -142,7 +142,7 @@ function calcInstall(d){
   const empty={client:0,cost:0,labourC:0,labourCost:0,coord:0,beClient:0,beCost:0,sb:0,cont:0,persons:0,maxWD:0,minWDfail:false};
   if(!x.enabled)return empty;
   const P=INSTALL_RATES, RC=INSTALL_RESCOST;
-  let labourC=0,labourCost=0,persons=0,maxWD=0,anyTI=false;
+  let labourC=0,labourCost=0,persons=0,maxWD=0,anyTI=false,crewSbDays=0,crewPdDays=0;
   (x.crew||[]).forEach(r=>{
     persons++;
     const dp=r.role==='lead'?P.lead:P.crew;
@@ -152,11 +152,16 @@ function calcInstall(d){
     labourCost+= (wd+td)*dc + hn*(dc/2) + ot*(dc/8);
     if(wd>maxWD)maxWD=wd;
     if(td>0)anyTI=true;
+    // Per-person standby/per-diem days, filled in via the crew calendar (paintDay). Both
+    // default to 0 and are additive on top of the manual sbDays/pdDays fields below, so
+    // quotes that never use the calendar compute exactly as before.
+    crewSbDays+=+r.sb||0;
+    crewPdDays+=+r.pd||0;
   });
   const coord=x.coordOn!==false?labourC*((+x.coordPct||0)/100):0;
   const flight=+x.flight||0, visa=+x.visa||0;
   const hotel=(+x.hotelN||0)*(+x.hotelP||0)*(+x.hotelR||0);
-  const perdiem=(+x.pdRate||0)*(+x.pdDays||0);
+  const perdiem=(+x.pdRate||0)*((+x.pdDays||0)+crewPdDays);
   const kmP=(+x.kmNL||0)*P.kmPrice, kmC=(+x.kmNL||0)*P.kmCost;
   const book=x.bookOn!==false?P.book:0;
   const transP=x.transMode==='cost'?(+x.transCost||0):P.trans;
@@ -165,11 +170,11 @@ function calcInstall(d){
   const co2=+x.co2||0, co2P=x.co2bill?co2:0;
   const beClient=flight+visa+hotel+perdiem+kmP+book+transP+park+co2P;
   const beCost  =flight+visa+hotel+perdiem+kmC+transC+park+co2;
-  const sb=(+x.sbDays||0)*(+x.sbRate||0);
+  const sb=((+x.sbDays||0)+crewSbDays)*(+x.sbRate||0);
   const cont=(flight+visa+hotel+park+co2)*((+x.conPct||0)/100);
   const client=labourC+coord+beClient+sb+cont;
   const cost=labourCost+beCost+sb;
-  return {client,cost,labourC,labourCost,coord,beClient,beCost,sb,cont,persons,maxWD,
+  return {client,cost,labourC,labourCost,coord,beClient,beCost,sb,cont,persons,maxWD,crewSbDays,crewPdDays,
     minWDfail:(anyTI&&maxWD>0&&maxWD<2)};
 }
 
@@ -1883,6 +1888,39 @@ function BudgetTab({data:d,set}){
   const addInstCrew=()=>upInst('crew',[...((d.install||{}).crew||[]),{id:uid(),role:'crew',res:'L1',custom:0,wd:0,td:0,hn:0,ot:0}]);
   const rmInstCrew=i=>upInst('crew',((d.install||{}).crew||[]).filter((_,x)=>x!==i));
 
+  // ── Crew calendar: click-to-paint reis/werkdag/halve werkdag/standby per persoon per dag.
+  // r.cal stores the raw day→type marks (so re-opening the calendar shows what was painted);
+  // wd/td/sb/pd on the row are recomputed from r.cal on every paint, so calcInstall and the
+  // rest of the app just read plain numbers as before — nothing else needs to know the
+  // calendar exists. A row with no r.cal entries behaves exactly like today (manual wd/td).
+  const CAL_TYPES={travel:{label:L==='nl'?'Reis':'Travel',color:'var(--yellow)'},work:{label:L==='nl'?'Werkdag':'Work day',color:'var(--teal-dark)'},halfwork:{label:L==='nl'?'Halve werkdag':'Half work day',color:'var(--green)'},standby:{label:L==='nl'?'Standby':'Standby',color:'var(--mid-grey)'}};
+  const[calOpen,setCalOpen]=useState(false);
+  const[calPaint,setCalPaint]=useState('work');
+  const[calStart,setCalStart]=useState(()=>d.project.date||new Date().toISOString().slice(0,10));
+  const[calDays,setCalDays]=useState(10);
+  const deriveFromCal=(cal)=>{
+    let wd=0,td=0,sb=0,pd=0;
+    Object.values(cal||{}).forEach(ty=>{
+      if(ty==='work'){wd+=1;pd+=1;}
+      else if(ty==='halfwork'){wd+=0.5;pd+=1;}
+      else if(ty==='travel'){td+=1;pd+=1;}
+      else if(ty==='standby'){sb+=1;pd+=1;}
+    });
+    return{wd,td,sb,pd};
+  };
+  const paintDay=(ri,dateISO)=>{
+    const c=[...((d.install||{}).crew||[])];
+    const r=c[ri];
+    const cal={...(r.cal||{})};
+    if(!calPaint)delete cal[dateISO];else cal[dateISO]=calPaint;
+    c[ri]={...r,cal,...deriveFromCal(cal)};
+    upInst('crew',c);
+  };
+  const clearCal=(ri)=>{const c=[...((d.install||{}).crew||[])];c[ri]={...c[ri],cal:{}};upInst('crew',c);};
+  // Build ISO date strings from local Y/M/D components — not toISOString(), which converts to
+  // UTC and can silently shift the date by a day depending on the browser's timezone.
+  const calDateList=(()=>{const out=[];const base=new Date(calStart+'T00:00:00');for(let i=0;i<calDays;i++){const dt=new Date(base);dt.setDate(dt.getDate()+i);const y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,'0'),dd=String(dt.getDate()).padStart(2,'0');out.push(y+'-'+m+'-'+dd);}return out;})();
+
   // Bouwblokken-bibliotheek
   const[libType,setLibType]=useState(null); // 'ots' | 'custom' | 'sub' → insert-modus
   const saveToLib=(type,item)=>{const nm=window.prompt('Naam voor dit bouwblok in de bibliotheek:',item.desc||item.showAs||'');if(nm===null)return;if(!nm.trim())return;const {id,...payload}=item;addLibraryBlock({type,name:nm.trim(),payload});alert('Opgeslagen in de bibliotheek. Voeg later in via “Uit bibliotheek”.');};
@@ -2061,8 +2099,8 @@ function BudgetTab({data:d,set}){
                 <td><select value={r.res} onChange={e=>upInstCrew(i,'res',e.target.value)}>
                   {Object.keys(INST_RES).map(k=><option key={k} value={k}>{INST_RES[k]}</option>)}</select>
                   {r.res==='custom'&&<input type="number" value={r.custom||''} placeholder={L==='nl'?'kost/dag':'cost/day'} onChange={e=>upInstCrew(i,'custom',parseFloat(e.target.value)||0)} style={{marginTop:4}}/>}</td>
-                <td><input type="number" value={r.wd||''} onChange={e=>upInstCrew(i,'wd',parseFloat(e.target.value)||0)}/></td>
-                <td><input type="number" value={r.td||''} onChange={e=>upInstCrew(i,'td',parseFloat(e.target.value)||0)}/></td>
+                <td><input type="number" value={r.wd||''} disabled={!!(r.cal&&Object.keys(r.cal).length)} onChange={e=>upInstCrew(i,'wd',parseFloat(e.target.value)||0)}/></td>
+                <td><input type="number" value={r.td||''} disabled={!!(r.cal&&Object.keys(r.cal).length)} onChange={e=>upInstCrew(i,'td',parseFloat(e.target.value)||0)}/></td>
                 <td><input type="number" value={r.hn||''} onChange={e=>upInstCrew(i,'hn',parseFloat(e.target.value)||0)}/></td>
                 <td><input type="number" value={r.ot||''} onChange={e=>upInstCrew(i,'ot',parseFloat(e.target.value)||0)}/></td>
                 <td className="tr mono">{fmt(rc)}</td>
@@ -2072,7 +2110,40 @@ function BudgetTab({data:d,set}){
             })}
           </tbody>
         </table></div>
-        <button className="btn btn-sm btn-g mt16" onClick={addInstCrew}>{L==='nl'?'+ persoon':'+ person'}</button>
+        <div className="flex g8" style={{alignItems:'center',flexWrap:'wrap',marginTop:16}}>
+          <button className="btn btn-sm btn-g" onClick={addInstCrew}>{L==='nl'?'+ persoon':'+ person'}</button>
+          <button className="btn btn-sm btn-g" onClick={()=>setCalOpen(o=>!o)}>{calOpen?(L==='nl'?'Kalender verbergen':'Hide calendar'):(L==='nl'?'📅 Kalender: reis/werk/standby per dag':'📅 Calendar: travel/work/standby per day')}</button>
+        </div>
+        {calOpen&&<div style={{marginTop:14,padding:14,background:'var(--warm-grey)',borderRadius:6}}>
+          <div className="flex g8" style={{alignItems:'center',flexWrap:'wrap',marginBottom:10}}>
+            <div className="fg" style={{width:160,marginBottom:0}}><label className="sm muted">{L==='nl'?'Startdatum':'Start date'}</label><input type="date" value={calStart} onChange={e=>setCalStart(e.target.value)}/></div>
+            <div className="fg" style={{width:100,marginBottom:0}}><label className="sm muted">{L==='nl'?'Aantal dagen':'Days shown'}</label><input type="number" min={1} max={31} value={calDays} onChange={e=>setCalDays(Math.max(1,Math.min(31,parseInt(e.target.value)||1)))}/></div>
+          </div>
+          <div className="sm muted" style={{marginBottom:6}}>{L==='nl'?'Kies wat je klikt aanmerkt als:':'Choose what a click marks a day as:'}</div>
+          <div className="flex g8" style={{marginBottom:14,flexWrap:'wrap'}}>
+            {Object.keys(CAL_TYPES).map(ty=><button key={ty} onClick={()=>setCalPaint(ty)} className="btn btn-sm" style={{border:'2px solid '+CAL_TYPES[ty].color,background:calPaint===ty?CAL_TYPES[ty].color:'#fff',color:calPaint===ty?'#fff':CAL_TYPES[ty].color}}>{CAL_TYPES[ty].label}</button>)}
+            <button onClick={()=>setCalPaint(null)} className="btn btn-sm" style={{border:'2px solid #d0d0ce',background:calPaint===null?'#d0d0ce':'#fff'}}>{L==='nl'?'Wissen':'Erase'}</button>
+          </div>
+          <div style={{overflowX:'auto'}}>
+            <table style={{borderCollapse:'collapse',width:'100%'}}>
+              <thead><tr>
+                <th style={{textAlign:'left',padding:'4px 8px',fontSize:11,color:'#999'}}>{L==='nl'?'Persoon':'Person'}</th>
+                {calDateList.map(dISO=><th key={dISO} style={{padding:'2px 3px',fontSize:10,color:'#999',fontWeight:500}}>{new Date(dISO+'T00:00:00').toLocaleDateString(L==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'short'})}</th>)}
+              </tr></thead>
+              <tbody>
+                {((d.install||{}).crew||[]).map((r,ri)=><tr key={r.id||ri}>
+                  <td style={{padding:'4px 8px',fontSize:12,fontWeight:600,whiteSpace:'nowrap'}}>{INST_RES[r.res]||r.res||('#'+(ri+1))}
+                    {r.cal&&Object.keys(r.cal).length>0&&<button onClick={()=>clearCal(ri)} title={L==='nl'?'Kalender voor deze persoon wissen':'Clear this person’s calendar'} style={{marginLeft:6,border:0,background:'transparent',color:'#b3261e',cursor:'pointer',fontSize:11}}>{L==='nl'?'wis':'clear'}</button>}
+                  </td>
+                  {calDateList.map(dISO=>{const ty=(r.cal||{})[dISO];return <td key={dISO} style={{padding:2}}>
+                    <div onClick={()=>paintDay(ri,dISO)} title={ty?CAL_TYPES[ty].label:''} style={{width:22,height:22,borderRadius:4,cursor:'pointer',background:ty?CAL_TYPES[ty].color:'#fff',border:'1px solid '+(ty?CAL_TYPES[ty].color:'#d0d0ce')}}/>
+                  </td>;})}
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+          <p className="sm muted" style={{marginTop:10}}>{L==='nl'?'Werkdg/Reisdg hierboven worden automatisch ingevuld per persoon. Standby-dagen en per diem-dagen tellen automatisch mee bovenaan bij "Standby" en "Reis en verblijf".':'Work/Travel days above fill in automatically per person. Standby days and per-diem days are automatically added to the "Standby" and "Travel & expenses" totals below.'}</p>
+        </div>}
 
         <div className="flex g8" style={{alignItems:'center',marginTop:14}}>
           <input type="checkbox" checked={(d.install||{}).coordOn!==false} onChange={e=>upInst('coordOn',e.target.checked)} style={{width:14,height:14}}/>
@@ -2096,7 +2167,8 @@ function BudgetTab({data:d,set}){
         </div>
         <div className="row">
           <div className="fg"><label>{L==='nl'?'Per diem, tarief p.p./dag':'Per diem, rate pp/day'}</label><input type="number" value={(d.install||{}).pdRate||''} onChange={e=>upInst('pdRate',parseFloat(e.target.value)||0)}/></div>
-          <div className="fg"><label>{L==='nl'?'Per diem, persoon-dagen':'Per diem, person-days'}</label><input type="number" value={(d.install||{}).pdDays||''} onChange={e=>upInst('pdDays',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"><label>{L==='nl'?'Per diem, persoon-dagen':'Per diem, person-days'}</label><input type="number" value={(d.install||{}).pdDays||''} onChange={e=>upInst('pdDays',parseFloat(e.target.value)||0)}/>
+            {inst.crewPdDays>0&&<div className="sm muted" style={{marginTop:2}}>{(L==='nl'?'+ ':'+ ')+inst.crewPdDays+(L==='nl'?' via kalender':' via calendar')}</div>}</div>
         </div>
         <div className="row">
           <div className="fg"><label>{L==='nl'?'Parkeren / city access (kost)':'Parking / city access (cost)'}</label><input type="number" value={(d.install||{}).park||''} onChange={e=>upInst('park',parseFloat(e.target.value)||0)}/></div>
@@ -2119,7 +2191,8 @@ function BudgetTab({data:d,set}){
 
         <div className="card-h" style={{marginTop:20,fontSize:13}}>{L==='nl'?'Standby en risico':'Standby & risk'}</div>
         <div className="row">
-          <div className="fg"><label>{L==='nl'?'Standby-dagen (klantvertraging)':'Standby days (client delay)'}</label><input type="number" value={(d.install||{}).sbDays||''} onChange={e=>upInst('sbDays',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"><label>{L==='nl'?'Standby-dagen (klantvertraging)':'Standby days (client delay)'}</label><input type="number" value={(d.install||{}).sbDays||''} onChange={e=>upInst('sbDays',parseFloat(e.target.value)||0)}/>
+            {inst.crewSbDays>0&&<div className="sm muted" style={{marginTop:2}}>{(L==='nl'?'+ ':'+ ')+inst.crewSbDays+(L==='nl'?' via kalender':' via calendar')}</div>}</div>
           <div className="fg"><label>{L==='nl'?'Standby-tarief/dag':'Standby rate/day'}</label><input type="number" value={(d.install||{}).sbRate!=null?d.install.sbRate:600} onChange={e=>upInst('sbRate',parseFloat(e.target.value)||0)}/></div>
         </div>
         <div className="row">
