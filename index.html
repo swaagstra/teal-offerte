@@ -130,19 +130,54 @@ function getHandlingPct(v){for(const b of HANDLING_BRACKETS)if(v<=b.max)return b
 const COORD_MARGIN=.12;
 
 // ── Installatie / reizen ──
-const INSTALL_RATES={lead:900,crew:600,travelIntl:550,halfNL:275,ot:130,kmPrice:.50,kmCost:.23,book:250,trans:250};
+const INSTALL_RATES={lead:900,crew:600,travelIntl:550,halfNL:275,ot:130,km:.23,trans:250};
 const INSTALL_RESCOST={erik:640,L0:160,L1:200,L2:220,L3:240}; // dagkost (8u)
 const INST_RES={erik:'Erik (€80/u)',L0:'L0 €20',L1:'L1 €25',L2:'L2 €27,50',L3:'L3 €30',custom:'Eigen kost'};
+// Per-diem tiers (per persoon per dag weg): standaard stad vs dure stad.
+const PERDIEM_STD=75, PERDIEM_CITY=120;
+// Bestemmingen met richtprijzen: retourvlucht per persoon vanaf Amsterdam, hotel per nacht,
+// en of het een dure stad is (→ per-diem-tier). Dit zijn RICHTBEDRAGEN die het formulier
+// vooraf invullen; ze zijn per offerte te overschrijven met de echte prijs. 0 = geen vlucht
+// (over de weg / binnenland). Geen live prijzen — een offline tool kan die niet ophalen.
+const DESTINATIONS=[
+  {key:'nl',   label:'Nederland',              flight:0,   hotel:120, tier:'std'},
+  {key:'bnl',  label:'België / Luxemburg',     flight:0,   hotel:140, tier:'std'},
+  {key:'de',   label:'Duitsland',              flight:0,   hotel:130, tier:'std'},
+  {key:'par',  label:'Parijs',                 flight:130, hotel:210, tier:'city'},
+  {key:'lon',  label:'Londen',                 flight:120, hotel:230, tier:'city'},
+  {key:'mil',  label:'Milaan / Rome',          flight:150, hotel:180, tier:'std'},
+  {key:'esp',  label:'Barcelona / Madrid',     flight:140, hotel:160, tier:'std'},
+  {key:'sca',  label:'Kopenhagen / Stockholm', flight:160, hotel:200, tier:'city'},
+  {key:'swi',  label:'Zürich / Genève',        flight:170, hotel:260, tier:'city'},
+  {key:'eu',   label:'Overig Europa',          flight:180, hotel:170, tier:'std'},
+  {key:'uae',  label:'Dubai / Golfstaten',     flight:600, hotel:190, tier:'city'},
+  {key:'use',  label:'VS — oostkust',          flight:650, hotel:290, tier:'city'},
+  {key:'usw',  label:'VS — westkust',          flight:750, hotel:320, tier:'city'},
+  {key:'asia', label:'Zuidoost-Azië',          flight:800, hotel:200, tier:'city'},
+  {key:'jp',   label:'Japan / Hongkong',       flight:850, hotel:230, tier:'city'},
+  {key:'other',label:'Anders / handmatig',     flight:0,   hotel:0,   tier:'std'},
+];
+const DEST_MAP=Object.fromEntries(DESTINATIONS.map(x=>[x.key,x]));
 const INSTALL_DEFAULT={enabled:false,crew:[],coordOn:true,coordPct:10,
-  flight:0,visa:0,hotelN:0,hotelP:0,hotelR:1,pdRate:0,pdDays:0,kmNL:0,
-  bookOn:true,transMode:'flat',transCost:0,park:0,co2:0,co2bill:false,
-  sbDays:0,sbRate:600,conPct:10};
+  dest:'nl',flight:0,visa:0,
+  hotelPN:'',hotelP:0,
+  pdTier:'std',pdRateStd:PERDIEM_STD,pdRateCity:PERDIEM_CITY,pdDays:'',
+  kmNL:0,transMode:'flat',transCost:0,park:0,co2:0,
+  sbDays:'',sbRate:600,conPct:10};
+// Value helper: an auto-fillable field. Empty string / null / NaN → use the calendar-derived
+// fallback; a real number → manual override. Lets one input show the auto value yet be typed over.
+function _instNum(v,fallback){return (v!==''&&v!=null&&!isNaN(+v))?+v:fallback;}
 function calcInstall(d){
   const x=d.install||{};
-  const empty={client:0,cost:0,labourC:0,labourCost:0,coord:0,beClient:0,beCost:0,sb:0,cont:0,persons:0,maxWD:0,minWDfail:false};
+  const empty={client:0,cost:0,labourC:0,labourCost:0,coord:0,beClient:0,beCost:0,sb:0,cont:0,persons:0,maxWD:0,minWDfail:false,
+    hotelPN:0,hotelPNcal:0,pdDays:0,pdDaysCal:0,sbDays:0,sbDaysCal:0,pdRate:0};
   if(!x.enabled)return empty;
   const P=INSTALL_RATES, RC=INSTALL_RESCOST;
-  let labourC=0,labourCost=0,persons=0,maxWD=0,anyTI=false,crewSbDays=0,crewPdDays=0;
+  let labourC=0,labourCost=0,persons=0,maxWD=0,anyTI=false;
+  // Everything time-based is derived straight from each person's painted calendar — the single
+  // source of truth. hotelPNcal = person-nights (nights between first & last day away, summed),
+  // pdDaysCal = person-days away (every painted day), sbDaysCal = painted standby days.
+  let hotelPNcal=0,pdDaysCal=0,sbDaysCal=0;
   (x.crew||[]).forEach(r=>{
     persons++;
     const dp=r.role==='lead'?P.lead:P.crew;
@@ -152,39 +187,42 @@ function calcInstall(d){
     labourCost+= (wd+td)*dc + hn*(dc/2) + ot*(dc/8);
     if(wd>maxWD)maxWD=wd;
     if(td>0)anyTI=true;
-    // Per-person standby/per-diem days, filled in via the crew calendar (paintDay). Both
-    // default to 0 and are additive on top of the manual sbDays/pdDays fields below, so
-    // quotes that never use the calendar compute exactly as before.
-    crewSbDays+=+r.sb||0;
-    crewPdDays+=+r.pd||0;
+    const cal=r.cal||{};const dates=Object.keys(cal).sort();
+    if(dates.length){
+      pdDaysCal+=dates.length;
+      hotelPNcal+=Math.max(0,Math.round((new Date(dates[dates.length-1]+'T00:00:00')-new Date(dates[0]+'T00:00:00'))/86400000));
+      dates.forEach(dd=>{if(cal[dd]==='standby')sbDaysCal++;});
+    }
   });
   const coord=x.coordOn!==false?labourC*((+x.coordPct||0)/100):0;
+  // Reis & verblijf: alles tegen kostprijs doorbelast; één contingency-% is de enige opslag.
   const flight=+x.flight||0, visa=+x.visa||0;
-  const hotel=(+x.hotelN||0)*(+x.hotelP||0)*(+x.hotelR||0);
-  const perdiem=(+x.pdRate||0)*((+x.pdDays||0)+crewPdDays);
-  const kmP=(+x.kmNL||0)*P.kmPrice, kmC=(+x.kmNL||0)*P.kmCost;
-  const book=x.bookOn!==false?P.book:0;
-  const transP=x.transMode==='cost'?(+x.transCost||0):P.trans;
-  const transC=+x.transCost||0;
-  const park=+x.park||0;
-  const co2=+x.co2||0, co2P=x.co2bill?co2:0;
-  const beClient=flight+visa+hotel+perdiem+kmP+book+transP+park+co2P;
-  const beCost  =flight+visa+hotel+perdiem+kmC+transC+park+co2;
-  const sb=((+x.sbDays||0)+crewSbDays)*(+x.sbRate||0);
-  const cont=(flight+visa+hotel+park+co2)*((+x.conPct||0)/100);
-  const client=labourC+coord+beClient+sb+cont;
+  const hotelPN=_instNum(x.hotelPN,hotelPNcal);
+  const hotel=hotelPN*(+x.hotelP||0);
+  const pdRate=x.pdTier==='city'?(+x.pdRateCity||0):(+x.pdRateStd||0);
+  const pdDays=_instNum(x.pdDays,pdDaysCal);
+  const perdiem=pdRate*pdDays;
+  const km=(+x.kmNL||0)*P.km;
+  const trans=x.transMode==='cost'?(+x.transCost||0):P.trans;
+  const park=+x.park||0, co2=+x.co2||0;
+  const travelBase=flight+visa+hotel+perdiem+km+trans+park+co2;
+  const cont=travelBase*((+x.conPct||0)/100);
+  const beClient=travelBase+cont;   // klantprijs reis/verblijf = kosten + buffer
+  const beCost  =travelBase;        // kost = zuivere doorbelasting (geen km/transfer-marge meer)
+  const sbDays=_instNum(x.sbDays,sbDaysCal);
+  const sb=sbDays*(+x.sbRate||0);
+  const client=labourC+coord+beClient+sb;
   const cost=labourCost+beCost+sb;
-  // Client-facing breakdown: a few honest lump sums (labour / travel / lodging / standby)
-  // instead of one "Installatie en reizen" line — no per-day or per-person detail. The four
-  // groups sum exactly to `client` (contingency is folded into travel, since it is a buffer
-  // computed on the pass-through travel costs).
+  // Client-facing breakdown: four honest lump sums that sum exactly to `client`. Contingency is
+  // folded into travel (it is the buffer on the pass-through travel costs).
   const breakdown={
     labour:labourC+coord,
-    travel:flight+visa+kmP+transP+book+park+co2P+cont,
+    travel:flight+visa+km+trans+park+co2+cont,
     lodging:hotel+perdiem,
     standby:sb,
   };
-  return {client,cost,labourC,labourCost,coord,beClient,beCost,sb,cont,persons,maxWD,crewSbDays,crewPdDays,breakdown,
+  return {client,cost,labourC,labourCost,coord,beClient,beCost,sb,cont,persons,maxWD,
+    hotelPN,hotelPNcal,pdDays,pdDaysCal,sbDays,sbDaysCal,pdRate,breakdown,
     minWDfail:(anyTI&&maxWD>0&&maxWD<2)};
 }
 
@@ -531,9 +569,34 @@ function defaultDelivery(){
     en:'This document hands over the completed work described below. Each item below links to its deliverable, such as drawings, documentation, media or files. If you have any questions about this delivery, please get in touch.'
   }};
 }
+// Convert a legacy install object (hotelN×rooms, flat pdRate, booking fee, km client/cost split)
+// to the new travel model (person-nights, tiered per-diem, single km rate, one contingency %).
+// Detected by the absence of pdTier. Values are preserved best-effort as manual overrides so the
+// quote's numbers stay put; the calendar takes over only where a field was left on auto.
+function migrateInstall(oi){
+  if(!oi||oi.pdTier!==undefined)return oi;
+  const o={...oi};
+  const out={...INSTALL_DEFAULT,...o};
+  const oldPN=(+o.hotelN||0)*(o.hotelR!=null?(+o.hotelR||1):1);
+  out.hotelPN=oldPN>0?oldPN:'';
+  out.pdTier='std';
+  out.pdRateStd=(+o.pdRate>0)?+o.pdRate:PERDIEM_STD;
+  out.pdRateCity=PERDIEM_CITY;
+  out.pdDays=(+o.pdDays>0)?+o.pdDays:'';
+  out.sbDays=(+o.sbDays>0)?+o.sbDays:'';
+  out.dest='other';
+  delete out.hotelN;delete out.hotelR;delete out.pdRate;delete out.bookOn;delete out.co2bill;
+  return out;
+}
 function migrateConds(d){
   if(!d||!d.conditions)return d;
   const c={...d.conditions};let ch=false;
+  if(d.install&&d.install.pdTier===undefined){d={...d,install:migrateInstall(d.install)};ch=true;}
+  if(d.multiOption&&Array.isArray(d.options)){
+    let changed=false;
+    const opts=d.options.map(op=>{if(op&&op.install&&op.install.pdTier===undefined){changed=true;return{...op,install:migrateInstall(op.install)};}return op;});
+    if(changed){d={...d,options:opts};ch=true;}
+  }
   if(!d.annexes){d={...d,annexes:defaultAnnexes()};ch=true;}
   else if(!d.annexes.responsibilities){d={...d,annexes:{...d.annexes,responsibilities:defaultAnnexes().responsibilities}};ch=true;}
   if(d.annexes&&!Array.isArray(d.annexes.custom)){d={...d,annexes:{...d.annexes,custom:[]}};ch=true;}
@@ -1942,8 +2005,14 @@ function BudgetTab({data:d,set}){
   const calStats=(cal)=>{const dates=Object.keys(cal||{}).sort();if(!dates.length)return null;const counts={travel:0,work:0,halfwork:0,standby:0};dates.forEach(dd=>{counts[cal[dd]]=(counts[cal[dd]]||0)+1;});const first=dates[0],last=dates[dates.length-1];return{first,last,nights:Math.max(0,daysBetweenISO(first,last)),counts,awayDays:dates.length};};
   const crewCalSummaries=((d.install||{}).crew||[]).map((r,i)=>({i,label:INST_RES[r.res]||r.res||('#'+(i+1)),stats:calStats(r.cal)})).filter(x=>x.stats);
   const anyCal=crewCalSummaries.length>0;
-  const suggestedHotelNights=crewCalSummaries.reduce((s,x)=>s+x.stats.nights,0); // total person-nights (rooms=1)
-  const applyHotelFromCal=()=>set({...d,install:{...INSTALL_DEFAULT,...(d.install||{}),hotelN:suggestedHotelNights,hotelR:1}});
+  const suggestedHotelNights=crewCalSummaries.reduce((s,x)=>s+x.stats.nights,0); // total person-nights
+  const instPersons=((d.install||{}).crew||[]).length||1;
+  // Pick a destination → pre-fill flight (per-person estimate × persons), hotel price/night and the
+  // per-diem tier from the built-in reference table. 'other' only records the choice, leaving the
+  // manual numbers untouched. All values stay editable afterwards.
+  const applyDest=(key)=>{const D=DEST_MAP[key]||DEST_MAP.other;const base={...INSTALL_DEFAULT,...(d.install||{}),dest:key};
+    if(key!=='other'){base.flight=D.flight*instPersons;base.hotelP=D.hotel;base.pdTier=D.tier;}
+    set({...d,install:base});};
   const calSummaryLine=(x)=>{const s=x.stats,p=[];if(s.counts.work)p.push(s.counts.work+(L==='nl'?' werk':' work'));if(s.counts.halfwork)p.push(s.counts.halfwork+(L==='nl'?' ½ werk':' ½ work'));if(s.counts.travel)p.push(s.counts.travel+(L==='nl'?' reis':' travel'));if(s.counts.standby)p.push(s.counts.standby+(L==='nl'?' standby':' standby'));return fmtCalD(s.first)+'–'+fmtCalD(s.last)+' · '+p.join(' · ')+' · '+s.nights+(L==='nl'?' nacht(en)':' night(s)');};
 
   // Bouwblokken-bibliotheek
@@ -2180,12 +2249,9 @@ function BudgetTab({data:d,set}){
           {anyCal&&<div style={{marginTop:12,padding:'10px 12px',background:'#fff',borderRadius:6,border:'1px solid #e0e0de'}}>
             <div className="sm" style={{fontWeight:600,marginBottom:6}}>{L==='nl'?'Samenvatting per persoon':'Summary per person'}</div>
             {crewCalSummaries.map(x=><div key={x.i} className="sm" style={{color:'#555',marginBottom:3}}><strong style={{color:'#071412'}}>{x.label}</strong> · {calSummaryLine(x)}</div>)}
-            <div className="flex g8" style={{alignItems:'center',flexWrap:'wrap',marginTop:8}}>
-              <span className="sm muted">{L==='nl'?'Hotel: '+suggestedHotelNights+' persoon-nacht(en) totaal':'Hotel: '+suggestedHotelNights+' person-night(s) total'}</span>
-              <button className="btn btn-sm btn-g" onClick={applyHotelFromCal} title={L==='nl'?'Zet hotelnachten op '+suggestedHotelNights+' en kamers op 1 (prijs/nacht vul je zelf)':'Set hotel nights to '+suggestedHotelNights+' and rooms to 1 (you set price/night)'}>{L==='nl'?'→ Overnemen als hotelnachten':'→ Use as hotel nights'}</button>
-            </div>
+            <div className="sm" style={{marginTop:8,color:'#2f6f5e',fontWeight:600}}>{L==='nl'?('Automatisch overgenomen: '+suggestedHotelNights+' hotelnacht(en) · '+inst.pdDaysCal+' per-diem-dag(en) · '+inst.sbDaysCal+' standby-dag(en).'):('Auto-applied: '+suggestedHotelNights+' hotel night(s) · '+inst.pdDaysCal+' per-diem day(s) · '+inst.sbDaysCal+' standby day(s).')}</div>
           </div>}
-          <p className="sm muted" style={{marginTop:10}}>{L==='nl'?'Werkdg/Reisdg worden per persoon automatisch ingevuld. Standby- en per diem-dagen tellen automatisch mee bij "Standby" en "Reis en verblijf" hieronder. Vluchten, km en parkeren vul je zelf in — die kent de kalender niet.':'Work/Travel days fill in automatically per person. Standby and per-diem days are added to "Standby" and "Travel & expenses" below. Flights, km and parking you enter yourself — the calendar can’t know those.'}</p>
+          <p className="sm muted" style={{marginTop:10}}>{L==='nl'?'Werk-, reis-, standby- én per-diem-dagen plus hotelnachten komen automatisch uit de kalender. Kies hieronder een bestemming voor richtprijzen; vluchtprijs, km en parkeren stel je zelf bij.':'Work, travel, standby and per-diem days plus hotel nights come straight from the calendar. Pick a destination below for estimated prices; flight price, km and parking you fine-tune yourself.'}</p>
         </div>}
 
         <div className="flex g8" style={{alignItems:'center',marginTop:14}}>
@@ -2197,52 +2263,50 @@ function BudgetTab({data:d,set}){
 
         <div className="card-h" style={{marginTop:20,fontSize:13}}>{L==='nl'?'Reis en verblijf':'Travel & expenses'}</div>
         <div className="row">
-          <div className="fg"><label>{L==='nl'?'Vluchten totaal (kost)':'Flights total (cost)'} <a href="https://www.google.com/travel/flights" target="_blank" rel="noopener" style={{color:'var(--green)',fontSize:11}}>Google Flights ↗</a></label><input type="number" value={(d.install||{}).flight||''} onChange={e=>upInst('flight',parseFloat(e.target.value)||0)}/></div>
-          <div className="fg"><label>{L==='nl'?'Visum totaal (kost)':'Visa total (cost)'}</label><input type="number" value={(d.install||{}).visa||''} onChange={e=>upInst('visa',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"><label>{L==='nl'?'Bestemming':'Destination'}</label>
+            <select value={(d.install||{}).dest||'nl'} onChange={e=>applyDest(e.target.value)}>
+              {DESTINATIONS.map(D=><option key={D.key} value={D.key}>{D.label}</option>)}</select>
+            <div className="sm muted" style={{marginTop:2}}>{L==='nl'?'Vult vlucht, hotelprijs en per-diem-tier met richtbedragen — pas ze aan naar de echte prijs.':'Pre-fills flight, hotel price and per-diem tier with estimates — adjust to the real price.'}</div></div>
+          <div className="fg"><label>{L==='nl'?'Vluchten totaal (kost)':'Flights total (cost)'} <a href="https://www.google.com/travel/flights" target="_blank" rel="noopener" style={{color:'var(--green)',fontSize:11}}>Google Flights ↗</a></label><input type="number" value={(d.install||{}).flight||''} onChange={e=>upInst('flight',parseFloat(e.target.value)||0)}/>
+            {(()=>{const D=DEST_MAP[(d.install||{}).dest];return D&&D.flight>0?<div className="sm muted" style={{marginTop:2}}>{(L==='nl'?'richtbedrag: ':'estimate: ')+fmtE(D.flight)+' × '+instPersons+(L==='nl'?' pers.':' ppl')}</div>:null;})()}</div>
         </div>
         <div className="row">
-          <div className="fg"><label>{L==='nl'?'Hotel, nachten':'Hotel, nights'}</label><input type="number" value={(d.install||{}).hotelN||''} onChange={e=>upInst('hotelN',parseFloat(e.target.value)||0)}/>
-            {anyCal&&(+(d.install||{}).hotelN||0)!==suggestedHotelNights&&suggestedHotelNights>0&&<div className="sm" style={{marginTop:2}}><a onClick={applyHotelFromCal} style={{color:'var(--green)',cursor:'pointer'}}>{(L==='nl'?'kalender suggereert ':'calendar suggests ')+suggestedHotelNights}</a></div>}</div>
-          <div className="fg"><label>{L==='nl'?'Hotel, prijs/nacht':'Hotel, price/night'}</label><input type="number" value={(d.install||{}).hotelP||''} onChange={e=>upInst('hotelP',parseFloat(e.target.value)||0)}/>
-            {(()=>{const x=d.install||{};const h=(+x.hotelN||0)*(+x.hotelP||0)*(+x.hotelR!=null?+x.hotelR:1);return h>0?<div className="sm muted" style={{marginTop:2}}>= {fmtE(h)}</div>:null;})()}</div>
+          <div className="fg"><label>{L==='nl'?'Hotel, prijs/nacht':'Hotel, price/night'}</label><input type="number" value={(d.install||{}).hotelP||''} onChange={e=>upInst('hotelP',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"><label>{L==='nl'?'Hotelnachten (persoon-nachten)':'Hotel nights (person-nights)'}</label><input type="number" placeholder={String(inst.hotelPNcal)} value={((d.install||{}).hotelPN!==''&&(d.install||{}).hotelPN!=null)?d.install.hotelPN:''} onChange={e=>upInst('hotelPN',e.target.value===''?'':(parseFloat(e.target.value)||0))}/>
+            <div className="sm muted" style={{marginTop:2}}>{(((d.install||{}).hotelPN===''||(d.install||{}).hotelPN==null)?(L==='nl'?'auto uit kalender: ':'auto from calendar: '):(L==='nl'?'handmatig · kalender: ':'manual · calendar: '))+inst.hotelPNcal}{inst.hotelPN*(+(d.install||{}).hotelP||0)>0?' · = '+fmtE(inst.hotelPN*(+(d.install||{}).hotelP||0)):''}</div></div>
         </div>
         <div className="row">
-          <div className="fg"><label>{L==='nl'?'Hotel, kamers':'Hotel, rooms'}</label><input type="number" value={(d.install||{}).hotelR!=null?d.install.hotelR:1} onChange={e=>upInst('hotelR',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"><label>{L==='nl'?'Per diem, stad':'Per diem, city'}</label>
+            <select value={(d.install||{}).pdTier||'std'} onChange={e=>upInst('pdTier',e.target.value)}>
+              <option value="std">{(L==='nl'?'Standaard — ':'Standard — ')+fmtE((d.install||{}).pdRateStd!=null?d.install.pdRateStd:PERDIEM_STD)+'/d'}</option>
+              <option value="city">{(L==='nl'?'Dure stad — ':'Expensive city — ')+fmtE((d.install||{}).pdRateCity!=null?d.install.pdRateCity:PERDIEM_CITY)+'/d'}</option></select>
+            <div className="sm muted" style={{marginTop:4}}>{L==='nl'?'tarief ':'rate '}<input type="number" style={{width:64,display:'inline-block'}} value={((d.install||{}).pdTier==='city'?(d.install||{}).pdRateCity:(d.install||{}).pdRateStd)||''} onChange={e=>upInst((d.install||{}).pdTier==='city'?'pdRateCity':'pdRateStd',parseFloat(e.target.value)||0)}/> {L==='nl'?'/dag':'/day'}</div></div>
+          <div className="fg"><label>{L==='nl'?'Per-diem-dagen (persoon-dagen)':'Per-diem days (person-days)'}</label><input type="number" placeholder={String(inst.pdDaysCal)} value={((d.install||{}).pdDays!==''&&(d.install||{}).pdDays!=null)?d.install.pdDays:''} onChange={e=>upInst('pdDays',e.target.value===''?'':(parseFloat(e.target.value)||0))}/>
+            <div className="sm muted" style={{marginTop:2}}>{(((d.install||{}).pdDays===''||(d.install||{}).pdDays==null)?(L==='nl'?'auto uit kalender: ':'auto from calendar: '):(L==='nl'?'handmatig · kalender: ':'manual · calendar: '))+inst.pdDaysCal}{inst.pdRate*inst.pdDays>0?' · = '+fmtE(inst.pdRate*inst.pdDays):''}</div></div>
+        </div>
+        <div className="row">
           <div className="fg"><label>{L==='nl'?'Reis NL, km retour':'Travel NL, km return'}</label><input type="number" value={(d.install||{}).kmNL||''} onChange={e=>upInst('kmNL',parseFloat(e.target.value)||0)}/>
-            {(+(d.install||{}).kmNL||0)>0&&<div className="sm muted" style={{marginTop:2}}>{'= '+fmtE((+(d.install||{}).kmNL||0)*INSTALL_RATES.kmPrice)+(L==='nl'?' (klant) · kost '+fmtE((+(d.install||{}).kmNL||0)*INSTALL_RATES.kmCost):' (client) · cost '+fmtE((+(d.install||{}).kmNL||0)*INSTALL_RATES.kmCost))}</div>}</div>
-        </div>
-        <div className="row">
-          <div className="fg"><label>{L==='nl'?'Per diem, tarief p.p./dag':'Per diem, rate pp/day'}</label><input type="number" value={(d.install||{}).pdRate||''} onChange={e=>upInst('pdRate',parseFloat(e.target.value)||0)}/></div>
-          <div className="fg"><label>{L==='nl'?'Per diem, persoon-dagen':'Per diem, person-days'}</label><input type="number" value={(d.install||{}).pdDays||''} onChange={e=>upInst('pdDays',parseFloat(e.target.value)||0)}/>
-            {(()=>{const x=d.install||{};const days=(+x.pdDays||0)+inst.crewPdDays;const pd=days*(+x.pdRate||0);return <div className="sm muted" style={{marginTop:2}}>{inst.crewPdDays>0?(L==='nl'?'+ '+inst.crewPdDays+' via kalender · ':'+ '+inst.crewPdDays+' via calendar · '):''}{pd>0?'= '+fmtE(pd):''}</div>;})()}</div>
-        </div>
-        <div className="row">
+            {(+(d.install||{}).kmNL||0)>0&&<div className="sm muted" style={{marginTop:2}}>{'= '+fmtE((+(d.install||{}).kmNL||0)*INSTALL_RATES.km)+' (€ '+INSTALL_RATES.km.toFixed(2).replace('.',',')+(L==='nl'?'/km, doorbelast)':'/km, at cost)')}</div>}</div>
           <div className="fg"><label>{L==='nl'?'Parkeren / city access (kost)':'Parking / city access (cost)'}</label><input type="number" value={(d.install||{}).park||''} onChange={e=>upInst('park',parseFloat(e.target.value)||0)}/></div>
+        </div>
+        <div className="row">
           <div className="fg"><label>{L==='nl'?'Transfers':'Transfers'}</label>
             <select value={(d.install||{}).transMode||'flat'} onChange={e=>upInst('transMode',e.target.value)}>
               <option value="flat">{L==='nl'?'Vast €250 / reis':'Flat €250 / trip'}</option>
-              <option value="cost">{L==='nl'?'Werkelijke kost':'At cost'}</option></select></div>
-        </div>
-        <div className="row">
-          <div className="fg"><label>{L==='nl'?'Transfers, werkelijke kost':'Transfers, actual cost'}</label><input type="number" value={(d.install||{}).transCost||''} onChange={e=>upInst('transCost',parseFloat(e.target.value)||0)}/></div>
+              <option value="cost">{L==='nl'?'Werkelijke kost':'At cost'}</option></select>
+            {(d.install||{}).transMode==='cost'&&<input type="number" style={{marginTop:6}} placeholder={L==='nl'?'werkelijke kost':'actual cost'} value={(d.install||{}).transCost||''} onChange={e=>upInst('transCost',parseFloat(e.target.value)||0)}/>}</div>
           <div className="fg"><label>{L==='nl'?'CO2-compensatie (kost)':'CO2 offset (cost)'}</label><input type="number" value={(d.install||{}).co2||''} onChange={e=>upInst('co2',parseFloat(e.target.value)||0)}/></div>
         </div>
-        <div className="flex g8" style={{alignItems:'center',flexWrap:'wrap'}}>
-          <input type="checkbox" checked={(d.install||{}).bookOn!==false} onChange={e=>upInst('bookOn',e.target.checked)} style={{width:14,height:14}}/>
-          <span className="sm">{L==='nl'?'Booking fee €250 (eenmalig per reis)':'Booking fee €250 (once per trip)'}</span>
-          <span style={{display:'inline-block',width:24}}/>
-          <input type="checkbox" checked={!!(d.install||{}).co2bill} onChange={e=>upInst('co2bill',e.target.checked)} style={{width:14,height:14}}/>
-          <span className="sm">{L==='nl'?'CO2 doorbelasten':'Bill CO2 to client'}</span>
-        </div>
 
-        <div className="card-h" style={{marginTop:20,fontSize:13}}>{L==='nl'?'Standby en risico':'Standby & risk'}</div>
+        <div className="card-h" style={{marginTop:20,fontSize:13}}>{L==='nl'?'Standby en buffer':'Standby & buffer'}</div>
         <div className="row">
-          <div className="fg"><label title={L==='nl'?'Aanwezig maar niet actief werkend (bijv. wachten op de klant, of tussen installatie en deïnstallatie blijven). Per diem loopt door; zodra je werkt maak je er een (halve) werkdag van.':'Present but not actively working (e.g. waiting on the client, or staying between install and de-install). Per diem continues; the moment you work it becomes a (half) work day.'}>{L==='nl'?'Standby-dagen (aanwezig, niet actief)':'Standby days (present, not working)'}</label><input type="number" value={(d.install||{}).sbDays||''} onChange={e=>upInst('sbDays',parseFloat(e.target.value)||0)}/>
-            {(()=>{const x=d.install||{};const days=(+x.sbDays||0)+inst.crewSbDays;const sb=days*(+x.sbRate!=null?+x.sbRate:600);return <div className="sm muted" style={{marginTop:2}}>{inst.crewSbDays>0?(L==='nl'?'+ '+inst.crewSbDays+' via kalender · ':'+ '+inst.crewSbDays+' via calendar · '):''}{sb>0?'= '+fmtE(sb):''}</div>;})()}</div>
+          <div className="fg"><label title={L==='nl'?'Aanwezig maar niet actief werkend (bijv. wachten op de klant, of tussen installatie en deïnstallatie blijven). Per diem loopt door; zodra je werkt maak je er een (halve) werkdag van.':'Present but not actively working (e.g. waiting on the client, or staying between install and de-install). Per diem continues; the moment you work it becomes a (half) work day.'}>{L==='nl'?'Standby-dagen (aanwezig, niet actief)':'Standby days (present, not working)'}</label><input type="number" placeholder={String(inst.sbDaysCal)} value={((d.install||{}).sbDays!==''&&(d.install||{}).sbDays!=null)?d.install.sbDays:''} onChange={e=>upInst('sbDays',e.target.value===''?'':(parseFloat(e.target.value)||0))}/>
+            <div className="sm muted" style={{marginTop:2}}>{(((d.install||{}).sbDays===''||(d.install||{}).sbDays==null)?(L==='nl'?'auto uit kalender: ':'auto from calendar: '):(L==='nl'?'handmatig · kalender: ':'manual · calendar: '))+inst.sbDaysCal}{inst.sb>0?' · = '+fmtE(inst.sb):''}</div></div>
           <div className="fg"><label>{L==='nl'?'Standby-tarief/dag':'Standby rate/day'}</label><input type="number" value={(d.install||{}).sbRate!=null?d.install.sbRate:600} onChange={e=>upInst('sbRate',parseFloat(e.target.value)||0)}/></div>
         </div>
         <div className="row">
-          <div className="fg"><label>{L==='nl'?'Contingency % op nacalculatie':'Contingency % on pass-through'}</label><input type="number" value={(d.install||{}).conPct!=null?d.install.conPct:10} onChange={e=>upInst('conPct',parseFloat(e.target.value)||0)}/></div>
+          <div className="fg"><label>{L==='nl'?'Contingency % (op alle reiskosten)':'Contingency % (on all travel costs)'}</label><input type="number" value={(d.install||{}).conPct!=null?d.install.conPct:10} onChange={e=>upInst('conPct',parseFloat(e.target.value)||0)}/>
+            <div className="sm muted" style={{marginTop:2}}>{(L==='nl'?'buffer op reis/verblijf = ':'buffer on travel = ')+fmtE(inst.cont)}</div></div>
           <div className="fg"></div>
         </div>
         <p className="sm muted" style={{marginTop:8}}>{L==='nl'?'Liften, hoogwerker, gereedschap, vergunningen, vracht en verzekering horen in Blok B (inkoop) of Blok C (onderaannemers); daar loopt de degressieve handling al.':'Lifts, equipment, permits, freight and insurance belong in Block B (procurement) or Block C (subcontractors), which already apply degressive handling.'}</p>
