@@ -454,7 +454,9 @@ function defaultAnnexes(){return {
   responsibilities:{enabled:false,rows:[
     {party:{nl:'TEAL',en:'TEAL'},item:{nl:'Ontwerp, engineering en productiebegeleiding.',en:'Design, engineering and production supervision.'}},
     {party:{nl:'Klant',en:'Client'},item:{nl:'Locatie, stroom en toegang op de installatiedag.',en:'Site, power and access on the installation day.'}}
-  ]}
+  ]},
+  // User-defined annexes: each a free-text block with a self-named heading.
+  custom:[]
 };}
 function createProject(type){
   const tpl=type==='build'?BUILD_PHASES:ASSEMBLE_PHASES;
@@ -534,6 +536,7 @@ function migrateConds(d){
   const c={...d.conditions};let ch=false;
   if(!d.annexes){d={...d,annexes:defaultAnnexes()};ch=true;}
   else if(!d.annexes.responsibilities){d={...d,annexes:{...d.annexes,responsibilities:defaultAnnexes().responsibilities}};ch=true;}
+  if(d.annexes&&!Array.isArray(d.annexes.custom)){d={...d,annexes:{...d.annexes,custom:[]}};ch=true;}
   // Fill the rate card with the current default prices, but only when it is still entirely empty (never clobber custom rates).
   if(d.annexes&&d.annexes.rateCard&&(d.annexes.rateCard.rows||[]).length&&(d.annexes.rateCard.rows||[]).every(r=>!String(r.rate||'').trim())){d={...d,annexes:{...d.annexes,rateCard:{...d.annexes.rateCard,rows:defaultAnnexes().rateCard.rows}}};ch=true;}
   if(c.meerwerk===undefined){c.meerwerk={nl:I.nl.meerwerkTekst,en:I.en.meerwerkTekst,_ensrc:I.nl.meerwerkTekst};if(c.meerwerkEnabled===undefined)c.meerwerkEnabled=true;ch=true;}
@@ -2432,6 +2435,12 @@ function AnnexesTab({data:d,set}){
   const setRcRow=(i,field,val)=>{const rows=ax.rateCard.rows.slice();if(field==='rate'){rows[i]={...rows[i],rate:val};}else{rows[i]={...rows[i],[field]:{...(rows[i][field]||{nl:'',en:''}),[L]:val}};}up({rateCard:{...ax.rateCard,rows}});};
   const addRc=()=>up({rateCard:{...ax.rateCard,rows:[...ax.rateCard.rows,{label:{nl:'',en:''},rate:'',unit:{nl:'',en:''}}]}});
   const delRc=(i)=>up({rateCard:{...ax.rateCard,rows:ax.rateCard.rows.filter((_,j)=>j!==i)}});
+  // Custom (user-defined) annexes: a free-text block with a self-named heading.
+  const custom=Array.isArray(ax.custom)?ax.custom:[];
+  const addCustom=()=>up({custom:[...custom,{id:uid(),enabled:true,title:{nl:'Nieuwe bijlage',en:'New annex'},text:{nl:'',en:''}}]});
+  const upCustom=(i,field,val)=>{const arr=custom.slice();const o=arr[i][field];const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=val;arr[i]={...arr[i],[field]:nn};up({custom:arr});};
+  const setCustomEnabled=(i,v)=>{const arr=custom.slice();arr[i]={...arr[i],enabled:v};up({custom:arr});};
+  const delCustom=(i)=>up({custom:custom.filter((_,j)=>j!==i)});
   return <div>
     <p className="sm muted" style={{marginBottom:16}}>{NL?'Bijlagen verschijnen alleen in deze offerte als je ze aanzet. Standaard uit, zo gaan ze alleen mee bij grote projecten. (Uitsluitingen, aannames en scope of work staan bij de Scope-tab.)':'Annexes appear in this quotation only when enabled. Off by default. (Exclusions, assumptions and scope of work live on the Scope tab.)'}</p>
     <div className="card">
@@ -2450,6 +2459,15 @@ function AnnexesTab({data:d,set}){
         <button className="btn btn-sm btn-g" onClick={()=>delRc(i)}>×</button></div>)}
       <button className="btn btn-sm btn-g" onClick={addRc}>+ {NL?'Regel':'Row'}</button>
     </div>
+    {custom.map((cb,i)=><div key={cb.id||i} className="card">
+      <div className="between mb16" style={{alignItems:'center'}}>
+        <input value={tval(cb.title)} onChange={e=>upCustom(i,'title',e.target.value)} placeholder={NL?'Kop van de bijlage':'Annex heading'} style={{border:'1px solid transparent',borderRadius:3,padding:'4px 8px',fontWeight:700,fontSize:15,background:'transparent',flex:1,marginRight:8}} onFocus={e=>{e.target.style.borderColor='#d0d0ce';e.target.style.background='#fff'}} onBlur={e=>{e.target.style.borderColor='transparent';e.target.style.background='transparent'}}/>
+        <label className="flex g8" style={{alignItems:'center',fontSize:13}}><input type="checkbox" checked={cb.enabled!==false} onChange={e=>setCustomEnabled(i,e.target.checked)}/> {NL?'Tonen':'Show'}</label>
+        <button className="btn btn-sm btn-g" style={{marginLeft:8}} onClick={()=>{if(confirm(NL?'Deze bijlage verwijderen?':'Remove this annex?'))delCustom(i);}}>×</button>
+      </div>
+      <textarea style={{width:'100%',minHeight:120}} value={tval(cb.text)} onChange={e=>upCustom(i,'text',e.target.value)} placeholder={NL?'Tekst van de bijlage… (lege regel = nieuwe alinea)':'Annex text… (blank line = new paragraph)'}/>
+    </div>)}
+    <button className="btn btn-g" onClick={addCustom}>+ {NL?'Eigen bijlage toevoegen':'Add your own annex'}</button>
   </div>;
 }
 
@@ -2770,6 +2788,10 @@ function PreviewTab({data:d}){
         {T.rateCard.map((r,i)=><div key={i} style={{display:'flex',alignItems:'baseline',padding:'11px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
           <div style={{flex:1,color:ink}}>{r.label}</div><div style={{textAlign:'right'}}><span style={{fontWeight:500}}>{r.rate||''}</span>{r.unit?<span style={{color:muted,fontSize:11,marginLeft:6}}>{r.unit}</span>:null}</div></div>)}
       </div>}
+      {(T.customAnnexes||[]).map((a,i)=><div key={'ca'+i} style={{marginTop:48}}>
+        <SecHead n={pa()} title={a.title}/>
+        <Para text={a.text}/>
+      </div>)}
       <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:40,display:'flex',justifyContent:'flex-end'}}>
         <span>{word} {T.number}</span>
       </div>
@@ -3095,6 +3117,13 @@ function buildQuoteDocDef(D, logoImg){
   // (Scope of work / responsibilities now renders above, directly under the scope section.)
   if(D.meerwerkClause)c.push({stack:[secHead(nxA(),D.nl?'Meerwerk':'Additional work'),paras(D.meerwerkClause,14*k)],margin:[0,36,0,0],unbreakable:true});
   if(D.rateCard&&D.rateCard.length){var rcb=[[{text:(D.nl?'Activiteit':'Activity').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:(D.nl?'Tarief (excl. btw)':'Rate (ex VAT)').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];D.rateCard.forEach(function(r){rcb.push([{text:r.label,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:[{text:(r.rate||''),font:'I5',color:ink},{text:(r.unit?'  '+r.unit:''),color:muted,fontSize:11*k}],fontSize:13*k,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});c.push({stack:[secHead(nxA(),D.nl?'Tarievenkaart':'Rate card'),{table:{widths:['*','auto'],body:rcb},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,36,0,0],unbreakable:true});}
+  // User-defined annexes: heading kept with its first paragraph; remaining paragraphs flow freely so long text never vanishes.
+  (D.customAnnexes||[]).forEach(function(a){
+    var parts=String(a.text||'').split(/\n\s*\n+/).map(function(p){return p.trim();}).filter(Boolean);
+    var first=parts.length?parts[0]:'';
+    c.push({stack:[secHead(nxA(),a.title||(D.nl?'Bijlage':'Annex'))].concat(first?[{text:first,fontSize:14*k,color:body,lineHeight:1.65}]:[]),margin:[0,36,0,0],unbreakable:true});
+    for(var pi=1;pi<parts.length;pi++)c.push({text:parts[pi],fontSize:14*k,color:body,lineHeight:1.65,margin:[0,10,0,0]});
+  });
   return {pageSize:'A4',pageMargins:[ML,MT,ML,MT],
     background:function(cp,ps){return {canvas:[{type:'rect',x:0,y:0,w:ps.width,h:ps.height,color:paper}]};},
     header:function(cp){if(cp===1)return null;return {margin:[ML,20,ML,0],columns:[{width:'auto',image:logoImg,fit:[150,12]},{width:'*',text:D.title+(D.subtitle?' · '+D.subtitle:''),font:'I4',fontSize:10*k,color:sec,alignment:'right',margin:[0,1,0,0]}]};},
@@ -3160,6 +3189,7 @@ function mapQuoteToTokens(d){
   const meerwerkClause=(ax.meerwerk&&ax.meerwerk.enabled)?t(ax.meerwerk.text,L):'';
   const rateCard=(ax.rateCard&&ax.rateCard.enabled)?(ax.rateCard.rows||[]).filter(r=>t(r.label,L)).map(r=>({label:t(r.label,L),rate:r.rate||'',unit:t(r.unit,L)})):[];
   const responsibilities=(ax.responsibilities&&ax.responsibilities.enabled)?(ax.responsibilities.rows||[]).filter(r=>t(r.party,L)||t(r.item,L)).map(r=>({party:t(r.party,L),item:t(r.item,L)})):[];
+  const customAnnexes=(Array.isArray(ax.custom)?ax.custom:[]).filter(a=>(a.enabled!==false)&&(t(a.title,L)||t(a.text,L))).map(a=>({title:t(a.title,L),text:t(a.text,L)}));
   return {prepared_by:d.project.preparedBy||'Erik Swaagstra',address:TEAL.addr+', '+TEAL.zip,registration:'KvK '+TEAL.kvk+' · BTW '+TEAL.btw,
     number:d.ref,date:fmtLong(d.project.date),valid:(d.conditions.validity||30)+' '+(NL?'dagen':'days'),
     title:d.project.name||'',subtitle:d.project.subtitle||'',
@@ -3167,7 +3197,7 @@ function mapQuoteToTokens(d){
     location:d.project.location||'',phase:d.project.phaseLabel||'',delivery,
     description:t(d.project.description,L),teal_role:t(d.project.tealRole,L),
     scope,effort,cost_items,total:fmtE(grand),payment,conditions,accepted_by:d.client.name||'',sign_line,weeks,tasks,
-    phaseNames,assumptions,excluded,excludedImages,meerwerkClause,rateCard,responsibilities,nl:NL,
+    phaseNames,assumptions,excluded,excludedImages,meerwerkClause,rateCard,responsibilities,customAnnexes,nl:NL,
     isMulti,options};
 }
 
