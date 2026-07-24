@@ -174,7 +174,17 @@ function calcInstall(d){
   const cont=(flight+visa+hotel+park+co2)*((+x.conPct||0)/100);
   const client=labourC+coord+beClient+sb+cont;
   const cost=labourCost+beCost+sb;
-  return {client,cost,labourC,labourCost,coord,beClient,beCost,sb,cont,persons,maxWD,crewSbDays,crewPdDays,
+  // Client-facing breakdown: a few honest lump sums (labour / travel / lodging / standby)
+  // instead of one "Installatie en reizen" line — no per-day or per-person detail. The four
+  // groups sum exactly to `client` (contingency is folded into travel, since it is a buffer
+  // computed on the pass-through travel costs).
+  const breakdown={
+    labour:labourC+coord,
+    travel:flight+visa+kmP+transP+book+park+co2P+cont,
+    lodging:hotel+perdiem,
+    standby:sb,
+  };
+  return {client,cost,labourC,labourCost,coord,beClient,beCost,sb,cont,persons,maxWD,crewSbDays,crewPdDays,breakdown,
     minWDfail:(anyTI&&maxWD>0&&maxWD<2)};
 }
 
@@ -2570,9 +2580,20 @@ function buildFinancialLines(d,totals,L){
     else{lines.push({desc:e.desc,total:e.total});}
   });
 
-  // Installation & travel (lump sum)
+  // Installation & travel: a short client-facing breakdown (labour / travel / lodging /
+  // standby) rather than one lump sum. Only non-zero groups show; the four sum to inst.client.
   const inst=(totals&&totals.inst)?totals.inst:calcInstall(d);
-  if(inst&&inst.client>0)lines.push({desc:L==='nl'?'Installatie en reizen':'Installation & travel',total:inst.client});
+  if(inst&&inst.client>0){
+    const bd=inst.breakdown||{};
+    const iLines=[
+      {desc:L==='nl'?'Installatie — arbeid op locatie':'Installation — on-site labour',total:bd.labour||0},
+      {desc:L==='nl'?'Reis- en transportkosten':'Travel & transport',total:bd.travel||0},
+      {desc:L==='nl'?'Hotel en verblijf':'Hotel & accommodation',total:bd.lodging||0},
+      {desc:L==='nl'?'Standby op locatie':'On-site standby',total:bd.standby||0},
+    ].filter(l=>l.total>0.005);
+    if(iLines.length)iLines.forEach(l=>lines.push(l));
+    else lines.push({desc:L==='nl'?'Installatie en reizen':'Installation & travel',total:inst.client});
+  }
 
   return lines;
 }
