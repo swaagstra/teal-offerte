@@ -3062,25 +3062,28 @@ function buildQuoteDocDef(D, logoImg){
   // Header + each option's [subtitle, table, total] are separate pushes (table not forced
   // unbreakable) so a long cost list flows across pages instead of risking the same
   // vanishing-block bug as the scope section, per the lesson above.
-  function costTable(items,totalFmt,label){
-    // `label` (an option title) is folded into the "Totaal" text itself — not just shown in a
-    // heading above the table — because the table can break across a page (intentionally, see
-    // above) and land the total row alone at the top of the next page, out of sight of that
-    // heading. A self-labelling total ("Totaal Optie B") stays unambiguous wherever it lands.
+  // The whole cost block (lead-in header/title + table + total) is pushed as ONE unbreakable
+  // stack so it never splits across a page (the extra install-breakdown rows had made the
+  // breakable version spill over a page edge). Per option it stays a separate block, so a
+  // multi-option quote never becomes a single oversized unbreakable unit. A realistic cost
+  // table is well under one page; the total still self-labels ("Totaal Optie B") as a safety
+  // net for the pathological case where an option's block is forced to the next page.
+  function costStack(items,totalFmt,label,leadIn){
     var totalLabel=label?(L('Totaal ','Total ')+label+' '):L('Totaal ','Total ');
     var cr=[[{text:L('OMSCHRIJVING','DESCRIPTION'),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:L('BEDRAG','AMOUNT'),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];
     (items||[]).forEach(function(it){cr.push([{text:it.d,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:it.a,font:'I5',fontSize:13*k,color:ink,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});
-    c.push({table:{widths:['*',105],body:cr},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}});
-    c.push({columns:[{width:'*',text:''},{width:225,table:{widths:['*','auto'],body:[[{text:[{text:totalLabel,font:'I5'},{text:L('(excl. btw)','(excl. VAT)'),fontSize:11*k,color:muted}],fontSize:16*k,color:ink,border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]},{text:totalFmt,font:'I5',fontSize:16*k,color:ink,alignment:'right',border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]}]]},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,0,0,0],unbreakable:true});
+    var totalRow={columns:[{width:'*',text:''},{width:225,table:{widths:['*','auto'],body:[[{text:[{text:totalLabel,font:'I5'},{text:L('(excl. btw)','(excl. VAT)'),fontSize:11*k,color:muted}],fontSize:16*k,color:ink,border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]},{text:totalFmt,font:'I5',fontSize:16*k,color:ink,alignment:'right',border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]}]]},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}]};
+    return (leadIn||[]).concat([{table:{widths:['*',105],body:cr},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}},totalRow]);
   }
-  c.push({stack:[secHead(nx(),L('Kosten','Costs'))],margin:[0,36,0,0]});
+  var kostenHead=secHead(nx(),L('Kosten','Costs'));
   if(D.isMulti&&D.options&&D.options.length>1){
     D.options.forEach(function(opt,oi){
-      c.push({text:opt.title.toUpperCase(),font:'I6',fontSize:12*k,color:ink,characterSpacing:lsf(0.08,12*k),margin:[0,oi?22:0,0,8],unbreakable:true});
-      costTable(opt.cost_items,opt.total,opt.title);
+      var title={text:opt.title.toUpperCase(),font:'I6',fontSize:12*k,color:ink,characterSpacing:lsf(0.08,12*k),margin:[0,0,0,8]};
+      var leadIn=oi===0?[kostenHead,title]:[title];
+      c.push({stack:costStack(opt.cost_items,opt.total,opt.title,leadIn),margin:[0,oi?22:36,0,0],unbreakable:true});
     });
   } else {
-    costTable(D.cost_items,D.total);
+    c.push({stack:costStack(D.cost_items,D.total,null,[kostenHead]),margin:[0,36,0,0],unbreakable:true});
   }
   function bullets(arr){return (arr||[]).map(function(t){return {columns:[{width:'auto',text:'·',color:muted,fontSize:14*k},{width:'*',text:t,fontSize:14*k,color:body,lineHeight:1.6}],columnGap:7.5,margin:[0,0,0,6.75]};});}
   if(D.payment&&D.payment.length)c.push({stack:[secHead(nx(),L('Betaling','Payment'))].concat(bullets(D.payment)),margin:[0,36,0,0],unbreakable:true});
