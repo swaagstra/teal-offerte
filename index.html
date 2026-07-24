@@ -1862,6 +1862,8 @@ function BudgetTab({data:d,set}){
   const upItem=(pi,ii,k,v)=>{const p=[...d.phases];const items=[...p[pi].items];items[ii]={...items[ii],[k]:v};p[pi]={...p[pi],items};set({...d,phases:p})};
   const addItem=pi=>{const p=[...d.phases];p[pi]={...p[pi],items:[...p[pi].items,{id:uid(),role:'design',desc:{nl:'',en:''},qty:0,extRate:120,intRate:75,unit:'uur'}]};set({...d,phases:p})};
   const rmItem=(pi,ii)=>{const p=[...d.phases];p[pi]={...p[pi],items:p[pi].items.filter((_,i)=>i!==ii)};set({...d,phases:p})};
+  // Reorder a budget line within its phase (swap with the neighbour in the given direction).
+  const moveItem=(pi,ii,dir)=>{const p=[...d.phases];const items=[...p[pi].items];const ni=ii+dir;if(ni<0||ni>=items.length)return;const tmp=items[ii];items[ii]=items[ni];items[ni]=tmp;p[pi]={...p[pi],items};set({...d,phases:p})};
   const upCont=(pi,v)=>{const p=[...d.phases];p[pi]={...p[pi],contingency:v};set({...d,phases:p})};
   const upTravel=(pi,k,v)=>{const p=[...d.phases];p[pi]={...p[pi],travel:{trips:0,km:0,rate:.50,hours:0,hourRate:0,...(p[pi].travel||{}),[k]:v}};set({...d,phases:p})};
 
@@ -1983,7 +1985,11 @@ function BudgetTab({data:d,set}){
                 <td><input type="number" value={it.intRate||''} onChange={e=>upItem(pi,ii,'intRate',parseFloat(e.target.value)||0)}/></td>
                 <td className="tr mono">{fmt(ip)}</td>
                 <td className="tr mono" style={{color:cp-ip>=0?'var(--green)':'var(--red)'}}>{fmt(cp-ip)}</td>
-                <td className="tr"><button className="btn btn-sm btn-g" onClick={()=>rmItem(pi,ii)}>&times;</button></td>
+                <td className="tr" style={{whiteSpace:'nowrap'}}>
+                  <button className="btn btn-sm btn-g" disabled={ii===0} style={ii===0?{opacity:.3}:null} title={L==='nl'?'Omhoog':'Move up'} onClick={()=>moveItem(pi,ii,-1)}>&uarr;</button>
+                  <button className="btn btn-sm btn-g" disabled={ii===ph.items.length-1} style={ii===ph.items.length-1?{opacity:.3,marginLeft:2}:{marginLeft:2}} title={L==='nl'?'Omlaag':'Move down'} onClick={()=>moveItem(pi,ii,1)}>&darr;</button>
+                  <button className="btn btn-sm btn-g" style={{marginLeft:2}} onClick={()=>rmItem(pi,ii)}>&times;</button>
+                </td>
               </tr>})}
             {ph.enabled!==false&&(()=>{const tv=ph.travel||{};return <tr style={{background:'rgba(212,236,230,.06)'}}>
               <td colSpan={5} style={{whiteSpace:'nowrap'}}>
