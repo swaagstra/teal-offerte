@@ -47,6 +47,8 @@
   .btn-g{background:0;color:var(--dark-grey);border:1px solid #d0d0ce}.btn-g:hover{background:var(--warm-grey)}
   .btn-sm{padding:4px 10px;font-size:12px}
   .btn-xs{padding:3px 8px;font-size:11px;border-radius:5px}
+  .costrow .costmove{opacity:0;transition:opacity .12s}
+  .costrow:hover .costmove{opacity:1}
   .tbl-scroll{overflow-x:auto;margin:0 -24px;padding:0 24px;-webkit-overflow-scrolling:touch}
   .bt{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
   .bt th{text-align:left;padding:8px 12px;background:var(--warm-grey);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dark-grey);border-bottom:2px solid #d0d0ce}
@@ -600,6 +602,13 @@ function migrateConds(d){
   if(!d.annexes){d={...d,annexes:defaultAnnexes()};ch=true;}
   else if(!d.annexes.responsibilities){d={...d,annexes:{...d.annexes,responsibilities:defaultAnnexes().responsibilities}};ch=true;}
   if(d.annexes&&!Array.isArray(d.annexes.custom)){d={...d,annexes:{...d.annexes,custom:[]}};ch=true;}
+  // Project description → block model (text/image blocks). Seed one text block from the old
+  // plain description so existing quotes keep their text; images can then be inserted anywhere.
+  if(d.project&&!Array.isArray(d.project.descBlocks)){
+    const txt=d.project.description;const has=t(txt,'nl')||t(txt,'en');
+    const blocks=has?[{id:uid(),type:'text',text:(typeof txt==='string'?{nl:txt,en:txt}:{...txt})}]:[];
+    d={...d,project:{...d.project,descBlocks:blocks}};ch=true;
+  }
   // Fill the rate card with the current default prices, but only when it is still entirely empty (never clobber custom rates).
   if(d.annexes&&d.annexes.rateCard&&(d.annexes.rateCard.rows||[]).length&&(d.annexes.rateCard.rows||[]).every(r=>!String(r.rate||'').trim())){d={...d,annexes:{...d.annexes,rateCard:{...d.annexes.rateCard,rows:defaultAnnexes().rateCard.rows}}};ch=true;}
   if(c.meerwerk===undefined){c.meerwerk={nl:I.nl.meerwerkTekst,en:I.en.meerwerkTekst,_ensrc:I.nl.meerwerkTekst};if(c.meerwerkEnabled===undefined)c.meerwerkEnabled=true;ch=true;}
@@ -1769,6 +1778,22 @@ function ProjectTab({data:d,set}){
   const up=(k,v)=>set({...d,project:{...d.project,[k]:v}});
   const upC=(k,v)=>set({...d,client:{...d.client,[k]:v}});
   const upLang=(k,v)=>{const o=d.project[k];const n=typeof o==='string'?{nl:o,en:o}:{...o};n[L]=v;up(k,n)};
+  // ── Project description as blocks: text and image blocks in any order. The first text block
+  // seeds from the legacy plain description; every save keeps d.project.description in sync
+  // (text blocks joined) so text-only consumers (change orders, exports) keep working.
+  const rawBlocks=Array.isArray(d.project.descBlocks)?d.project.descBlocks:[];
+  const descBlocks=rawBlocks.length?rawBlocks:[{id:'seed',type:'text',text:d.project.description||{nl:'',en:''}}];
+  const saveBlocks=(bl)=>{
+    const joinL=(lang)=>bl.filter(b=>b.type==='text').map(b=>t(b.text,lang)).filter(Boolean).join('\n\n');
+    set({...d,project:{...d.project,descBlocks:bl,description:{nl:joinL('nl'),en:joinL('en')}}});
+  };
+  const upTextBlock=(i,v)=>{const bl=descBlocks.map(b=>({...b}));const o=bl[i].text||{nl:'',en:''};const nn=typeof o==='string'?{nl:o,en:o}:{...o};nn[L]=v;bl[i]={...bl[i],text:nn,type:'text',id:bl[i].id||uid()};saveBlocks(bl);};
+  const upImgCaption=(i,v)=>{const bl=descBlocks.map(b=>({...b}));const o=bl[i].caption||{nl:'',en:''};bl[i]={...bl[i],caption:{...o,[L]:v}};saveBlocks(bl);};
+  const addTextBlock=()=>saveBlocks([...descBlocks.map(b=>({...b})),{id:uid(),type:'text',text:{nl:'',en:''}}]);
+  const addImgBlock=(src)=>saveBlocks([...descBlocks.map(b=>({...b})),{id:uid(),type:'image',src,caption:{nl:'',en:''}}]);
+  const delBlock=(i)=>saveBlocks(descBlocks.filter((_,j)=>j!==i).map(b=>({...b})));
+  const moveBlock=(i,dir)=>{const ni=i+dir;if(ni<0||ni>=descBlocks.length)return;const bl=descBlocks.map(b=>({...b}));const tmp=bl[i];bl[i]=bl[ni];bl[ni]=tmp;saveBlocks(bl);};
+  const onPickDescImg=(e)=>{const f=e.target.files&&e.target.files[0];if(f)imgToDataUrlFree(f).then(u=>addImgBlock(u));e.target.value='';};
   return <>
     <div className="card">
       <div className="card-h">{ll.projectGegevens}</div>
@@ -1809,8 +1834,25 @@ function ProjectTab({data:d,set}){
     </div>
     <div className="card">
       <div className="card-h">{ll.omschrijving} ({L.toUpperCase()})</div>
-      <div className="row full"><div className="fg"><label>{ll.projectOmschrijving}</label>
-        <textarea value={t(d.project.description,L)} onChange={e=>upLang('description',e.target.value)} placeholder={ll.beschrijvingPlaceholder}/></div></div>
+      <label className="sm muted" style={{display:'block',marginBottom:8}}>{ll.projectOmschrijving}</label>
+      {descBlocks.map((b,i)=><div key={b.id||i} style={{marginBottom:12,padding:12,border:'1px solid #eee',borderRadius:6,background:'#fafafa'}}>
+        <div className="between mb8" style={{alignItems:'center'}}>
+          <span className="sm muted">{b.type==='image'?(L==='nl'?'Afbeelding':'Image'):(L==='nl'?'Tekst':'Text')}{' '+(i+1)}</span>
+          <div className="flex g8">
+            <button className="btn btn-sm btn-g" disabled={i===0} style={i===0?{opacity:.3}:null} title={L==='nl'?'Omhoog':'Up'} onClick={()=>moveBlock(i,-1)}>&uarr;</button>
+            <button className="btn btn-sm btn-g" disabled={i===descBlocks.length-1} style={i===descBlocks.length-1?{opacity:.3}:null} title={L==='nl'?'Omlaag':'Down'} onClick={()=>moveBlock(i,1)}>&darr;</button>
+            <button className="btn btn-sm btn-g" title={L==='nl'?'Verwijderen':'Remove'} onClick={()=>{if(descBlocks.length>1||b.type==='image'||t(b.text,'nl')||t(b.text,'en')){if(b.type==='image'||confirm(L==='nl'?'Dit tekstblok verwijderen?':'Remove this text block?'))delBlock(i);}}}>&times;</button>
+          </div>
+        </div>
+        {b.type==='image'
+          ? <div><img src={b.src} style={{maxWidth:'100%',maxHeight:200,objectFit:'contain',borderRadius:4,display:'block',marginBottom:8}}/>
+              <input value={t(b.caption,L)} onChange={e=>upImgCaption(i,e.target.value)} placeholder={L==='nl'?'Onderschrift (optioneel)':'Caption (optional)'}/></div>
+          : <textarea value={t(b.text,L)} onChange={e=>upTextBlock(i,e.target.value)} placeholder={ll.beschrijvingPlaceholder} style={{minHeight:80}}/>}
+      </div>)}
+      <div className="flex g8" style={{marginBottom:4}}>
+        <button className="btn btn-sm btn-g" onClick={addTextBlock}>{L==='nl'?'+ Tekstblok':'+ Text block'}</button>
+        <label className="btn btn-sm btn-g" style={{cursor:'pointer',margin:0}}>{L==='nl'?'+ Afbeelding':'+ Image'}<input type="file" accept="image/*" onChange={onPickDescImg} style={{display:'none'}}/></label>
+      </div>
       <div className="row full"><div className="fg"><label>{ll.rolVanTeal}</label>
         <textarea value={t(d.project.tealRole,L)} onChange={e=>upLang('tealRole',e.target.value)} placeholder={ll.technischeScope}/></div></div>
     </div>
@@ -2648,24 +2690,25 @@ function buildFinancialLines(d,totals,L){
   const lines=[];
   const pn=(ph)=>ph.customName||t(ph.name,L);
 
-  // Phase totals as lump sums (includes contingency, no rate breakdown)
+  // Phase totals as lump sums (includes contingency, no rate breakdown). Each line carries a
+  // stable `key` so a custom display order (d.costOrder) can be applied at the end.
   (d.phases||[]).forEach((ph,pi)=>{
     if(ph.enabled===false)return;
     const pd=totals.phaseData[pi];
     if(!pd||pd.total===0)return;
-    lines.push({desc:pn(ph),total:pd.total});
+    lines.push({desc:pn(ph),total:pd.total,key:'ph:'+(ph.id||pi)});
   });
 
   // Procurement + subcontractors: collect with an optional "show as" display group,
   // then merge rows that share the same label into one client-facing line.
   const ext=[];
-  (d.procOTS||[]).forEach(it=>{if(!it.amount)return;const h=(it.amount||0)*(it.handlingPct||0);ext.push({desc:it.desc||(L==='nl'?'Materialen':'Materials'),total:it.amount+h,showAs:it.showAs});});
-  (d.procCustom||[]).forEach(it=>{if(!it.amount)return;const h=(it.amount||0)*(it.handlingPct||0);const r=(it.amount||0)*(it.riskPct||0);ext.push({desc:it.desc||(L==='nl'?'Maatwerk':'Custom materials'),total:it.amount+h+r,showAs:it.showAs});});
-  (d.subs||[]).forEach(it=>{if(!it.amount)return;const c=(it.amount||0)*(it.coordPct||COORD_MARGIN);ext.push({desc:it.desc||(L==='nl'?'Onderaannemer':'Subcontractor'),total:it.amount+c,showAs:it.showAs});});
+  (d.procOTS||[]).forEach(it=>{if(!it.amount)return;const h=(it.amount||0)*(it.handlingPct||0);ext.push({desc:it.desc||(L==='nl'?'Materialen':'Materials'),total:it.amount+h,showAs:it.showAs,id:it.id});});
+  (d.procCustom||[]).forEach(it=>{if(!it.amount)return;const h=(it.amount||0)*(it.handlingPct||0);const r=(it.amount||0)*(it.riskPct||0);ext.push({desc:it.desc||(L==='nl'?'Maatwerk':'Custom materials'),total:it.amount+h+r,showAs:it.showAs,id:it.id});});
+  (d.subs||[]).forEach(it=>{if(!it.amount)return;const c=(it.amount||0)*(it.coordPct||COORD_MARGIN);ext.push({desc:it.desc||(L==='nl'?'Onderaannemer':'Subcontractor'),total:it.amount+c,showAs:it.showAs,id:it.id});});
   const groupIdx={};
   ext.forEach(e=>{const g=(e.showAs||'').trim();
-    if(g){if(g in groupIdx){lines[groupIdx[g]].total+=e.total;}else{groupIdx[g]=lines.length;lines.push({desc:g,total:e.total});}}
-    else{lines.push({desc:e.desc,total:e.total});}
+    if(g){if(g in groupIdx){lines[groupIdx[g]].total+=e.total;}else{groupIdx[g]=lines.length;lines.push({desc:g,total:e.total,key:'grp:'+g});}}
+    else{lines.push({desc:e.desc,total:e.total,key:'ext:'+(e.id||e.desc)});}
   });
 
   // Installation & travel: a short client-facing breakdown (labour / travel / lodging /
@@ -2674,21 +2717,45 @@ function buildFinancialLines(d,totals,L){
   if(inst&&inst.client>0){
     const bd=inst.breakdown||{};
     const iLines=[
-      {desc:L==='nl'?'Installatie — arbeid op locatie':'Installation — on-site labour',total:bd.labour||0},
-      {desc:L==='nl'?'Reis- en transportkosten':'Travel & transport',total:bd.travel||0},
-      {desc:L==='nl'?'Hotel en verblijf':'Hotel & accommodation',total:bd.lodging||0},
-      {desc:L==='nl'?'Standby op locatie':'On-site standby',total:bd.standby||0},
+      {desc:L==='nl'?'Installatie — arbeid op locatie':'Installation — on-site labour',total:bd.labour||0,key:'inst:labour'},
+      {desc:L==='nl'?'Reis- en transportkosten':'Travel & transport',total:bd.travel||0,key:'inst:travel'},
+      {desc:L==='nl'?'Hotel en verblijf':'Hotel & accommodation',total:bd.lodging||0,key:'inst:lodging'},
+      {desc:L==='nl'?'Standby op locatie':'On-site standby',total:bd.standby||0,key:'inst:standby'},
     ].filter(l=>l.total>0.005);
     if(iLines.length)iLines.forEach(l=>lines.push(l));
-    else lines.push({desc:L==='nl'?'Installatie en reizen':'Installation & travel',total:inst.client});
+    else lines.push({desc:L==='nl'?'Installatie en reizen':'Installation & travel',total:inst.client,key:'inst:all'});
+  }
+
+  // Apply the user's custom display order (from the preview's move-up/down controls). Keys not
+  // present in costOrder keep their natural position (stable sort), so new lines land sensibly.
+  const order=Array.isArray(d.costOrder)?d.costOrder:[];
+  if(order.length){
+    lines.forEach((l,i)=>l._i=i);
+    lines.sort((a,b)=>{
+      let ia=order.indexOf(a.key);if(ia<0)ia=1e9+a._i;
+      let ib=order.indexOf(b.key);if(ib<0)ib=1e9+b._i;
+      return ia-ib;
+    });
+    lines.forEach(l=>{delete l._i;});
   }
 
   return lines;
 }
 
-function PreviewTab({data:d}){
+function PreviewTab({data:d,set}){
   const L=d.lang;const ll=L_(L);
   const NL=L==='nl';
+  // Reorder the client-facing cost lines. Rebuild costOrder from the shown line keys with the
+  // swap applied, then keep any other stored keys (e.g. from another option) after them.
+  const moveCost=(items,idx,dir)=>{
+    if(!set)return;
+    const ni=idx+dir;if(ni<0||ni>=items.length)return;
+    const keys=items.map(it=>it.k).filter(Boolean);
+    if(keys.length!==items.length)return;
+    const tmp=keys[idx];keys[idx]=keys[ni];keys[ni]=tmp;
+    const prev=Array.isArray(d.costOrder)?d.costOrder:[];
+    set({...d,costOrder:[...keys,...prev.filter(k=>!keys.includes(k))]});
+  };
   const totals=calcTotals(d);
   const grand=totals.grandClient;
   const phaseName=(ph)=>ph.customName||t(ph.name,L);
@@ -2754,9 +2821,13 @@ function PreviewTab({data:d}){
           </div>
         </div>
       </div>
-      {(T.description||T.teal_role)&&<div style={{marginTop:48}}>
+      {((T.descBlocks&&T.descBlocks.length)||T.description||T.teal_role)&&<div style={{marginTop:48}}>
         <SecHead n={pn()} title={NL?'Projectomschrijving':'Project description'}/>
-        {T.description&&<Para text={T.description}/>}
+        {(T.descBlocks&&T.descBlocks.length)
+          ? T.descBlocks.map((b,i)=>b.type==='image'
+              ? <figure key={i} style={{margin:(i?14:6)+'px 0 0'}}><img src={b.src} style={{width:'100%',maxHeight:260,objectFit:'contain',objectPosition:'left top',borderRadius:4,display:'block'}}/>{b.caption&&<figcaption style={{fontSize:12,color:muted,marginTop:6,lineHeight:1.4}}>{b.caption}</figcaption>}</figure>
+              : <div key={i} style={{marginTop:i?10:0}}><Para text={b.text}/></div>)
+          : (T.description&&<Para text={T.description}/>)}
         {T.teal_role&&<div style={{marginTop:16}}><Eyebrow mb={6}>{NL?"TEAL's rol":"TEAL's role"}</Eyebrow><Para text={T.teal_role}/></div>}
       </div>}
       <div style={{marginTop:48}}>
@@ -2818,7 +2889,11 @@ function PreviewTab({data:d}){
           <div style={{display:'flex',alignItems:'baseline',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
             <div style={{flex:1}}>{NL?'Omschrijving':'Description'}</div><div style={{width:140,textAlign:'right'}}>{NL?'Bedrag':'Amount'}</div>
           </div>
-          {opt.cost_items.map((it,i)=><div key={i} style={{display:'flex',alignItems:'baseline',padding:'12px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
+          {opt.cost_items.map((it,i)=><div key={i} className="costrow" style={{position:'relative',display:'flex',alignItems:'baseline',padding:'12px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
+            {set&&it.k&&<div className="costmove" style={{position:'absolute',left:-52,top:'50%',transform:'translateY(-50%)',display:'flex',gap:2}}>
+              <button title={NL?'Omhoog':'Move up'} disabled={i===0} onClick={()=>moveCost(opt.cost_items,i,-1)} style={{cursor:i===0?'default':'pointer',border:'1px solid '+hair,background:'#fff',color:i===0?faint:body,borderRadius:4,width:20,height:20,lineHeight:'16px',fontSize:12,padding:0}}>↑</button>
+              <button title={NL?'Omlaag':'Move down'} disabled={i===opt.cost_items.length-1} onClick={()=>moveCost(opt.cost_items,i,1)} style={{cursor:i===opt.cost_items.length-1?'default':'pointer',border:'1px solid '+hair,background:'#fff',color:i===opt.cost_items.length-1?faint:body,borderRadius:4,width:20,height:20,lineHeight:'16px',fontSize:12,padding:0}}>↓</button>
+            </div>}
             <div style={{flex:1,color:ink}}>{it.d}</div><div style={{width:140,textAlign:'right',fontWeight:500,fontVariantNumeric:'tabular-nums'}}>{it.a}</div>
           </div>)}
           <div style={{display:'flex',justifyContent:'flex-end'}}>
@@ -3089,11 +3164,26 @@ function buildQuoteDocDef(D, logoImg){
   if(D.phase)det.push({text:[{text:L('Fase  ','Phase  '),color:muted},{text:D.phase,color:body}],fontSize:13*k,lineHeight:1.45});
   if(D.delivery)det.push({text:[{text:L('Oplevering  ','Expected delivery  '),color:muted},{text:D.delivery,color:body}],fontSize:13*k,lineHeight:1.45});
   c.push({columns:[{width:'*',stack:[secHead('01',L('Klant','Client')),{text:[D.client_name,D.client_contact,D.client_email].filter(Boolean).join('\n'),fontSize:13*k,color:body,lineHeight:1.45}]},{width:'*',stack:[secHead('02',L('Projectdetails','Project details')),{stack:det}]}],columnGap:36,margin:[0,30,0,0]});
-  if(D.description||D.teal_role){
-    var ds=[secHead(nx(),L('Projectomschrijving','Project description'))];
-    if(D.description)ds.push(paras(D.description,14*k));
-    if(D.teal_role)ds.push({stack:[eyebrow(L("TEAL's rol","TEAL's role"),4.5),paras(D.teal_role,14*k)],margin:[0,14,0,0]});
-    c.push({stack:ds,margin:[0,26,0,0],unbreakable:true});
+  if((D.descBlocks&&D.descBlocks.length)||D.description||D.teal_role){
+    if(D.descBlocks&&D.descBlocks.length){
+      // Header stays with the first block; the rest (text or images) flow freely so a long
+      // description with images never overflows one unbreakable stack and silently vanishes.
+      var first=D.descBlocks[0];
+      var head=[secHead(nx(),L('Projectomschrijving','Project description'))];
+      if(first.type==='image'&&first.src){head.push({image:first.src,fit:[CW,300],margin:[0,6,0,0]});if(first.caption)head.push({text:first.caption,fontSize:11*k,color:muted,margin:[0,4,0,0],lineHeight:1.4});}
+      else if(first.text){head.push(paras(first.text,14*k));}
+      c.push({stack:head,margin:[0,26,0,0],unbreakable:true});
+      for(var _b=1;_b<D.descBlocks.length;_b++){var bb=D.descBlocks[_b];
+        if(bb.type==='image'&&bb.src){c.push({image:bb.src,fit:[CW,300],margin:[0,12,0,0]});if(bb.caption)c.push({text:bb.caption,fontSize:11*k,color:muted,margin:[0,4,0,0],lineHeight:1.4});}
+        else if(bb.text){c.push({stack:[paras(bb.text,14*k)],margin:[0,10,0,0]});}
+      }
+      if(D.teal_role)c.push({stack:[eyebrow(L("TEAL's rol","TEAL's role"),4.5),paras(D.teal_role,14*k)],margin:[0,14,0,0],unbreakable:true});
+    } else {
+      var ds=[secHead(nx(),L('Projectomschrijving','Project description'))];
+      if(D.description)ds.push(paras(D.description,14*k));
+      if(D.teal_role)ds.push({stack:[eyebrow(L("TEAL's rol","TEAL's role"),4.5),paras(D.teal_role,14*k)],margin:[0,14,0,0]});
+      c.push({stack:ds,margin:[0,26,0,0],unbreakable:true});
+    }
   }
   function hardBlock(title,items){var rows=[{text:String(title).toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.12,11*k),margin:[0,0,0,7]}];items.forEach(function(x,i){rows.push({columns:[{width:'auto',text:'·',color:muted,fontSize:13*k},{width:'*',text:x,fontSize:13*k,color:body,lineHeight:1.5}],columnGap:7,margin:[0,i?5:0,0,0]});});return {table:{widths:['*'],body:[[{stack:rows,fillColor:'#efeee9'}]]},layout:{defaultBorder:false,paddingLeft:function(){return 16;},paddingRight:function(){return 16;},paddingTop:function(){return 13;},paddingBottom:function(){return 13;}},margin:[0,24,0,0],unbreakable:true};}
   // Header + items are pushed as separate, individually-unbreakable pieces (like the
@@ -3230,8 +3320,9 @@ function mapQuoteToTokens(d){
     const bPhaseNames=[...bActive.map(ph=>ph.customName||t(ph.name,L)),...steps.map(sx=>t(sx.name,L))].filter(Boolean);
     const bEffort=(bActive.find(ph=>ph.effort)||{}).effort||'';
     const bTotals=calcTotals(bn);
-    const bFinLines=buildFinancialLines(bn,bTotals,L);
-    const bCostItems=bFinLines.map(ln=>({d:ln.desc||'',a:fmtE(ln.total)}));
+    // costOrder lives on the top-level doc; inject it so option bundles honour the same order.
+    const bFinLines=buildFinancialLines(bn.costOrder?bn:{...bn,costOrder:d.costOrder},bTotals,L);
+    const bCostItems=bFinLines.map(ln=>({d:ln.desc||'',a:fmtE(ln.total),k:ln.key}));
     return {scope:bScope,phaseNames:bPhaseNames,effort:bEffort,cost_items:bCostItems,grandClient:bTotals.grandClient,total:fmtE(bTotals.grandClient)};
   };
   const base=tokensForBundle(bundle);
@@ -3266,6 +3357,7 @@ function mapQuoteToTokens(d){
     client_name:d.client.name||'',client_contact:d.client.contact||'',client_email:d.client.email||'',
     location:d.project.location||'',phase:d.project.phaseLabel||'',delivery,
     description:t(d.project.description,L),teal_role:t(d.project.tealRole,L),
+    descBlocks:(Array.isArray(d.project.descBlocks)?d.project.descBlocks:[]).map(b=>b&&b.type==='image'?{type:'image',src:b.src,caption:t(b.caption,L)}:{type:'text',text:t(b.text,L)}).filter(b=>b.type==='image'?b.src:b.text),
     scope,effort,cost_items,total:fmtE(grand),payment,conditions,accepted_by:d.client.name||'',sign_line,weeks,tasks,
     phaseNames,assumptions,excluded,excludedImages,meerwerkClause,rateCard,responsibilities,customAnnexes,nl:NL,
     isMulti,options};
@@ -4386,7 +4478,7 @@ function App(){
         {tab==='planning'&&(()=>{const hasOpts=d.multiOption&&d.options&&d.options.length;const[sd,ss]=hasOpts?scopedForOption(0):[d,setDWithArchive];return <>{hasOpts&&<p className="sm muted mb16">{d.lang==='nl'?'De planning is gedeeld en volgt Optie '+(d.options[0].label)+'.':'The timeline is shared and follows Option '+(d.options[0].label)+'.'}</p>}<PlanningTab data={sd} set={ss}/></>;})()}
         {tab==='payment'&&<PaymentTab data={d} set={setDWithArchive}/>}
         {tab==='annexes'&&<AnnexesTab data={d} set={setDWithArchive}/>}
-        {tab==='preview'&&<PreviewTab data={d}/>}
+        {tab==='preview'&&<PreviewTab data={d} set={setDWithArchive}/>}
         <div className="between mt24">
           {(()=>{const order=tabs.map(x=>x.id);const i=order.indexOf(tab);return i>0?<button className="btn btn-g" onClick={()=>setTab(order[i-1])}>{d.lang==='nl'?'‹ Vorige sectie':'‹ Previous section'}</button>:<span/>;})()}
           {(()=>{const order=tabs.map(x=>x.id);const i=order.indexOf(tab);return i>=0&&i<order.length-1?<button className="btn btn-s" onClick={()=>setTab(order[i+1])}>{d.lang==='nl'?'Volgende sectie ›':'Next section ›'}</button>:<span/>;})()}
