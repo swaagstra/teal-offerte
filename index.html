@@ -1794,6 +1794,15 @@ function ProjectTab({data:d,set}){
   const delBlock=(i)=>saveBlocks(descBlocks.filter((_,j)=>j!==i).map(b=>({...b})));
   const moveBlock=(i,dir)=>{const ni=i+dir;if(ni<0||ni>=descBlocks.length)return;const bl=descBlocks.map(b=>({...b}));const tmp=bl[i];bl[i]=bl[ni];bl[ni]=tmp;saveBlocks(bl);};
   const onPickDescImg=(e)=>{const f=e.target.files&&e.target.files[0];if(f)imgToDataUrlFree(f).then(u=>addImgBlock(u));e.target.value='';};
+  // ── Interne links: reminders voor jezelf (welke onderdelen/leveranciers/referenties). Bewust
+  // opgeslagen in de offerte-data maar NERGENS getokend, dus onzichtbaar in preview en PDF.
+  const links=Array.isArray(d.project.links)?d.project.links:[];
+  const saveLinks=(ls)=>set({...d,project:{...d.project,links:ls}});
+  const addLink=(url)=>{const raw=String(url||'').trim();if(!raw)return;const u=/^https?:\/\//i.test(raw)?raw:('https://'+raw);saveLinks([...links,{id:uid(),url:u,label:''}]);};
+  const upLinkLabel=(i,v)=>{const ls=links.slice();ls[i]={...ls[i],label:v};saveLinks(ls);};
+  const delLink=(i)=>saveLinks(links.filter((_,j)=>j!==i));
+  const onDropLink=(e)=>{e.preventDefault();const dt=e.dataTransfer;if(!dt)return;const uri=dt.getData('text/uri-list')||dt.getData('text/plain')||'';uri.split(/[\r\n\s]+/).filter(x=>/^https?:\/\//i.test(x)||/\w\.\w/.test(x)).forEach(addLink);};
+  const[linkDraft,setLinkDraft]=useState('');
   return <>
     <div className="card">
       <div className="card-h">{ll.projectGegevens}</div>
@@ -1855,6 +1864,28 @@ function ProjectTab({data:d,set}){
       </div>
       <div className="row full"><div className="fg"><label>{ll.rolVanTeal}</label>
         <textarea value={t(d.project.tealRole,L)} onChange={e=>upLang('tealRole',e.target.value)} placeholder={ll.technischeScope}/></div></div>
+    </div>
+    <div className="card">
+      <div className="between" style={{alignItems:'baseline'}}>
+        <div className="card-h" style={{border:0,padding:0,margin:0}}>{L==='nl'?'🔗 Interne links':'🔗 Internal links'}</div>
+        <span className="sm" style={{color:'#b3261e',fontWeight:600}}>{L==='nl'?'niet zichtbaar voor de klant':'never shown to the client'}</span>
+      </div>
+      <p className="sm muted" style={{margin:'6px 0 14px'}}>{L==='nl'?'Alleen voor jezelf — verschijnt nooit in de offerte of PDF. Sleep of plak links van gebruikte onderdelen, leveranciers of referenties.':'For your eyes only — never appears in the quote or PDF. Drop or paste links to used parts, suppliers or references.'}</p>
+      <div onDrop={onDropLink} onDragOver={e=>e.preventDefault()} style={{border:'1.5px dashed #d0d0ce',borderRadius:6,padding:'14px',marginBottom:12,textAlign:'center',color:'#9a9a94',fontSize:13}}>
+        {L==='nl'?'Sleep hier een link naartoe':'Drop a link here'}
+      </div>
+      <div className="flex g8" style={{marginBottom:14}}>
+        <input value={linkDraft} onChange={e=>setLinkDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){addLink(linkDraft);setLinkDraft('');}}} placeholder={L==='nl'?'https://… plakken en Enter':'https://… paste and Enter'} style={{flex:1}}/>
+        <button className="btn btn-sm btn-g" onClick={()=>{addLink(linkDraft);setLinkDraft('');}}>{L==='nl'?'Toevoegen':'Add'}</button>
+      </div>
+      {links.length===0
+        ? <p className="sm muted" style={{margin:0}}>{L==='nl'?'Nog geen links.':'No links yet.'}</p>
+        : links.map((lk,i)=><div key={lk.id||i} className="flex g8" style={{alignItems:'center',marginBottom:8}}>
+            <a href={lk.url} target="_blank" rel="noopener noreferrer" title={lk.url} style={{flexShrink:0,fontSize:15,textDecoration:'none'}}>🔗</a>
+            <input value={lk.label||''} onChange={e=>upLinkLabel(i,e.target.value)} placeholder={L==='nl'?'label (bijv. Motor XYZ bij leverancier)':'label (e.g. Motor XYZ at supplier)'} style={{flex:'0 0 38%'}}/>
+            <a href={lk.url} target="_blank" rel="noopener noreferrer" style={{flex:1,minWidth:0,fontSize:12,color:'var(--green)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lk.url}</a>
+            <button className="btn btn-sm btn-g" onClick={()=>delLink(i)}>&times;</button>
+          </div>)}
     </div>
   </>;
 }
