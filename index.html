@@ -1417,6 +1417,12 @@ function BudgetTab({data:d,set}){
       <input type="number" step="0.1" min="0" placeholder="×1.0" style={{width:56}} onKeyDown={e=>{if(e.key==='Enter'){const f=parseFloat(e.target.value);if(f>0){scaleEffort(f);e.target.value='';}}}} title={L==='nl'?'Typ een factor en Enter':'Type a factor and Enter'}/>
       <label className="flex g8" style={{alignItems:'center',marginLeft:'auto',fontSize:13,cursor:'pointer'}}><input type="checkbox" checked={showCost} onChange={e=>setShowCost(e.target.checked)}/> {L==='nl'?'Toon kostprijs & marge':'Show cost & margin'}</label>
     </div>
+    <div className="sm muted" style={{marginBottom:16,lineHeight:1.7,display:'flex',flexWrap:'wrap',gap:'2px 16px'}}>
+      <span>🛠️ {L==='nl'?'Eigen werk = jullie uren':'Own work = your hours'}</span>
+      <span>📦 {L==='nl'?'Inkoop = een gekocht ding':'Procurement = a bought item'}</span>
+      <span>🔧 {L==='nl'?'Maatwerk = ding op maat naar jouw spec':'Custom = made to your spec'}</span>
+      <span>🤝 {L==='nl'?'Onderaannemer = ingekocht werk dat je aanstuurt':'Subcontractor = outsourced work you direct'}</span>
+    </div>
     {[...d.phases.map((ph,pi)=>({ph,pi})),null].map((entry)=>{
       const isOverig=!entry;
       const ph=entry?entry.ph:{id:'',code:'',name:{nl:'Overig',en:'Other'}};
@@ -1489,10 +1495,10 @@ function BudgetTab({data:d,set}){
             <span style={{marginLeft:'auto'}} className="mono">{fmt((totals.phaseData[pi]||{}).travel||0)}</span>
           </div>}
           <div className="flex g8" style={{marginTop:12,flexWrap:'wrap'}}>
-            {!isOverig&&<button className="btn btn-sm btn-g" onClick={()=>addLine('labour',pid)}>+ {L==='nl'?'Eigen werk':'Own work'}</button>}
-            <button className="btn btn-sm btn-g" onClick={()=>addLine('ots',pid)}>+ {L==='nl'?'Inkoop':'Procurement'}</button>
-            <button className="btn btn-sm btn-g" onClick={()=>addLine('cust',pid)}>+ {L==='nl'?'Maatwerk':'Custom'}</button>
-            <button className="btn btn-sm btn-g" onClick={()=>addLine('sub',pid)}>+ {L==='nl'?'Onderaannemer':'Subcontractor'}</button>
+            {!isOverig&&<button className="btn btn-sm btn-g" title={L==='nl'?'Jullie eigen uren × tarief.':'Your own hours × rate.'} onClick={()=>addLine('labour',pid)}>+ {L==='nl'?'Eigen werk':'Own work'}</button>}
+            <button className="btn btn-sm btn-g" title={L==='nl'?'Een ding dat je van de plank koopt en doorlevert. Automatische handling-fee.':'An off-the-shelf item you buy and pass through. Automatic handling fee.'} onClick={()=>addLine('ots',pid)}>+ {L==='nl'?'Inkoop':'Procurement'}</button>
+            <button className="btn btn-sm btn-g" title={L==='nl'?'Een ding dat speciaal naar jouw spec gemaakt en aan je geleverd wordt — ook als een externe werkplaats het maakt. Handling + risicobuffer.':'An item made to your spec and delivered to you — even if an external shop makes it. Handling + risk buffer.'} onClick={()=>addLine('cust',pid)}>+ {L==='nl'?'Maatwerk':'Custom'}</button>
+            <button className="btn btn-sm btn-g" title={L==='nl'?'Een partij die werk/uitvoering doet dat jij aanstuurt (bijv. montage, installatie op locatie). 12% coördinatie.':'A party doing work you direct (e.g. on-site assembly/installation). 12% coordination.'} onClick={()=>addLine('sub',pid)}>+ {L==='nl'?'Onderaannemer':'Subcontractor'}</button>
           </div>
         </React.Fragment>}
       </div>;
