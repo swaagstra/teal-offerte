@@ -50,6 +50,30 @@ async function patchArchive(ws, archiveId, mutate) {
   await redis(['SET', 'arch:' + ws, JSON.stringify(arr), 'EX', TTL]);
 }
 
+// Stuur een e-mailmelding bij akkoord. Achter env-vars; stil overslaan als niet geconfigureerd,
+// zodat akkoord nooit faalt door mailproblemen.
+//   RESEND_API_KEY  — API key van resend.com
+//   NOTIFY_EMAIL    — ontvanger (bijv. erik@teamteal.nl)
+//   NOTIFY_FROM     — afzender op een geverifieerd domein (default onboarding@resend.dev)
+async function notifyEmail(rec) {
+  const key = process.env.RESEND_API_KEY, to = process.env.NOTIFY_EMAIL;
+  if (!key || !to) return;
+  const from = process.env.NOTIFY_FROM || 'TEAL Offerte <onboarding@resend.dev>';
+  const proj = rec.projectName || '(zonder naam)';
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from, to,
+        subject: '✅ Offerte getekend: ' + proj + ' — ' + rec.acceptedBy,
+        text: rec.acceptedBy + ' heeft de offerte "' + proj + '" online geaccepteerd op ' +
+          rec.acceptedAt + '.' + (rec.note ? ('\n\nOpmerking van de klant:\n' + rec.note) : ''),
+      }),
+    });
+  } catch (e) { /* mail mag nooit het akkoord blokkeren */ }
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -65,10 +89,12 @@ module.exports = async (req, res) => {
       if (ws.length < 8) return res.status(400).json({ error: 'bad-ws' });
       if (!body || !body.snapshot || typeof body.snapshot !== 'object') return res.status(400).json({ error: 'bad-snapshot' });
       const newId = genId();
+      const vd = Math.max(1, Math.min(3650, parseInt(body.validityDays) || 30));
       const rec = {
         ws, archiveId: body.archiveId || null, snapshot: body.snapshot,
         lang: body.lang === 'en' ? 'en' : 'nl', projectName: body.projectName || '',
         status: 'open', createdAt: nowIso(), views: 0, lastView: null, lastViewDay: null,
+        validityDays: vd, expiresAt: new Date(Date.now() + vd * 86400000).toISOString(),
         acceptedBy: null, acceptedAt: null, note: null,
       };
       const payload = JSON.stringify(rec);
@@ -94,9 +120,11 @@ module.exports = async (req, res) => {
           e.updatedAt = nowIso();
         });
       }
+      const isExpired = rec.status !== 'accepted' && rec.expiresAt && Date.now() > new Date(rec.expiresAt).getTime();
       return res.status(200).json({
         snapshot: rec.snapshot, lang: rec.lang, projectName: rec.projectName,
         status: rec.status, acceptedBy: rec.acceptedBy, acceptedAt: rec.acceptedAt,
+        expiresAt: rec.expiresAt || null, expired: !!isExpired,
       });
     }
 
@@ -109,6 +137,7 @@ module.exports = async (req, res) => {
       if (action === 'accept') {
         const name = String((body && body.name) || '').trim().slice(0, 120);
         if (!name) return res.status(400).json({ error: 'name-required' });
+        if (rec.status !== 'accepted' && rec.expiresAt && Date.now() > new Date(rec.expiresAt).getTime()) return res.status(403).json({ error: 'expired' });
         if (rec.status !== 'accepted') {
           rec.status = 'accepted'; rec.acceptedBy = name; rec.acceptedAt = nowIso();
           rec.note = String((body && body.note) || '').slice(0, 1000) || null;
@@ -119,6 +148,7 @@ module.exports = async (req, res) => {
             if (!Array.isArray(e.changelog)) e.changelog = [];
             e.changelog.push({ action: 'geaccepteerd door ' + name, date: when });
           });
+          await notifyEmail(rec);
         }
         return res.status(200).json({ ok: true, status: 'accepted', acceptedBy: rec.acceptedBy, acceptedAt: rec.acceptedAt });
       }

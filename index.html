@@ -1033,7 +1033,7 @@ function Header({data:d,onPdf,onExport,setData,onBack}){
         }
         setData(nd);
       }}>{d.lang==='nl'?'EN':'NL'}</button>}
-      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={async()=>{await copyShareLink(d,d.lang==='nl');archiveLogAction(d,'shared');}}>{ll.deelLink}</button>}{d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>onExport('planning')} title="Open deze offerte in de TEAL Planner">📅 Planner</button>}{d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} title="Publiceer een klant-weergave met online akkoord (geen editor, geen marges/interne data)" onClick={async(ev)=>{const btn=ev.currentTarget;const prev=btn.textContent;btn.disabled=true;btn.textContent='…';try{const ws=getWorkspaceId();const snap=mapQuoteToTokens(d);const r=await fetch('/api/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ws,archiveId:d._archiveId,snapshot:snap,lang:d.lang,projectName:d.project&&d.project.name})});const j=await r.json();if(j&&j.id){const url=location.origin+'/v/'+j.id;try{await navigator.clipboard.writeText(url);}catch(e){}if(d._archiveId){archiveSetStatus(d._archiveId,'verstuurd');}archiveLogAction(d,'ter akkoord gedeeld');window.prompt(d.lang==='nl'?'Deel deze link met de klant (gekopieerd). De klant kan de offerte bekijken en online akkoord geven:':'Share this link with the client (copied). They can view and accept online:',url);}else{alert('Publiceren mislukt: '+((j&&j.error)||'onbekend'));}}catch(e){alert('Publiceren mislukt: '+e);}btn.disabled=false;btn.textContent=prev;}}>{d.lang==='nl'?'Ter akkoord':'For approval'}</button>}
+      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={async()=>{await copyShareLink(d,d.lang==='nl');archiveLogAction(d,'shared');}}>{ll.deelLink}</button>}{d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>onExport('planning')} title="Open deze offerte in de TEAL Planner">📅 Planner</button>}{d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} title="Publiceer een klant-weergave met online akkoord (geen editor, geen marges/interne data)" onClick={async(ev)=>{const btn=ev.currentTarget;const prev=btn.textContent;btn.disabled=true;btn.textContent='…';try{const ws=getWorkspaceId();const snap=mapQuoteToTokens(d);const r=await fetch('/api/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ws,archiveId:d._archiveId,snapshot:snap,lang:d.lang,projectName:d.project&&d.project.name,validityDays:(d.conditions&&d.conditions.validity)||30})});const j=await r.json();if(j&&j.id){const url=location.origin+'/v/'+j.id;try{await navigator.clipboard.writeText(url);}catch(e){}if(d._archiveId){archiveSetStatus(d._archiveId,'verstuurd');}archiveLogAction(d,'ter akkoord gedeeld');window.prompt(d.lang==='nl'?'Deel deze link met de klant (gekopieerd). De klant kan de offerte bekijken en online akkoord geven:':'Share this link with the client (copied). They can view and accept online:',url);}else{alert('Publiceren mislukt: '+((j&&j.error)||'onbekend'));}}catch(e){alert('Publiceren mislukt: '+e);}btn.disabled=false;btn.textContent=prev;}}>{d.lang==='nl'?'Ter akkoord':'For approval'}</button>}
       
       {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>emailQuote(d)} title={d.lang==='nl'?'Stel een e-mail op met de offerte-PDF als bijlage':'Compose an email with the quotation PDF attached'}>{d.lang==='nl'?'Mail':'Email'}</button>}
       {d&&<button className="btn btn-s" onClick={onPdf}>PDF</button>}
@@ -3036,7 +3036,15 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
   const[importText,setImportText]=useState('');
   const[importErr,setImportErr]=useState('');
   const[synced,setSynced]=useState(false);
-  useEffect(()=>{pullArchive().then(a=>{migrateDeliveryRefs();setArchive(loadArchiveLive());setSynced(true);});},[]);
+  const[signedNotice,setSignedNotice]=useState([]);
+  useEffect(()=>{pullArchive().then(a=>{migrateDeliveryRefs();setArchive(loadArchiveLive());setSynced(true);
+    // Melding: welke offertes zijn getekend sinds je laatste bezoek?
+    try{const K='teal.offerte.lastSeen';const last=localStorage.getItem(K);const lt=last?new Date(last).getTime():0;
+      const fresh=loadArchiveLive().filter(e=>e&&e.status==='geaccepteerd'&&e.statusAt&&new Date(e.statusAt).getTime()>lt);
+      if(fresh.length)setSignedNotice(fresh);
+      localStorage.setItem(K,new Date().toISOString());
+    }catch(_e){}
+  });},[]);
   const statusMeta={
     concept:{label:'Concept',color:'#7a807e',bg:'#f0f0ee'},
     verstuurd:{label:'Verstuurd',color:'#1d6fb8',bg:'#e7f0fb'},
@@ -3167,6 +3175,12 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
   };
 
   return <div>
+    {signedNotice.length>0&&<div style={{background:'#0a6b57',color:'#fff',borderRadius:8,padding:'12px 16px',marginBottom:16,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+      <span style={{fontSize:18}}>✅</span>
+      <span style={{fontWeight:600}}>{signedNotice.length===1?'Een offerte is getekend':signedNotice.length+' offertes zijn getekend'} sinds je laatste bezoek:</span>
+      <span style={{opacity:.92}}>{signedNotice.map(e=>e.ref+' ('+(e.clientName||'—')+')').join(', ')}</span>
+      <button className="btn btn-sm" style={{marginLeft:'auto',background:'rgba(255,255,255,.18)',color:'#fff',border:0}} onClick={()=>setSignedNotice([])}>Sluiten</button>
+    </div>}
     {baseOpen&&<div onClick={()=>setBaseOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:100,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'6vh 16px',overflowY:'auto'}}>
       <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:10,maxWidth:640,width:'100%',padding:24,boxShadow:'0 10px 40px rgba(0,0,0,.25)'}}>
         <div className="between mb16" style={{alignItems:'center'}}><h3 style={{margin:0}}>Nieuwe offerte op basis van…</h3><button className="btn btn-sm btn-g" onClick={()=>setBaseOpen(false)}>&times;</button></div>
@@ -3774,23 +3788,28 @@ function getViewId(){
 }
 function PublicView({id}){
   const[state,setState]=useState({loading:true});
-  const[name,setName]=useState('');const[note,setNote]=useState('');const[agree,setAgree]=useState(false);const[busy,setBusy]=useState(false);
+  const[name,setName]=useState('');const[note,setNote]=useState('');const[agree,setAgree]=useState(false);const[busy,setBusy]=useState(false);const[scale,setScale]=useState(1);
   useEffect(()=>{fetch('/api/quote?id='+encodeURIComponent(id)).then(r=>r.ok?r.json():Promise.reject(r.status)).then(j=>setState({loading:false,data:j})).catch(e=>setState({loading:false,error:e}));},[]);
+  useEffect(()=>{const f=()=>{const w=window.innerWidth;setScale(w<834?Math.max(0.42,(w-8)/834):1);};f();window.addEventListener('resize',f);return ()=>window.removeEventListener('resize',f);},[]);
   if(state.loading)return <div style={{padding:40,fontFamily:'system-ui',color:'#555'}}>Laden…</div>;
   if(state.error||!state.data||!state.data.snapshot)return <div style={{padding:40,fontFamily:'system-ui',color:'#b3261e'}}>Deze offerte is niet (meer) beschikbaar.</div>;
   const T=state.data.snapshot, L=state.data.lang, NL=L!=='en';
   const accepted=state.data.status==='accepted'||!!state.data.acceptedBy;
+  const expired=(state.data.status==='expired'||!!state.data.expired)&&!accepted;
+  const expDate=state.data.expiresAt?new Date(state.data.expiresAt).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
   const doAccept=async()=>{
     if(!name.trim()||!agree||busy)return;setBusy(true);
     try{const r=await fetch('/api/quote?id='+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'accept',name:name.trim(),note})});const j=await r.json();if(j&&j.ok)setState(s=>({...s,data:{...s.data,status:'accepted',acceptedBy:j.acceptedBy,acceptedAt:j.acceptedAt}}));else alert(NL?'Akkoord mislukt. Probeer opnieuw.':'Could not accept. Please retry.');}catch(e){alert('Error: '+e);}
     setBusy(false);
   };
   return <div style={{minHeight:'100vh',background:'#d8d6cf',paddingBottom:130}}>
-    <QuoteDoc T={T} L={L} editable={false} onMove={()=>{}}/>
+    <div style={{zoom:scale}}><QuoteDoc T={T} L={L} editable={false} onMove={()=>{}}/></div>
     <div style={{position:'fixed',left:0,right:0,bottom:0,background:'#05100e',color:'#fff',padding:'16px 20px',boxShadow:'0 -4px 24px rgba(0,0,0,.28)'}}>
       <div style={{maxWidth:794,margin:'0 auto'}}>
         {accepted
           ? <div style={{fontSize:15,display:'flex',alignItems:'center',gap:10}}><span style={{color:'#7ee0c0',fontSize:20}}>✓</span><span>{(NL?'Akkoord gegeven door ':'Accepted by ')}<strong>{state.data.acceptedBy}</strong>{state.data.acceptedAt?' · '+new Date(state.data.acceptedAt).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):''}</span></div>
+          : expired
+          ? <div style={{fontSize:14,color:'#f3c9c9',display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:18}}>⏳</span><span>{NL?('Deze offerte is verlopen'+(expDate?' op '+expDate:'')+'. Neem contact op voor een bijgewerkte offerte.'):('This quotation has expired'+(expDate?' on '+expDate:'')+'. Please contact us for an updated one.')}</span></div>
           : <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
               <span style={{fontSize:13,color:'#c9d3d0'}}>{NL?'Akkoord met deze offerte?':'Accept this quotation?'}</span>
               <input value={name} onChange={e=>setName(e.target.value)} placeholder={NL?'Uw naam':'Your name'} style={{padding:'10px 12px',borderRadius:6,border:0,fontSize:14,flex:'1 1 180px',minWidth:140}}/>
