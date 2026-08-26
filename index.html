@@ -1095,7 +1095,32 @@ function ProjectTab({data:d,set}){
   // contact/e-mail/adres vullen zich; typen van een exacte naammatch doet hetzelfde.
   const pastClients=(()=>{const seen=new Set();const out=[];(loadArchiveLive()||[]).forEach(e=>{const c=(e.data&&e.data.client)||{};const nm=String(c.name||'').trim();if(nm&&!seen.has(nm.toLowerCase())){seen.add(nm.toLowerCase());out.push(c);}});return out;})();
   const onClientName=(v)=>{const m=pastClients.find(c=>String(c.name||'').toLowerCase()===v.trim().toLowerCase());if(m){set({...d,client:{...d.client,name:m.name,contact:m.contact||'',email:m.email||'',addr:m.addr||'',zip:m.zip||'',city:m.city||''}});}else{upC('name',v);}};
+  // Slimme suggestie: zoek de meest vergelijkbare eerdere offerte (exacte klant weegt zwaar, dan
+  // trefwoorden in de projectnaam, dan type). Alleen tonen bij een echt signaal — geen ruis op een
+  // leeg nieuw formulier. "Overnemen" kopieert fases/inkoop/onderaannemers/installatie hierheen.
+  const[baseDismissed,setBaseDismissed]=useState(false);
+  const bestMatch=(()=>{
+    const arch=(loadArchiveLive()||[]).filter(e=>e&&(e.kind||'quote')==='quote'&&e.id!==d._archiveId&&e.data&&Array.isArray(e.data.phases));
+    if(!arch.length)return null;
+    const cn=String(d.client.name||'').trim().toLowerCase();
+    const words=s=>String(s||'').toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>3);
+    const pw=new Set(words(d.project.name));
+    let best=null,bs=0;
+    arch.forEach(e=>{let sc=0;const ec=String(e.clientName||'').trim().toLowerCase();
+      if(cn&&ec&&ec===cn)sc+=100;
+      if((e.type||'')===d.type)sc+=2;
+      words(e.projectName).forEach(w=>{if(pw.has(w))sc+=6;});
+      if(sc>bs||(sc===bs&&sc>0&&best&&new Date(e.updatedAt||0)>new Date(best.updatedAt||0))){bs=sc;best=e;}});
+    return bs>=6?best:null;
+  })();
+  const applyBaseFrom=(e)=>{const s=e.data||{};const cp=x=>x?JSON.parse(JSON.stringify(x)):x;set({...d,phases:cp(s.phases)||d.phases,procOTS:cp(s.procOTS)||[],procCustom:cp(s.procCustom)||[],subs:cp(s.subs)||[],install:cp(s.install)||d.install,costOrder:cp(s.costOrder)||[]});setBaseDismissed(true);};
   return <>
+    {bestMatch&&!baseDismissed&&<div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',background:'var(--mint-light,#eaf5f0)',border:'1px solid #bfe0d4',borderRadius:10,padding:'12px 16px',marginBottom:16}}>
+      <span style={{fontSize:18}}>💡</span>
+      <span style={{flex:1,minWidth:200,fontSize:14}}>{L==='nl'?'Lijkt op ':'Similar to '}<b>{bestMatch.ref}</b> · {bestMatch.projectName||'—'} <span className="muted">({bestMatch.clientName||'—'})</span></span>
+      <button className="btn btn-sm btn-s" onClick={()=>applyBaseFrom(bestMatch)}>{L==='nl'?'Fases & prijzen overnemen':'Reuse phases & prices'}</button>
+      <button className="btn btn-sm btn-g" title={L==='nl'?'Verbergen':'Dismiss'} onClick={()=>setBaseDismissed(true)}>&times;</button>
+    </div>}
     <div className="card">
       <div className="card-h">{ll.projectGegevens}</div>
       <div className="row">
@@ -1184,6 +1209,22 @@ function ProjectTab({data:d,set}){
 }
 
 // ── Scope Tab ──
+// Veelgebruikte uitsluitingen/aannames — als één-klik-frasen naast de +knoppen.
+const COMMON_EXCL=[
+  {nl:'BTW en overige belastingen',en:'VAT and other taxes'},
+  {nl:'Vergunningen, keuringen en leges',en:'Permits, inspections and fees'},
+  {nl:'Bouwkundige voorzieningen en fundering',en:'Structural provisions and foundation'},
+  {nl:'Stroom, water en internet op locatie',en:'Power, water and internet on site'},
+  {nl:'Transport en verzekering van het eindproduct',en:'Transport and insurance of the final product'},
+  {nl:'Onderhoud en support na oplevering',en:'Maintenance and support after delivery'},
+  {nl:'Werkzaamheden buiten de omschreven scope',en:'Work outside the described scope'},
+];
+const COMMON_ASSUMP=[
+  {nl:'De klant levert tijdig de benodigde content, specificaties en goedkeuringen aan.',en:'The client supplies the required content, specifications and approvals on time.'},
+  {nl:'Werkzaamheden vinden plaats binnen reguliere werktijden.',en:'Work takes place during regular working hours.'},
+  {nl:'De locatie is tijdig toegankelijk en gereed voor installatie.',en:'The site is accessible and ready for installation on time.'},
+  {nl:'Prijzen zijn gebaseerd op de huidige materiaal- en leverancierstarieven.',en:'Prices are based on current material and supplier rates.'},
+];
 function ScopeTab({data:d,set}){
   const L=d.lang;const ll=L_(L);
   const upPhase=(i,k,v)=>{const p=[...d.phases];p[i]={...p[i],[k]:v};set({...d,phases:p})};
@@ -1245,6 +1286,7 @@ function ScopeTab({data:d,set}){
           <textarea style={{flex:1,minHeight:44}} value={t(it,L)} onChange={e=>setAssumpItem(i,e.target.value)} disabled={!assump.enabled} placeholder={L==='nl'?'Eén aanname per regel.':'One assumption per line.'}/>
           <button className="btn btn-sm btn-g" onClick={()=>delAssump(i)} disabled={!assump.enabled}>×</button></div>)}
         <button className="btn btn-sm btn-g" onClick={addAssump} disabled={!assump.enabled}>+ {L==='nl'?'Aanname':'Assumption'}</button>
+        {assump.enabled&&(()=>{const avail=COMMON_ASSUMP.filter(p=>!(assump.items||[]).some(it=>t(it,'nl')===p.nl));return avail.length?<div className="flex g8" style={{flexWrap:'wrap',marginTop:10}}>{avail.map((p,i)=><button key={i} className="btn btn-xs btn-g" title={p[L]||p.nl} onClick={()=>set({...d,annexes:{...ax,assumptions:{...assump,items:[...(assump.items||[]),{nl:p.nl,en:p.en}]}}})}>+ {(p[L]||p.nl).length>40?(p[L]||p.nl).slice(0,40)+'…':(p[L]||p.nl)}</button>)}</div>:null;})()}
       </div>
     </div>
   </div>
@@ -1264,6 +1306,7 @@ function ScopeTab({data:d,set}){
         <textarea style={{flex:1,minHeight:40}} value={t(it,L)} onChange={e=>setExclItem(i,e.target.value)} disabled={!resp.enabled} placeholder={L==='nl'?'Eén uitsluiting (bijv. vergunningen, grondwerk, stroomvoorziening).':'One exclusion (e.g. permits, groundwork, power supply).'}/>
         <button className="btn btn-sm btn-g" onClick={()=>delExclItem(i)} disabled={!resp.enabled}>×</button></div>)}
       <button className="btn btn-sm btn-g" onClick={addExclItem} disabled={!resp.enabled}>+ {L==='nl'?'Uitsluiting':'Exclusion'}</button>
+      {resp.enabled&&(()=>{const avail=COMMON_EXCL.filter(p=>!exclItems.some(it=>t(it,'nl')===p.nl));return avail.length?<div className="flex g8" style={{flexWrap:'wrap',marginTop:10}}>{avail.map((p,i)=><button key={i} className="btn btn-xs btn-g" onClick={()=>set({...d,project:{...d.project,exclusionItems:[...exclItems,{nl:p.nl,en:p.en}]}})}>+ {p[L]||p.nl}</button>)}</div>:null;})()}
     </div>
     <div style={{marginTop:18,opacity:resp.enabled?1:.5}}>
       <div className="sm muted" style={{marginBottom:6}}>{L==='nl'?'Afbeeldingen (optioneel, met bijschrift) — verschijnen onder dit blok in de offerte':'Images (optional, with caption) — shown below this block in the quotation'}</div>
@@ -3705,6 +3748,7 @@ function App(){
     <div className="topbar">
       <Header data={showDash||isCO||isDelivery?null:d} onPdf={handlePdf} onExport={handleExport} setData={setDWithArchive} onBack={goToDash}/>
       {!showDash&&d&&!isCO&&!isDelivery&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
+      {!showDash&&d&&!isCO&&!isDelivery&&<button className="btn btn-g btn-sm" style={{marginLeft:8,color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} title={d.lang==='nl'?'Alle secties op één doorlopende pagina (geen tabs)':'All sections on one continuous page (no tabs)'} onClick={()=>setTab(t=>t==='all'?'project':'all')}>{tab==='all'?(d.lang==='nl'?'Per tab':'By tab'):(d.lang==='nl'?'📄 Eén pagina':'📄 One page')}</button>}
     </div>
     <div className="main">
       {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onNewFrom={newQuoteFrom} onNewInProject={newQuoteInProject} onNewExternalProject={newExternalProject} onImport={importDoc} onDuplicate={duplicateQuote} onDelete={deleteQuote} onNewCO={newCO} onNewDelivery={newDelivery} onNewCOForProject={newCOForProject} onNewDeliveryForProject={newDeliveryForProject} onBumpVersion={bumpVersion}/>:
@@ -3719,8 +3763,8 @@ function App(){
           </div>
           <button className="btn btn-g btn-sm" onClick={()=>bumpVersion(d._archiveId)}>Nieuwe versie</button>
         </div>
-        {tab==='project'&&<ProjectTab data={d} set={setDWithArchive}/>}
-        {(tab==='scope'||tab==='budget')&&(()=>{
+        {(tab==='project'||tab==='all')&&<React.Fragment>{tab==='all'&&<div className="card-h" style={{fontSize:15,margin:'8px 0 14px',paddingBottom:8,borderBottom:'2px solid var(--teal-dark)'}}>{d.lang==='nl'?'Project':'Project'}</div>}<ProjectTab data={d} set={setDWithArchive}/></React.Fragment>}
+        {(tab==='scope'||tab==='budget'||tab==='all')&&(()=>{
           const optIdx=(d.multiOption&&d.options&&d.options.length)?Math.min(activeOptIdx,d.options.length-1):null;
           return <div className="card" style={{padding:'12px 16px',marginBottom:16}}>
             {optIdx==null?
@@ -3742,11 +3786,11 @@ function App(){
             </div>}
           </div>;
         })()}
-        {tab==='scope'&&(()=>{const optIdx=(d.multiOption&&d.options&&d.options.length)?Math.min(activeOptIdx,d.options.length-1):null;const[sd,ss]=optIdx!=null?scopedForOption(optIdx):[d,setDWithArchive];return <ScopeTab data={sd} set={ss}/>;})()}
-        {tab==='budget'&&(()=>{const optIdx=(d.multiOption&&d.options&&d.options.length)?Math.min(activeOptIdx,d.options.length-1):null;const[sd,ss]=optIdx!=null?scopedForOption(optIdx):[d,setDWithArchive];return <BudgetTab data={sd} set={ss}/>;})()}
-        {tab==='planning'&&(()=>{const hasOpts=d.multiOption&&d.options&&d.options.length;const[sd,ss]=hasOpts?scopedForOption(0):[d,setDWithArchive];return <>{hasOpts&&<p className="sm muted mb16">{d.lang==='nl'?'De planning is gedeeld en volgt Optie '+(d.options[0].label)+'.':'The timeline is shared and follows Option '+(d.options[0].label)+'.'}</p>}<PlanningTab data={sd} set={ss}/></>;})()}
-        {tab==='payment'&&<PaymentTab data={d} set={setDWithArchive}/>}
-        {tab==='annexes'&&<AnnexesTab data={d} set={setDWithArchive}/>}
+        {(tab==='scope'||tab==='all')&&(()=>{const optIdx=(d.multiOption&&d.options&&d.options.length)?Math.min(activeOptIdx,d.options.length-1):null;const[sd,ss]=optIdx!=null?scopedForOption(optIdx):[d,setDWithArchive];return <React.Fragment>{tab==='all'&&<div className="card-h" style={{fontSize:15,margin:'34px 0 14px',paddingBottom:8,borderBottom:'2px solid var(--teal-dark)'}}>{d.lang==='nl'?'Scope':'Scope'}</div>}<ScopeTab data={sd} set={ss}/></React.Fragment>;})()}
+        {(tab==='budget'||tab==='all')&&(()=>{const optIdx=(d.multiOption&&d.options&&d.options.length)?Math.min(activeOptIdx,d.options.length-1):null;const[sd,ss]=optIdx!=null?scopedForOption(optIdx):[d,setDWithArchive];return <React.Fragment>{tab==='all'&&<div className="card-h" style={{fontSize:15,margin:'34px 0 14px',paddingBottom:8,borderBottom:'2px solid var(--teal-dark)'}}>{d.lang==='nl'?'Kosten':'Costs'}</div>}<BudgetTab data={sd} set={ss}/></React.Fragment>;})()}
+        {(tab==='planning'||tab==='all')&&(()=>{const hasOpts=d.multiOption&&d.options&&d.options.length;const[sd,ss]=hasOpts?scopedForOption(0):[d,setDWithArchive];return <React.Fragment>{tab==='all'&&<div className="card-h" style={{fontSize:15,margin:'34px 0 14px',paddingBottom:8,borderBottom:'2px solid var(--teal-dark)'}}>{d.lang==='nl'?'Planning':'Timeline'}</div>}{hasOpts&&<p className="sm muted mb16">{d.lang==='nl'?'De planning is gedeeld en volgt Optie '+(d.options[0].label)+'.':'The timeline is shared and follows Option '+(d.options[0].label)+'.'}</p>}<PlanningTab data={sd} set={ss}/></React.Fragment>;})()}
+        {(tab==='payment'||tab==='all')&&<React.Fragment>{tab==='all'&&<div className="card-h" style={{fontSize:15,margin:'34px 0 14px',paddingBottom:8,borderBottom:'2px solid var(--teal-dark)'}}>{d.lang==='nl'?'Betaling':'Payment'}</div>}<PaymentTab data={d} set={setDWithArchive}/></React.Fragment>}
+        {(tab==='annexes'||tab==='all')&&<React.Fragment>{tab==='all'&&<div className="card-h" style={{fontSize:15,margin:'34px 0 14px',paddingBottom:8,borderBottom:'2px solid var(--teal-dark)'}}>{d.lang==='nl'?'Bijlagen':'Annexes'}</div>}<AnnexesTab data={d} set={setDWithArchive}/></React.Fragment>}
         {tab==='preview'&&<PreviewTab data={d} set={setDWithArchive}/>}
         <div className="between mt24">
           {(()=>{const order=tabs.map(x=>x.id);const i=order.indexOf(tab);return i>0?<button className="btn btn-g" onClick={()=>setTab(order[i-1])}>{d.lang==='nl'?'‹ Vorige sectie':'‹ Previous section'}</button>:<span/>;})()}
