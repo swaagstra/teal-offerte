@@ -1803,6 +1803,10 @@ function ProjectTab({data:d,set}){
   const delLink=(i)=>saveLinks(links.filter((_,j)=>j!==i));
   const onDropLink=(e)=>{e.preventDefault();const dt=e.dataTransfer;if(!dt)return;const uri=dt.getData('text/uri-list')||dt.getData('text/plain')||'';uri.split(/[\r\n\s]+/).filter(x=>/^https?:\/\//i.test(x)||/\w\.\w/.test(x)).forEach(addLink);};
   const[linkDraft,setLinkDraft]=useState('');
+  // Klant-autocomplete: unieke klanten uit eerdere offertes (meest recent eerst). Kies er een en
+  // contact/e-mail/adres vullen zich; typen van een exacte naammatch doet hetzelfde.
+  const pastClients=(()=>{const seen=new Set();const out=[];(loadArchiveLive()||[]).forEach(e=>{const c=(e.data&&e.data.client)||{};const nm=String(c.name||'').trim();if(nm&&!seen.has(nm.toLowerCase())){seen.add(nm.toLowerCase());out.push(c);}});return out;})();
+  const onClientName=(v)=>{const m=pastClients.find(c=>String(c.name||'').toLowerCase()===v.trim().toLowerCase());if(m){set({...d,client:{...d.client,name:m.name,contact:m.contact||'',email:m.email||'',addr:m.addr||'',zip:m.zip||'',city:m.city||''}});}else{upC('name',v);}};
   return <>
     <div className="card">
       <div className="card-h">{ll.projectGegevens}</div>
@@ -1829,7 +1833,8 @@ function ProjectTab({data:d,set}){
     <div className="card">
       <div className="card-h">{ll.klantGegevens}</div>
       <div className="row">
-        <div className="fg"><label>{ll.bedrijfsnaam}</label><input value={d.client.name} onChange={e=>upC('name',e.target.value)}/></div>
+        <div className="fg"><label>{ll.bedrijfsnaam}</label><input list="teal-clients" value={d.client.name} onChange={e=>onClientName(e.target.value)} placeholder={L==='nl'?'Kies of typ een klant…':'Pick or type a client…'}/>
+          <datalist id="teal-clients">{pastClients.map((c,i)=><option key={i} value={c.name}/>)}</datalist></div>
         <div className="fg"><label>{ll.contactpersoon}</label><input value={d.client.contact} onChange={e=>upC('contact',e.target.value)}/></div>
       </div>
       <div className="row">
@@ -2000,6 +2005,9 @@ function BudgetTab({data:d,set}){
   const rmItem=(pi,ii)=>{const p=[...d.phases];p[pi]={...p[pi],items:p[pi].items.filter((_,i)=>i!==ii)};set({...d,phases:p})};
   // Reorder a budget line within its phase (swap with the neighbour in the given direction).
   const moveItem=(pi,ii,dir)=>{const p=[...d.phases];const items=[...p[pi].items];const ni=ii+dir;if(ni<0||ni>=items.length)return;const tmp=items[ii];items[ii]=items[ni];items[ni]=tmp;p[pi]={...p[pi],items};set({...d,phases:p})};
+  // Omvang-schaling: vermenigvuldig alle uren/dagen van de ingeschakelde fases in één klik, als
+  // snelle "kleiner/groter"-knop. Afronden op 1 decimaal (dagen kunnen halve zijn).
+  const scaleEffort=(f)=>{const p=d.phases.map(ph=>ph.enabled===false?ph:{...ph,items:(ph.items||[]).map(it=>({...it,qty:Math.round(((+it.qty||0)*f)*10)/10}))});set({...d,phases:p})};
   const upCont=(pi,v)=>{const p=[...d.phases];p[pi]={...p[pi],contingency:v};set({...d,phases:p})};
   const upTravel=(pi,k,v)=>{const p=[...d.phases];p[pi]={...p[pi],travel:{trips:0,km:0,rate:.50,hours:0,hourRate:0,...(p[pi].travel||{}),[k]:v}};set({...d,phases:p})};
 
@@ -2102,6 +2110,13 @@ function BudgetTab({data:d,set}){
     <div className="card">
       <div className="card-h">{ll.blockATitle}</div>
       <p className="sm muted mb16">{ll.blockAHelp}</p>
+      <div className="flex g8" style={{alignItems:'center',flexWrap:'wrap',marginBottom:14}}>
+        <span className="sm muted">{L==='nl'?'Omvang — schaal alle uren/dagen:':'Scale — all hours/days:'}</span>
+        <button className="btn btn-sm btn-g" title={L==='nl'?'Alle inzet ×0,6':'All effort ×0.6'} onClick={()=>scaleEffort(0.6)}>{L==='nl'?'Kleiner ×0,6':'Smaller ×0.6'}</button>
+        <button className="btn btn-sm btn-g" title={L==='nl'?'Alle inzet ×1,5':'All effort ×1.5'} onClick={()=>scaleEffort(1.5)}>{L==='nl'?'Groter ×1,5':'Larger ×1.5'}</button>
+        <span className="sm muted" style={{marginLeft:4}}>{L==='nl'?'of typ ×':'or type ×'}</span>
+        <input type="number" step="0.1" min="0" placeholder="1.0" style={{width:64}} onKeyDown={e=>{if(e.key==='Enter'){const f=parseFloat(e.target.value);if(f>0){scaleEffort(f);e.target.value='';}}}} title={L==='nl'?'Typ een factor en Enter (bijv. 2 = dubbel)':'Type a factor and Enter (e.g. 2 = double)'}/>
+      </div>
       <div className="tbl-scroll"><table className="bt">
         <thead><tr><th style={{width:'20%'}}>{ll.omschrijvingCol}</th><th style={{width:'12%'}}>{ll.rol}</th><th style={{width:'7%'}}>{ll.aantal}</th><th style={{width:'7%'}}>{ll.eenheid}</th><th style={{width:'9%'}}>{ll.extTarief}</th><th style={{width:'10%'}}>{ll.klantprijs}</th><th style={{width:'9%'}}>{ll.intTarief}</th><th style={{width:'10%'}}>{ll.kostprijs}</th><th style={{width:'10%'}}>{ll.marge}</th><th style={{width:'4%'}}></th></tr></thead>
         <tbody>
@@ -3749,8 +3764,9 @@ async function pushToOdoo(entry,opts={}){
 }
 
 // ── Dashboard ──
-function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onImport,onDuplicate,onDelete,onNewCO,onNewDelivery,onNewCOForProject,onNewDeliveryForProject,onBumpVersion}){
+function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,onImport,onDuplicate,onDelete,onNewCO,onNewDelivery,onNewCOForProject,onNewDeliveryForProject,onBumpVersion}){
   const[archive,setArchive]=useState(loadArchiveLive());
+  const[baseOpen,setBaseOpen]=useState(false);
   const[expandedId,setExpandedId]=useState(null);
   const[avRefresh,setAvRefresh]=useState(0);
   const refresh=()=>setArchive(loadArchiveLive());
@@ -3903,6 +3919,19 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onImport,on
   };
 
   return <div>
+    {baseOpen&&<div onClick={()=>setBaseOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:100,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'6vh 16px',overflowY:'auto'}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:10,maxWidth:640,width:'100%',padding:24,boxShadow:'0 10px 40px rgba(0,0,0,.25)'}}>
+        <div className="between mb16" style={{alignItems:'center'}}><h3 style={{margin:0}}>Nieuwe offerte op basis van…</h3><button className="btn btn-sm btn-g" onClick={()=>setBaseOpen(false)}>&times;</button></div>
+        <p className="sm muted mb16">Kies een eerdere offerte; de fases, inzet en prijzen worden overgenomen als startpunt (met een nieuwe referentie). Klant en teksten pas je daarna aan.</p>
+        {archive.filter(e=>!isChild(e)).length===0
+          ? <p className="sm muted">Nog geen eerdere offertes om op voort te bouwen.</p>
+          : archive.filter(e=>!isChild(e)).slice().sort((a,b)=>new Date(b.updatedAt||0)-new Date(a.updatedAt||0)).map(e=>
+            <div key={e.id} onClick={()=>{setBaseOpen(false);onNewFrom(e);}} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,padding:'10px 12px',border:'1px solid #eee',borderRadius:8,marginBottom:8,cursor:'pointer',background:'#fafafa'}}>
+              <div style={{minWidth:0}}><div style={{fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.projectName||'—'}</div><div className="sm muted">{e.ref} · {e.clientName||'—'} · {e.type==='build'?'Build':'Assemble'}</div></div>
+              <div className="mono" style={{whiteSpace:'nowrap'}}>{fmtE(entryTotal(e))}</div>
+            </div>)}
+      </div>
+    </div>}
     <div className="between mb16">
       <div>
         <Logo color="#071412" h={36}/>
@@ -3913,6 +3942,7 @@ function Dashboard({onOpen,onNew,onNewInProject,onNewExternalProject,onImport,on
         <button className="btn btn-g btn-sm" onClick={copyWsUrl} title="Kopieer een prive-link om je offertes op een ander apparaat te openen">Apparaten</button>
         <button className="btn btn-p" onClick={()=>onNew('build')}>+ Build</button>
         <button className="btn btn-p" onClick={()=>onNew('assemble')}>+ Assemble</button>
+        <button className="btn btn-g" onClick={()=>setBaseOpen(true)} title="Start een nieuwe offerte met de fases, inzet en prijzen van een eerdere offerte als basis">+ Op basis van…</button>
         <button className="btn btn-g" onClick={()=>onNewExternalProject()} title="Voeg een project toe waarvan de offerte buiten de tool is gemaakt, en maak er meteen een change order in aan">+ Project (extern)</button>
         <button className="btn btn-g" onClick={()=>{setImportText('');setImportErr('');setImportOpen(true);}} title="Plak een offerte-JSON of import-link (bijv. gegenereerd door de intake-skill)">Importeren</button>
       </div>
@@ -4367,6 +4397,11 @@ function App(){
   const openQuote=(data)=>{const md=isStandalone(data)?data:migrateConds(data);const saved=archiveSave(md,'updated');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const newQuote=(type)=>{const proj=createProject(type);const saved=archiveSave(proj,'created');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const newQuoteInProject=(fromEntry)=>{const type=fromEntry.type||(fromEntry.data&&fromEntry.data.type)||'build';const proj=createProject(type);proj.project.name=fromEntry.projectName||(fromEntry.data&&fromEntry.data.project&&fromEntry.data.project.name)||'';const pc=(fromEntry.data&&fromEntry.data.client)||{};proj.client={...proj.client,name:pc.name||'',contact:pc.contact||'',email:pc.email||'',addr:pc.addr||'',zip:pc.zip||'',city:pc.city||''};proj.project.location=(fromEntry.data&&fromEntry.data.project&&fromEntry.data.project.location)||'';const saved=archiveSave(proj,'created');save(saved);setD(saved);setTab('project');setShowDash(false);};
+  // Start een nieuwe offerte met een bestaande als basis: neem fases/inzet/prijzen/teksten/klant
+  // over, maar met een verse referentie en zonder _archiveId (dus een echte nieuwe offerte).
+  const newQuoteFrom=(entry)=>{const src=(entry&&entry.data)||entry;if(!src||!src.phases)return;const copy=JSON.parse(JSON.stringify(src));delete copy._archiveId;
+    const base=genRef(copy.type||'assemble');const refs=new Set(loadArchiveLive().map(e=>e.ref));let ref=base,n=1;while(refs.has(ref)){n++;ref=base.replace(/-\d+$/,'')+'-'+n;}copy.ref=ref;
+    const saved=archiveSave(copy,'created');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const newCO=(parentEntry)=>{const lang=parentEntry?parentEntry.lang:((d&&d.lang)||'nl');const co=createChangeOrder(parentEntry,lang);const saved=archiveSave(co,'created');save(saved);setD(saved);setShowDash(false);};
   const newDelivery=(parentEntry)=>{const lang=parentEntry?parentEntry.lang:((d&&d.lang)||'nl');const dvd=createDelivery(parentEntry,lang);const saved=archiveSave(dvd,'created');save(saved);setD(saved);setShowDash(false);};
   const newCOForProject=(name)=>{const co=createChangeOrder(null,(d&&d.lang)||'nl');if(name)co.project.name=name;const saved=archiveSave(co,'created');save(saved);setD(saved);setShowDash(false);};
@@ -4469,7 +4504,7 @@ function App(){
       {!showDash&&d&&!isCO&&!isDelivery&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
     </div>
     <div className="main">
-      {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onNewInProject={newQuoteInProject} onNewExternalProject={newExternalProject} onImport={importDoc} onDuplicate={duplicateQuote} onDelete={deleteQuote} onNewCO={newCO} onNewDelivery={newDelivery} onNewCOForProject={newCOForProject} onNewDeliveryForProject={newDeliveryForProject} onBumpVersion={bumpVersion}/>:
+      {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onNewFrom={newQuoteFrom} onNewInProject={newQuoteInProject} onNewExternalProject={newExternalProject} onImport={importDoc} onDuplicate={duplicateQuote} onDelete={deleteQuote} onNewCO={newCO} onNewDelivery={newDelivery} onNewCOForProject={newCOForProject} onNewDeliveryForProject={newDeliveryForProject} onBumpVersion={bumpVersion}/>:
       isCO?<ChangeOrderFlow data={d} set={setDWithArchive} onBack={goToDash}/>:
       isDelivery?<DeliveryFlow data={d} set={setDWithArchive} onBack={goToDash}/>:
       !d?<Start onSelect={type=>{if(type==='load'){const r=load();if(r)openQuote(r);}else newQuote(type);}}/>:<>
