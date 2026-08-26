@@ -1320,6 +1320,25 @@ function BudgetTab({data:d,set}){
   const upSub=(i,k,v)=>{const a=[...(d.subs||[])];a[i]={...a[i],[k]:v};set({...d,subs:a})};
   const addSub=()=>set({...d,subs:[...(d.subs||[]),{id:uid(),desc:'',company:'',amount:0,coordPct:COORD_MARGIN}]});
   const rmSub=i=>set({...d,subs:(d.subs||[]).filter((_,idx)=>idx!==i)});
+  // ── Activiteit-gecentreerde kosten: inkoop/maatwerk/onderaannemer worden per regel aan een
+  // activiteit (fase) gekoppeld via phaseId, zodat je per activiteit denkt i.p.v. per blok.
+  const[showCost,setShowCost]=useState(false);
+  const otsFor=(pid)=>(d.procOTS||[]).map((it,i)=>({it,i})).filter(x=>(x.it.phaseId||'')===(pid||''));
+  const custFor=(pid)=>(d.procCustom||[]).map((it,i)=>({it,i})).filter(x=>(x.it.phaseId||'')===(pid||''));
+  const subFor=(pid)=>(d.subs||[]).map((it,i)=>({it,i})).filter(x=>(x.it.phaseId||'')===(pid||''));
+  const cOTS=(it)=>{const h=(+it.amount||0)*(it.handlingPct||0);return{client:(+it.amount||0)+h,cost:(+it.amount||0),h};};
+  const cCust=(it)=>{const h=(+it.amount||0)*(it.handlingPct||0),r=(+it.amount||0)*(it.riskPct||0);return{client:(+it.amount||0)+h+r,cost:(+it.amount||0),h,r};};
+  const cSub=(it)=>{const co=(+it.amount||0)*(it.coordPct||COORD_MARGIN);return{client:(+it.amount||0)+co,cost:(+it.amount||0),co};};
+  const actClient=(ph,pi)=>{let s=(totals.phaseData[pi]||{}).total||0;otsFor(ph.id).forEach(x=>s+=cOTS(x.it).client);custFor(ph.id).forEach(x=>s+=cCust(x.it).client);subFor(ph.id).forEach(x=>s+=cSub(x.it).client);return s;};
+  const actCost=(ph,pi)=>{let s=(totals.phaseData[pi]||{}).cost||0;otsFor(ph.id).forEach(x=>s+=cOTS(x.it).cost);custFor(ph.id).forEach(x=>s+=cCust(x.it).cost);subFor(ph.id).forEach(x=>s+=cSub(x.it).cost);return s;};
+  const addLine=(type,pid)=>{
+    if(type==='labour'){const p=[...d.phases];const idx=p.findIndex(x=>x.id===pid);if(idx<0)return;p[idx]={...p[idx],items:[...(p[idx].items||[]),{id:uid(),role:'design',desc:{nl:'',en:''},qty:0,extRate:120,intRate:75,unit:'uur'}]};set({...d,phases:p});}
+    else if(type==='ots')set({...d,procOTS:[...(d.procOTS||[]),{id:uid(),desc:'',supplier:'',amount:0,handlingPct:.20,phaseId:pid||null}]});
+    else if(type==='cust')set({...d,procCustom:[...(d.procCustom||[]),{id:uid(),desc:'',supplier:'',amount:0,handlingPct:.12,riskPct:.10,phaseId:pid||null}]});
+    else if(type==='sub')set({...d,subs:[...(d.subs||[]),{id:uid(),desc:'',company:'',amount:0,coordPct:COORD_MARGIN,phaseId:pid||null}]});
+  };
+  const addPhase=()=>{const p=[...d.phases];const n=p.length;p.push({id:uid(),code:'',name:{nl:'Nieuwe activiteit',en:'New activity'},items:[],enabled:true,customName:null,startWeek:n*4,durationWeeks:4,description:{nl:'',en:''},effort:'',contingency:0.1,travel:{trips:0,km:0,rate:.5,hours:0,hourRate:0}});set({...d,phases:p});};
+  const rmPhase=(pi)=>{if(!confirm(L==='nl'?'Deze activiteit verwijderen? (regels eronder gaan mee)':'Remove this activity?'))return;const ph=d.phases[pi];const p=d.phases.filter((_,i)=>i!==pi);set({...d,phases:p,procOTS:(d.procOTS||[]).filter(x=>(x.phaseId||'')!==ph.id),procCustom:(d.procCustom||[]).filter(x=>(x.phaseId||'')!==ph.id),subs:(d.subs||[]).filter(x=>(x.phaseId||'')!==ph.id)});};
 
   // Installatie / reizen helpers
   const inst=totals.inst;
@@ -1390,151 +1409,95 @@ function BudgetTab({data:d,set}){
 
   return <>
     {/* Block A */}
-    <div className="card">
-      <div className="card-h">{ll.blockATitle}</div>
-      <p className="sm muted mb16">{ll.blockAHelp}</p>
-      <div className="flex g8" style={{alignItems:'center',flexWrap:'wrap',marginBottom:14}}>
-        <span className="sm muted">{L==='nl'?'Omvang — schaal alle uren/dagen:':'Scale — all hours/days:'}</span>
-        <button className="btn btn-sm btn-g" title={L==='nl'?'Alle inzet ×0,6':'All effort ×0.6'} onClick={()=>scaleEffort(0.6)}>{L==='nl'?'Kleiner ×0,6':'Smaller ×0.6'}</button>
-        <button className="btn btn-sm btn-g" title={L==='nl'?'Alle inzet ×1,5':'All effort ×1.5'} onClick={()=>scaleEffort(1.5)}>{L==='nl'?'Groter ×1,5':'Larger ×1.5'}</button>
-        <span className="sm muted" style={{marginLeft:4}}>{L==='nl'?'of typ ×':'or type ×'}</span>
-        <input type="number" step="0.1" min="0" placeholder="1.0" style={{width:64}} onKeyDown={e=>{if(e.key==='Enter'){const f=parseFloat(e.target.value);if(f>0){scaleEffort(f);e.target.value='';}}}} title={L==='nl'?'Typ een factor en Enter (bijv. 2 = dubbel)':'Type a factor and Enter (e.g. 2 = double)'}/>
-      </div>
-      <div className="tbl-scroll"><table className="bt">
-        <thead><tr><th style={{width:'20%'}}>{ll.omschrijvingCol}</th><th style={{width:'12%'}}>{ll.rol}</th><th style={{width:'7%'}}>{ll.aantal}</th><th style={{width:'7%'}}>{ll.eenheid}</th><th style={{width:'9%'}}>{ll.extTarief}</th><th style={{width:'10%'}}>{ll.klantprijs}</th><th style={{width:'9%'}}>{ll.intTarief}</th><th style={{width:'10%'}}>{ll.kostprijs}</th><th style={{width:'10%'}}>{ll.marge}</th><th style={{width:'4%'}}></th></tr></thead>
-        <tbody>
-          {d.phases.map((ph,pi)=><React.Fragment key={ph.id}>
-            <tr className="ph" style={{opacity:ph.enabled===false?.5:1}}><td colSpan={9}>
-              <span className="flex g8" style={{alignItems:'center'}}>
-                <input type="checkbox" checked={ph.enabled!==false} onChange={e=>{const p=[...d.phases];p[pi]={...p[pi],enabled:e.target.checked};set({...d,phases:p})}} style={{width:14,height:14,cursor:'pointer'}}/>
-                {ph.code} - {phaseName(ph)}
-              </span>
-              <span style={{opacity:.6,marginLeft:12,fontSize:11}}>{ll.contingency}: <input type="number" value={Math.round((ph.contingency||0)*100)} onChange={e=>upCont(pi,(parseInt(e.target.value)||0)/100)} style={{width:40,textAlign:'center',background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.2)',borderRadius:3,color:'var(--teal-mint)',fontSize:11,padding:'2px 4px'}}/>%</span>
-            </td><td style={{textAlign:'right'}}><button className="btn btn-sm" style={{background:'rgba(212,236,230,.15)',color:'var(--teal-mint)',border:0}} onClick={()=>addItem(pi)}>+</button></td></tr>
-            {ph.enabled!==false&&ph.items.map((it,ii)=>{
-              const cp=(it.qty||0)*(it.extRate||0);
-              const ip=(it.qty||0)*(it.intRate||0);
-              return <tr key={it.id}>
-                <td><input value={t(it.desc,L)} onChange={e=>{const o=it.desc;const n=typeof o==='string'?{nl:o,en:o}:{...o};n[L]=e.target.value;upItem(pi,ii,'desc',n)}}/></td>
-                <td><select value={it.role} onChange={e=>changeRole(pi,ii,e.target.value)}>
-                  {ROLES.map(r=><option key={r.id} value={r.id}>{t(r.name,L)}</option>)}</select></td>
-                <td><input type="number" value={it.qty||''} onChange={e=>upItem(pi,ii,'qty',parseFloat(e.target.value)||0)}/></td>
-                <td className="sm muted">{it.unit}</td>
-                <td><input type="number" value={it.extRate||''} onChange={e=>upItem(pi,ii,'extRate',parseFloat(e.target.value)||0)}/></td>
-                <td className="tr mono">{fmt(cp)}</td>
-                <td><input type="number" value={it.intRate||''} onChange={e=>upItem(pi,ii,'intRate',parseFloat(e.target.value)||0)}/></td>
-                <td className="tr mono">{fmt(ip)}</td>
-                <td className="tr mono" style={{color:cp-ip>=0?'var(--green)':'var(--red)'}}>{fmt(cp-ip)}</td>
-                <td className="tr" style={{whiteSpace:'nowrap'}}>
-                  <button className="btn btn-sm btn-g" disabled={ii===0} style={ii===0?{opacity:.3}:null} title={L==='nl'?'Omhoog':'Move up'} onClick={()=>moveItem(pi,ii,-1)}>&uarr;</button>
-                  <button className="btn btn-sm btn-g" disabled={ii===ph.items.length-1} style={ii===ph.items.length-1?{opacity:.3,marginLeft:2}:{marginLeft:2}} title={L==='nl'?'Omlaag':'Move down'} onClick={()=>moveItem(pi,ii,1)}>&darr;</button>
-                  <button className="btn btn-sm btn-g" style={{marginLeft:2}} onClick={()=>rmItem(pi,ii)}>&times;</button>
-                </td>
-              </tr>})}
-            {ph.enabled!==false&&(()=>{const tv=ph.travel||{};return <tr style={{background:'rgba(212,236,230,.06)'}}>
-              <td colSpan={5} style={{whiteSpace:'nowrap'}}>
-                <span className="sm muted" style={{marginRight:6}}>{L==='nl'?'Reizen / mobilisatie':'Travel / mobilisation'}</span>
-                <input type="number" style={{width:42}} value={tv.trips||''} placeholder={L==='nl'?'rit':'trip'} onChange={e=>upTravel(pi,'trips',parseFloat(e.target.value)||0)}/>
-                <span className="sm muted"> × </span>
-                <input type="number" style={{width:52}} value={tv.km||''} placeholder="km" onChange={e=>upTravel(pi,'km',parseFloat(e.target.value)||0)}/>
-                <span className="sm muted"> km × € </span>
-                <input type="number" style={{width:52}} value={tv.rate!=null?tv.rate:.50} onChange={e=>upTravel(pi,'rate',parseFloat(e.target.value)||0)}/>
-                <span className="sm muted"> + </span>
-                <input type="number" style={{width:42}} value={tv.hours||''} placeholder={L==='nl'?'u':'h'} onChange={e=>upTravel(pi,'hours',parseFloat(e.target.value)||0)}/>
-                <span className="sm muted"> {L==='nl'?'u × €':'h × €'} </span>
-                <input type="number" style={{width:52}} value={tv.hourRate||''} onChange={e=>upTravel(pi,'hourRate',parseFloat(e.target.value)||0)}/>
-              </td>
-              <td className="tr mono">{fmt(totals.phaseData[pi]?.travel||0)}</td><td></td>
-              <td className="tr mono">{fmt(totals.phaseData[pi]?.travel||0)}</td>
-              <td className="tr mono sm muted">{L==='nl'?'in prijs':'in price'}</td><td></td></tr>;})()}
-            {ph.enabled!==false&&<tr className="sub"><td colSpan={5}>{ll.subtotaal} {ph.code}</td>
-              <td className="tr mono">{fmt(totals.phaseData[pi]?.client||0)}</td><td></td>
-              <td className="tr mono">{fmt(totals.phaseData[pi]?.cost||0)}</td>
-              <td className="tr mono">{fmt((totals.phaseData[pi]?.client||0)-(totals.phaseData[pi]?.cost||0))}</td><td></td></tr>}
-            {ph.enabled!==false&&(ph.contingency||0)>0&&<tr className="sub"><td colSpan={5} className="sm">{ll.contingency} {Math.round((ph.contingency||0)*100)}%</td>
-              <td className="tr mono sm">{fmt(totals.phaseData[pi]?.cont||0)}</td><td colSpan={4}></td></tr>}
-          </React.Fragment>)}
-          <tr className="tot"><td colSpan={5}>{ll.totaalBlockA}</td>
-            <td className="tr mono">{fmtE(totals.blockAClient)}</td><td></td>
-            <td className="tr mono">{fmtE(totals.blockACost)}</td>
-            <td className="tr mono">{fmtE(totals.blockAClient-totals.blockACost)}</td><td></td></tr>
-        </tbody>
-      </table></div>
+    {/* Kosten per activiteit */}
+    <div className="flex g8" style={{alignItems:'center',flexWrap:'wrap',marginBottom:14}}>
+      <span className="sm muted">{L==='nl'?'Omvang:':'Scale:'}</span>
+      <button className="btn btn-sm btn-g" title={L==='nl'?'Alle uren/dagen ×0,6':'All hours/days ×0.6'} onClick={()=>scaleEffort(0.6)}>{L==='nl'?'Kleiner ×0,6':'Smaller ×0.6'}</button>
+      <button className="btn btn-sm btn-g" title={L==='nl'?'Alle uren/dagen ×1,5':'All hours/days ×1.5'} onClick={()=>scaleEffort(1.5)}>{L==='nl'?'Groter ×1,5':'Larger ×1.5'}</button>
+      <input type="number" step="0.1" min="0" placeholder="×1.0" style={{width:56}} onKeyDown={e=>{if(e.key==='Enter'){const f=parseFloat(e.target.value);if(f>0){scaleEffort(f);e.target.value='';}}}} title={L==='nl'?'Typ een factor en Enter':'Type a factor and Enter'}/>
+      <label className="flex g8" style={{alignItems:'center',marginLeft:'auto',fontSize:13,cursor:'pointer'}}><input type="checkbox" checked={showCost} onChange={e=>setShowCost(e.target.checked)}/> {L==='nl'?'Toon kostprijs & marge':'Show cost & margin'}</label>
     </div>
-
-    {/* Block B1: Off-the-shelf */}
-    <div className="card">
-      <div className="card-h">{ll.blockB1Title}</div>
-      <p className="sm muted mb16">{ll.blockB1Help}</p>
-      <div className="tbl-scroll"><table className="bt">
-        <thead><tr><th>{ll.item}</th><th style={{width:'14%'}}>{ll.leverancier}</th><th style={{width:'12%'}}>{ll.inkoopwaarde}</th><th style={{width:'8%'}}>{ll.handlingPct}</th><th style={{width:'12%'}}>{ll.handlingFee}</th><th style={{width:'12%'}}>{ll.klantprijs}</th><th style={{width:'4%'}}></th></tr></thead>
-        <tbody>
-          {(d.procOTS||[]).map((it,i)=>{
-            const h=(it.amount||0)*(it.handlingPct||0);
-            return <tr key={it.id||i}>
-              <td><input value={it.desc||''} onChange={e=>upOTS(i,'desc',e.target.value)}/><input value={it.showAs||''} onChange={e=>upOTS(i,'showAs',e.target.value)} placeholder={L==='nl'?'Toon als (offerte)':'Show as (quote)'} style={{marginTop:4,width:'100%',fontSize:11,color:'#888'}}/></td>
-              <td><input value={it.supplier||''} onChange={e=>upOTS(i,'supplier',e.target.value)}/></td>
-              <td><input type="number" value={it.amount||''} onChange={e=>upOTS(i,'amount',parseFloat(e.target.value)||0)}/></td>
-              <td className="tr mono">{Math.round((it.handlingPct||0)*100)}%</td>
-              <td className="tr mono">{fmt(h)}</td>
-              <td className="tr mono">{fmt((it.amount||0)+h)}</td>
-              <td><div className="flex g6" style={{justifyContent:'flex-end'}}><button className="btn btn-sm btn-g" onClick={()=>rmOTS(i)}>&times;</button></div></td>
-            </tr>})}
-          <tr className="sub"><td colSpan={2}>{ll.subtotaalB1}</td><td className="tr mono">{fmt(totals.b1Purchase)}</td><td></td><td className="tr mono">{fmt(totals.b1Handling)}</td><td className="tr mono">{fmt(totals.b1Purchase+totals.b1Handling)}</td><td></td></tr>
-        </tbody>
-      </table></div>
-      <div className="flex g8 mt16"><button className="btn btn-sm btn-g" onClick={addOTS}>{ll.inkooppost}</button></div>
-    </div>
-
-    {/* Block B2: Custom */}
-    <div className="card">
-      <div className="card-h">{ll.blockB2Title}</div>
-      <p className="sm muted mb16">{ll.blockB2Help}</p>
-      <div className="tbl-scroll"><table className="bt">
-        <thead><tr><th>{ll.item}</th><th style={{width:'12%'}}>{ll.leverancier}</th><th style={{width:'10%'}}>{ll.inkoopwaarde}</th><th style={{width:'7%'}}>{ll.handlingPct}</th><th style={{width:'9%'}}>{ll.handlingFee}</th><th style={{width:'7%'}}>{ll.riskPct}</th><th style={{width:'9%'}}>{ll.riskBuffer}</th><th style={{width:'10%'}}>{ll.klantprijs}</th><th style={{width:'4%'}}></th></tr></thead>
-        <tbody>
-          {(d.procCustom||[]).map((it,i)=>{
-            const h=(it.amount||0)*(it.handlingPct||0);
-            const r=(it.amount||0)*(it.riskPct||0);
-            return <tr key={it.id||i}>
-              <td><input value={it.desc||''} onChange={e=>upCust(i,'desc',e.target.value)}/><input value={it.showAs||''} onChange={e=>upCust(i,'showAs',e.target.value)} placeholder={L==='nl'?'Toon als (offerte)':'Show as (quote)'} style={{marginTop:4,width:'100%',fontSize:11,color:'#888'}}/></td>
-              <td><input value={it.supplier||''} onChange={e=>upCust(i,'supplier',e.target.value)}/></td>
-              <td><input type="number" value={it.amount||''} onChange={e=>upCust(i,'amount',parseFloat(e.target.value)||0)}/></td>
-              <td className="tr mono">{Math.round((it.handlingPct||0)*100)}%</td>
-              <td className="tr mono">{fmt(h)}</td>
-              <td><input type="number" value={Math.round((it.riskPct||0)*100)} onChange={e=>upCust(i,'riskPct',(parseInt(e.target.value)||0)/100)} style={{width:50}}/></td>
-              <td className="tr mono">{fmt(r)}</td>
-              <td className="tr mono">{fmt((it.amount||0)+h+r)}</td>
-              <td><div className="flex g6" style={{justifyContent:'flex-end'}}><button className="btn btn-sm btn-g" onClick={()=>rmCust(i)}>&times;</button></div></td>
-            </tr>})}
-          <tr className="sub"><td colSpan={2}>{ll.subtotaalB2}</td><td className="tr mono">{fmt(totals.b2Purchase)}</td><td></td><td className="tr mono">{fmt(totals.b2Handling)}</td><td></td><td className="tr mono">{fmt(totals.b2Risk)}</td><td className="tr mono">{fmt(totals.b2Purchase+totals.b2Handling+totals.b2Risk)}</td><td></td></tr>
-        </tbody>
-      </table></div>
-      <div className="flex g8 mt16"><button className="btn btn-sm btn-g" onClick={addCust}>{ll.maatwerk}</button></div>
-    </div>
-
-    {/* Block C: Subcontractors */}
-    <div className="card">
-      <div className="card-h">{ll.blockCTitle}</div>
-      <div className="tbl-scroll"><table className="bt">
-        <thead><tr><th>{ll.omschrijvingCol}</th><th style={{width:'14%'}}>{ll.onderaannemer}</th><th style={{width:'12%'}}>{ll.bedrag}</th><th style={{width:'8%'}}>{ll.coordPct}</th><th style={{width:'12%'}}>{ll.coordFee}</th><th style={{width:'12%'}}>{ll.klantprijs}</th><th style={{width:'4%'}}></th></tr></thead>
-        <tbody>
-          {(d.subs||[]).map((it,i)=>{
-            const c=(it.amount||0)*(it.coordPct||COORD_MARGIN);
-            return <tr key={it.id||i}>
-              <td><input value={it.desc||''} onChange={e=>upSub(i,'desc',e.target.value)}/><input value={it.showAs||''} onChange={e=>upSub(i,'showAs',e.target.value)} placeholder={L==='nl'?'Toon als (offerte)':'Show as (quote)'} style={{marginTop:4,width:'100%',fontSize:11,color:'#888'}}/></td>
-              <td><input value={it.company||''} onChange={e=>upSub(i,'company',e.target.value)}/></td>
-              <td><input type="number" value={it.amount||''} onChange={e=>upSub(i,'amount',parseFloat(e.target.value)||0)}/></td>
-              <td className="tr mono">{Math.round((it.coordPct||COORD_MARGIN)*100)}%</td>
-              <td className="tr mono">{fmt(c)}</td>
-              <td className="tr mono">{fmt((it.amount||0)+c)}</td>
-              <td><div className="flex g6" style={{justifyContent:'flex-end'}}><button className="btn btn-sm btn-g" onClick={()=>rmSub(i)}>&times;</button></div></td>
-            </tr>})}
-          <tr className="sub"><td colSpan={2}>{ll.subtotaalC}</td><td className="tr mono">{fmt(totals.subFees)}</td><td></td><td className="tr mono">{fmt(totals.subCoord)}</td><td className="tr mono">{fmt(totals.subClient)}</td><td></td></tr>
-        </tbody>
-      </table></div>
-      <div className="flex g8 mt16"><button className="btn btn-sm btn-g" onClick={addSub}>{ll.plusOnderaannemer}</button></div>
-    </div>
+    {[...d.phases.map((ph,pi)=>({ph,pi})),null].map((entry)=>{
+      const isOverig=!entry;
+      const ph=entry?entry.ph:{id:'',code:'',name:{nl:'Overig',en:'Other'}};
+      const pi=entry?entry.pi:-1;
+      const pid=ph.id;
+      const on=isOverig?true:(ph.enabled!==false);
+      const ots=otsFor(pid),cust=custFor(pid),sub=subFor(pid);
+      if(isOverig&&!ots.length&&!cust.length&&!sub.length)return null;
+      const rowStyle={display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderBottom:'1px solid #f1f1ef',flexWrap:'wrap'};
+      const priceCell=(client,cost)=><React.Fragment><span className="mono" style={{width:88,textAlign:'right',fontWeight:600,flexShrink:0}}>{fmtE(client)}</span>{showCost&&<span className="mono sm muted" style={{width:150,textAlign:'right',flexShrink:0}}>{(L==='nl'?'kost ':'cost ')+fmt(cost)+' · '+fmt(client-cost)}</span>}</React.Fragment>;
+      const overigTot=ots.reduce((s,x)=>s+cOTS(x.it).client,0)+cust.reduce((s,x)=>s+cCust(x.it).client,0)+sub.reduce((s,x)=>s+cSub(x.it).client,0);
+      return <div key={pid||'overig'} className="card" style={{opacity:on?1:.55}}>
+        <div className="between" style={{alignItems:'center',marginBottom:on?12:0}}>
+          <div className="flex g8" style={{alignItems:'center'}}>
+            {!isOverig&&<input type="checkbox" checked={on} onChange={e=>{const p=[...d.phases];p[pi]={...p[pi],enabled:e.target.checked};set({...d,phases:p});}} style={{width:15,height:15,cursor:'pointer'}}/>}
+            {!isOverig&&<input value={ph.code||''} onChange={e=>{const p=[...d.phases];p[pi]={...p[pi],code:e.target.value};set({...d,phases:p});}} title={L==='nl'?'Code':'Code'} style={{width:44,fontWeight:600,textAlign:'center',fontSize:12,border:'1px solid transparent',borderRadius:3,padding:'3px 2px',background:'transparent'}} onFocus={e=>{e.target.style.borderColor='#d0d0ce';e.target.style.background='#fff';}} onBlur={e=>{e.target.style.borderColor='transparent';e.target.style.background='transparent';}}/>}
+            <input value={isOverig?(L==='nl'?'Overig / niet gekoppeld':'Other / unassigned'):phaseName(ph)} disabled={isOverig} onChange={e=>{const p=[...d.phases];p[pi]={...p[pi],customName:e.target.value};set({...d,phases:p});}} style={{fontWeight:600,fontSize:15,border:'1px solid transparent',borderRadius:3,padding:'3px 8px',background:'transparent',width:280}} onFocus={e=>{if(!isOverig){e.target.style.borderColor='#d0d0ce';e.target.style.background='#fff';}}} onBlur={e=>{e.target.style.borderColor='transparent';e.target.style.background='transparent';}}/>
+          </div>
+          <div style={{textAlign:'right',display:'flex',alignItems:'center',gap:10}}>
+            <span style={{fontSize:16,fontWeight:600,color:'var(--teal-dark)'}}>{fmtE(isOverig?overigTot:actClient(ph,pi))}</span>
+            {showCost&&!isOverig&&<span className="sm muted">{(L==='nl'?'marge ':'margin ')+fmtE(actClient(ph,pi)-actCost(ph,pi))}</span>}
+            {!isOverig&&<button className="btn btn-sm btn-g" title={L==='nl'?'Activiteit verwijderen':'Remove activity'} onClick={()=>rmPhase(pi)}>&times;</button>}
+          </div>
+        </div>
+        {on&&<React.Fragment>
+          {!isOverig&&(ph.items||[]).map((it,ii)=>{const cp=(it.qty||0)*(it.extRate||0),ip=(it.qty||0)*(it.intRate||0);return <div key={it.id} style={rowStyle}>
+            <span title={L==='nl'?'Eigen werk':'Own work'} style={{flexShrink:0,fontSize:15}}>🛠️</span>
+            <input style={{flex:2,minWidth:110}} value={t(it.desc,L)} onChange={e=>{const o=it.desc;const n=typeof o==='string'?{nl:o,en:o}:{...o};n[L]=e.target.value;upItem(pi,ii,'desc',n);}} placeholder={L==='nl'?'Omschrijving':'Description'}/>
+            <select value={it.role} onChange={e=>changeRole(pi,ii,e.target.value)} style={{flexShrink:0,width:112}}>{ROLES.map(r=><option key={r.id} value={r.id}>{t(r.name,L)}</option>)}</select>
+            <input type="number" style={{width:56}} value={it.qty||''} onChange={e=>upItem(pi,ii,'qty',parseFloat(e.target.value)||0)} title={L==='nl'?'Aantal':'Qty'}/>
+            <span className="sm muted" style={{flexShrink:0}}>{it.unit} × €</span>
+            <input type="number" style={{width:60}} value={it.extRate||''} onChange={e=>upItem(pi,ii,'extRate',parseFloat(e.target.value)||0)} title={L==='nl'?'Tarief':'Rate'}/>
+            {priceCell(cp,ip)}
+            <button className="btn btn-sm btn-g" onClick={()=>rmItem(pi,ii)}>&times;</button>
+          </div>;})}
+          {ots.map(({it,i})=>{const c=cOTS(it);return <div key={it.id||'o'+i} style={rowStyle}>
+            <span title={L==='nl'?'Inkoop':'Procurement'} style={{flexShrink:0,fontSize:15}}>📦</span>
+            <input style={{flex:2,minWidth:110}} value={it.desc||''} onChange={e=>upOTS(i,'desc',e.target.value)} placeholder={L==='nl'?'Inkoop / materiaal':'Item / material'}/>
+            <input style={{width:100}} value={it.supplier||''} onChange={e=>upOTS(i,'supplier',e.target.value)} placeholder={L==='nl'?'leverancier':'supplier'}/>
+            <span className="sm muted">€</span><input type="number" style={{width:76}} value={it.amount||''} onChange={e=>upOTS(i,'amount',parseFloat(e.target.value)||0)}/>
+            <span className="sm muted" style={{fontSize:11,flexShrink:0}} title={L==='nl'?'handling (automatisch)':'handling (auto)'}>+{Math.round((it.handlingPct||0)*100)}%</span>
+            {priceCell(c.client,c.cost)}
+            <button className="btn btn-sm btn-g" onClick={()=>rmOTS(i)}>&times;</button>
+          </div>;})}
+          {cust.map(({it,i})=>{const c=cCust(it);return <div key={it.id||'c'+i} style={rowStyle}>
+            <span title={L==='nl'?'Maatwerk':'Custom'} style={{flexShrink:0,fontSize:15}}>🔧</span>
+            <input style={{flex:2,minWidth:110}} value={it.desc||''} onChange={e=>upCust(i,'desc',e.target.value)} placeholder={L==='nl'?'Maatwerk inkoop':'Custom procurement'}/>
+            <input style={{width:100}} value={it.supplier||''} onChange={e=>upCust(i,'supplier',e.target.value)} placeholder={L==='nl'?'leverancier':'supplier'}/>
+            <span className="sm muted">€</span><input type="number" style={{width:76}} value={it.amount||''} onChange={e=>upCust(i,'amount',parseFloat(e.target.value)||0)}/>
+            <span className="sm muted" style={{fontSize:11,flexShrink:0}}>+{Math.round((it.handlingPct||0)*100)}%</span>
+            <span className="sm muted" style={{fontSize:11}}>{L==='nl'?'risico':'risk'}</span><input type="number" style={{width:40}} value={Math.round((it.riskPct||0)*100)} onChange={e=>upCust(i,'riskPct',(parseInt(e.target.value)||0)/100)}/><span className="sm muted" style={{fontSize:11}}>%</span>
+            {priceCell(c.client,c.cost)}
+            <button className="btn btn-sm btn-g" onClick={()=>rmCust(i)}>&times;</button>
+          </div>;})}
+          {sub.map(({it,i})=>{const c=cSub(it);return <div key={it.id||'s'+i} style={rowStyle}>
+            <span title={L==='nl'?'Onderaannemer':'Subcontractor'} style={{flexShrink:0,fontSize:15}}>🤝</span>
+            <input style={{flex:2,minWidth:110}} value={it.desc||''} onChange={e=>upSub(i,'desc',e.target.value)} placeholder={L==='nl'?'Werk door derden':'Subcontracted work'}/>
+            <input style={{width:100}} value={it.company||''} onChange={e=>upSub(i,'company',e.target.value)} placeholder={L==='nl'?'bedrijf':'company'}/>
+            <span className="sm muted">€</span><input type="number" style={{width:76}} value={it.amount||''} onChange={e=>upSub(i,'amount',parseFloat(e.target.value)||0)}/>
+            <span className="sm muted" style={{fontSize:11,flexShrink:0}} title={L==='nl'?'coördinatie':'coordination'}>+{Math.round((it.coordPct||COORD_MARGIN)*100)}%</span>
+            {priceCell(c.client,c.cost)}
+            <button className="btn btn-sm btn-g" onClick={()=>rmSub(i)}>&times;</button>
+          </div>;})}
+          {!isOverig&&<div className="flex g8" style={{alignItems:'center',flexWrap:'wrap',marginTop:10,fontSize:12,color:'#8a8a85'}}>
+            <span>{L==='nl'?'Onvoorzien':'Contingency'}</span><input type="number" style={{width:44}} value={Math.round((ph.contingency||0)*100)} onChange={e=>upCont(pi,(parseInt(e.target.value)||0)/100)}/><span>%</span>
+            <span style={{marginLeft:14}}>{L==='nl'?'Reizen':'Travel'}</span>
+            <input type="number" style={{width:40}} value={(ph.travel||{}).trips||''} placeholder={L==='nl'?'rit':'trip'} onChange={e=>upTravel(pi,'trips',parseFloat(e.target.value)||0)}/><span>×</span>
+            <input type="number" style={{width:52}} value={(ph.travel||{}).km||''} placeholder="km" onChange={e=>upTravel(pi,'km',parseFloat(e.target.value)||0)}/><span>km × €</span>
+            <input type="number" style={{width:46}} value={(ph.travel||{}).rate!=null?ph.travel.rate:.5} onChange={e=>upTravel(pi,'rate',parseFloat(e.target.value)||0)}/>
+            <span style={{marginLeft:'auto'}} className="mono">{fmt((totals.phaseData[pi]||{}).travel||0)}</span>
+          </div>}
+          <div className="flex g8" style={{marginTop:12,flexWrap:'wrap'}}>
+            {!isOverig&&<button className="btn btn-sm btn-g" onClick={()=>addLine('labour',pid)}>+ {L==='nl'?'Eigen werk':'Own work'}</button>}
+            <button className="btn btn-sm btn-g" onClick={()=>addLine('ots',pid)}>+ {L==='nl'?'Inkoop':'Procurement'}</button>
+            <button className="btn btn-sm btn-g" onClick={()=>addLine('cust',pid)}>+ {L==='nl'?'Maatwerk':'Custom'}</button>
+            <button className="btn btn-sm btn-g" onClick={()=>addLine('sub',pid)}>+ {L==='nl'?'Onderaannemer':'Subcontractor'}</button>
+          </div>
+        </React.Fragment>}
+      </div>;
+    })}
+    <div style={{marginBottom:20}}><button className="btn btn-g" onClick={addPhase}>+ {L==='nl'?'Activiteit toevoegen':'Add activity'}</button></div>
 
     {/* Installatie / reizen */}
     <div className="card">
@@ -2019,21 +1982,30 @@ function buildFinancialLines(d,totals,L){
   const lines=[];
   const pn=(ph)=>ph.customName||t(ph.name,L);
 
-  // Phase totals as lump sums (includes contingency, no rate breakdown). Each line carries a
-  // stable `key` so a custom display order (d.costOrder) can be applied at the end.
+  // Activiteit-gecentreerd: inkoop/maatwerk/onderaannemers die aan een fase (phaseId) zijn
+  // gekoppeld tellen mee in het ÉNE bedrag van die activiteit. Niet-gekoppelde posten blijven
+  // aparte klantregels. Zo ziet de klant per activiteit één bedrag (arbeid + materiaal + subs).
+  const phaseIds=new Set((d.phases||[]).map(ph=>ph.id));
+  const isTagged=(it)=>it.phaseId&&phaseIds.has(it.phaseId);
+  const extraByPhase={};
+  const addExtra=(pid,amt)=>{extraByPhase[pid]=(extraByPhase[pid]||0)+amt;};
+  (d.procOTS||[]).forEach(it=>{if(!it.amount||!isTagged(it))return;addExtra(it.phaseId,it.amount+(it.amount||0)*(it.handlingPct||0));});
+  (d.procCustom||[]).forEach(it=>{if(!it.amount||!isTagged(it))return;addExtra(it.phaseId,it.amount+(it.amount||0)*(it.handlingPct||0)+(it.amount||0)*(it.riskPct||0));});
+  (d.subs||[]).forEach(it=>{if(!it.amount||!isTagged(it))return;addExtra(it.phaseId,it.amount+(it.amount||0)*(it.coordPct||COORD_MARGIN));});
+
   (d.phases||[]).forEach((ph,pi)=>{
     if(ph.enabled===false)return;
-    const pd=totals.phaseData[pi];
-    if(!pd||pd.total===0)return;
-    lines.push({desc:pn(ph),total:pd.total,key:'ph:'+(ph.id||pi)});
+    const pd=totals.phaseData[pi]||{};
+    const total=(pd.total||0)+(extraByPhase[ph.id]||0);
+    if(total<=0.005)return;
+    lines.push({desc:pn(ph),total,key:'ph:'+(ph.id||pi)});
   });
 
-  // Procurement + subcontractors: collect with an optional "show as" display group,
-  // then merge rows that share the same label into one client-facing line.
+  // Niet-gekoppelde inkoop/onderaannemers → aparte klantregels (met optionele "toon als"-groepering).
   const ext=[];
-  (d.procOTS||[]).forEach(it=>{if(!it.amount)return;const h=(it.amount||0)*(it.handlingPct||0);ext.push({desc:it.desc||(L==='nl'?'Materialen':'Materials'),total:it.amount+h,showAs:it.showAs,id:it.id});});
-  (d.procCustom||[]).forEach(it=>{if(!it.amount)return;const h=(it.amount||0)*(it.handlingPct||0);const r=(it.amount||0)*(it.riskPct||0);ext.push({desc:it.desc||(L==='nl'?'Maatwerk':'Custom materials'),total:it.amount+h+r,showAs:it.showAs,id:it.id});});
-  (d.subs||[]).forEach(it=>{if(!it.amount)return;const c=(it.amount||0)*(it.coordPct||COORD_MARGIN);ext.push({desc:it.desc||(L==='nl'?'Onderaannemer':'Subcontractor'),total:it.amount+c,showAs:it.showAs,id:it.id});});
+  (d.procOTS||[]).forEach(it=>{if(!it.amount||isTagged(it))return;const h=(it.amount||0)*(it.handlingPct||0);ext.push({desc:it.desc||(L==='nl'?'Materialen':'Materials'),total:it.amount+h,showAs:it.showAs,id:it.id});});
+  (d.procCustom||[]).forEach(it=>{if(!it.amount||isTagged(it))return;const h=(it.amount||0)*(it.handlingPct||0);const r=(it.amount||0)*(it.riskPct||0);ext.push({desc:it.desc||(L==='nl'?'Maatwerk':'Custom materials'),total:it.amount+h+r,showAs:it.showAs,id:it.id});});
+  (d.subs||[]).forEach(it=>{if(!it.amount||isTagged(it))return;const c=(it.amount||0)*(it.coordPct||COORD_MARGIN);ext.push({desc:it.desc||(L==='nl'?'Onderaannemer':'Subcontractor'),total:it.amount+c,showAs:it.showAs,id:it.id});});
   const groupIdx={};
   ext.forEach(e=>{const g=(e.showAs||'').trim();
     if(g){if(g in groupIdx){lines[groupIdx[g]].total+=e.total;}else{groupIdx[g]=lines.length;lines.push({desc:g,total:e.total,key:'grp:'+g});}}
