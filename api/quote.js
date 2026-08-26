@@ -50,26 +50,38 @@ async function patchArchive(ws, archiveId, mutate) {
   await redis(['SET', 'arch:' + ws, JSON.stringify(arr), 'EX', TTL]);
 }
 
-// Stuur een e-mailmelding bij akkoord. Achter env-vars; stil overslaan als niet geconfigureerd,
-// zodat akkoord nooit faalt door mailproblemen.
-//   RESEND_API_KEY  — API key van resend.com
-//   NOTIFY_EMAIL    — ontvanger (bijv. erik@teamteal.nl)
-//   NOTIFY_FROM     — afzender op een geverifieerd domein (default onboarding@resend.dev)
+// Stuur een e-mailmelding bij akkoord via Google Workspace (Gmail API, verstuurd vanaf je eigen
+// adres). Achter env-vars; stil overslaan als niet geconfigureerd, zodat akkoord nooit faalt.
+//   GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET / GMAIL_REFRESH_TOKEN — OAuth2 (scope gmail.send)
+//   NOTIFY_EMAIL  — ontvanger (bijv. erik@teamteal.nl); ook de afzender tenzij NOTIFY_FROM gezet
+async function gmailAccessToken() {
+  const cid = process.env.GMAIL_CLIENT_ID, csec = process.env.GMAIL_CLIENT_SECRET, rt = process.env.GMAIL_REFRESH_TOKEN;
+  if (!cid || !csec || !rt) return null;
+  const r = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: cid, client_secret: csec, refresh_token: rt, grant_type: 'refresh_token' }),
+  });
+  const j = await r.json();
+  return j.access_token || null;
+}
 async function notifyEmail(rec) {
-  const key = process.env.RESEND_API_KEY, to = process.env.NOTIFY_EMAIL;
-  if (!key || !to) return;
-  const from = process.env.NOTIFY_FROM || 'TEAL Offerte <onboarding@resend.dev>';
-  const proj = rec.projectName || '(zonder naam)';
+  const to = process.env.NOTIFY_EMAIL;
+  if (!to) return;
   try {
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from, to,
-        subject: '✅ Offerte getekend: ' + proj + ' — ' + rec.acceptedBy,
-        text: rec.acceptedBy + ' heeft de offerte "' + proj + '" online geaccepteerd op ' +
-          rec.acceptedAt + '.' + (rec.note ? ('\n\nOpmerking van de klant:\n' + rec.note) : ''),
-      }),
+    const token = await gmailAccessToken();
+    if (!token) return;
+    const from = process.env.NOTIFY_FROM || to;
+    const proj = rec.projectName || '(zonder naam)';
+    const subject = '✅ Offerte getekend: ' + proj + ' — ' + rec.acceptedBy;
+    const body = rec.acceptedBy + ' heeft de offerte "' + proj + '" online geaccepteerd op ' +
+      rec.acceptedAt + '.' + (rec.note ? ('\n\nOpmerking van de klant:\n' + rec.note) : '');
+    const raw = 'From: ' + from + '\r\nTo: ' + to +
+      '\r\nSubject: =?UTF-8?B?' + Buffer.from(subject, 'utf-8').toString('base64') + '?=' +
+      '\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n' + body;
+    const b64 = Buffer.from(raw, 'utf-8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw: b64 }),
     });
   } catch (e) { /* mail mag nooit het akkoord blokkeren */ }
 }
