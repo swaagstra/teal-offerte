@@ -44,6 +44,60 @@ async function setArchive(ws, arr) {
 const nowIso = () => new Date().toISOString();
 const b36 = (n) => n.toString(36);
 const genId = () => b36(Date.now()) + Math.random().toString(36).slice(2, 6);
+const uid7 = () => Math.random().toString(36).slice(2, 9);
+const ml = (v) => (v && typeof v === 'object') ? { nl: v.nl || v.en || '', en: v.en || v.nl || '' } : { nl: v || '', en: v || '' };
+function deepMerge(base, patch) {
+  for (const k of Object.keys(patch || {})) {
+    const v = patch[k];
+    if (v && typeof v === 'object' && !Array.isArray(v) && base[k] && typeof base[k] === 'object' && !Array.isArray(base[k])) deepMerge(base[k], v);
+    else base[k] = v;
+  }
+  return base;
+}
+let TEMPLATES = null;
+try { TEMPLATES = require('../lib/quoteTemplates.js'); } catch (e) { TEMPLATES = null; }
+// Bouw een volledige offerte-data uit een compacte spec (zoals de skill-create). type bepaalt de
+// template; project/client/conditions/payment/install/annexes worden erin gemerged; phases worden
+// (indien opgegeven) opgebouwd uit compacte fase-specs met ext/int-tarieven per regel.
+function buildQuoteFromSpec(spec) {
+  if (!TEMPLATES) throw new Error('templates-unavailable');
+  const typ = (spec && spec.type) === 'build' ? 'build' : 'assemble';
+  const data = JSON.parse(JSON.stringify(TEMPLATES[typ]));
+  data.lang = (spec && spec.lang) || data.lang || 'nl';
+  data.project.date = (spec && spec.date) || new Date().toISOString().slice(0, 10);
+  for (const sect of ['project', 'client', 'conditions', 'payment', 'install', 'annexes']) {
+    if (spec && spec[sect]) deepMerge(data[sect], spec[sect]);
+  }
+  if (spec && spec.description !== undefined) {
+    data.project.description = ml(spec.description);
+    data.project.descBlocks = [{ id: uid7(), type: 'text', text: ml(spec.description) }];
+  }
+  if (spec && spec.tealRole !== undefined) data.project.tealRole = ml(spec.tealRole);
+  if (spec && Array.isArray(spec.phases)) {
+    let week = 0;
+    data.phases = spec.phases.map((p) => {
+      const dur = +(p.durationWeeks || 4);
+      const desc = ml(p.description || '');
+      const items = (p.items || []).map((it) => ({
+        id: uid7(), role: it.role || 'design', desc: ml(it.desc || ''),
+        qty: it.qty || 0, extRate: it.ext != null ? it.ext : (it.extRate || 0),
+        intRate: it.int != null ? it.int : (it.intRate || 0), unit: it.unit || 'uur',
+      }));
+      const ph = {
+        id: p.id || uid7(), code: p.code || '', name: ml(p.name || ''), desc, items,
+        enabled: p.enabled !== false, customName: null, startWeek: week, durationWeeks: dur,
+        description: desc, effort: '', contingency: p.contingency != null ? p.contingency : 0.1,
+        travel: { trips: 0, km: 0, rate: 0.5, hours: 0, hourRate: 0 },
+      };
+      week += dur;
+      return ph;
+    });
+  }
+  for (const sect of ['procOTS', 'procCustom', 'subs']) {
+    if (spec && Array.isArray(spec[sect])) data[sect] = spec[sect];
+  }
+  return data;
+}
 const isVisibleQuote = (e) => e && !e.deletedAt && (e.kind || 'quote') !== 'change_order' && (e.kind || 'quote') !== 'delivery';
 
 function findEntries(archive, query) {
@@ -83,6 +137,15 @@ const TOOLS = [
         message: { type: 'string', description: 'Korte changelog-notitie (optioneel).' },
       },
       required: ['data'], additionalProperties: false,
+    },
+  },
+  {
+    name: 'create_quote',
+    description: 'Maak een NIEUWE offerte vanaf een template + compacte spec. Gebruik dit voor "beschrijf de klus en genereer een concept". spec: {type:"assemble"|"build", lang, project:{name,location,description,...}, client:{name,email,...}, phases:[{code,name,description,items:[{desc,qty,ext,int,role,unit}]}], conditions, payment, install}. ext=klanttarief, int=kostprijs. Weggelaten delen houden de template-standaard (voorwaarden, bijlagen, betaaltermijnen). Stel realistische fases en inzet voor; baseer je desnoods op een vergelijkbare bestaande offerte via read_quote.',
+    inputSchema: {
+      type: 'object',
+      properties: { spec: { type: 'object', description: 'Compacte offerte-spec (zie beschrijving).' } },
+      required: ['spec'], additionalProperties: false,
     },
   },
 ];
@@ -142,6 +205,31 @@ async function callTool(ws, name, args) {
     }
     await setArchive(ws, archive);
     return { text: 'Offerte ' + (ref || '?') + ' (' + (projectName || '—') + ') ' + verb + ' en gesynct. Ververs de Offerte Tool om de wijziging te zien.' };
+  }
+  if (name === 'create_quote') {
+    if (!TEMPLATES) return { text: 'FOUT: templates niet beschikbaar op de server.', isError: true };
+    const spec = (args && args.spec) || {};
+    let data;
+    try { data = buildQuoteFromSpec(spec); } catch (e) { return { text: 'FOUT bij opbouwen: ' + String((e && e.message) || e), isError: true }; }
+    const archive = await getArchive(ws);
+    const refs = new Set(archive.map((e) => e && e.ref));
+    const baseRef = spec.ref || (((spec.type === 'build') ? 'B' : 'A') + '-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-1');
+    let ref = baseRef, n = 1;
+    while (refs.has(ref)) { n += 1; ref = baseRef.replace(/-\d+$/, '') + '-' + n; }
+    data.ref = ref;
+    const now = nowIso();
+    const newId = genId();
+    data._archiveId = newId;
+    const projectName = (data.project && data.project.name) || '';
+    const clientName = (data.client && data.client.name) || '';
+    archive.push({
+      id: newId, ref, type: data.type || 'assemble', lang: data.lang || 'nl',
+      kind: 'quote', parentRef: null, parentId: null, projectName, clientName,
+      status: 'concept', statusAt: null, createdAt: now, updatedAt: now,
+      changelog: [{ action: 'aangemaakt via Claude', date: now }], data,
+    });
+    await setArchive(ws, archive);
+    return { text: 'Nieuwe offerte ' + ref + ' (' + (projectName || '—') + ') aangemaakt en gesynct. Ververs de Offerte Tool om hem te zien.' };
   }
   return { text: 'Onbekende tool: ' + name, isError: true };
 }
