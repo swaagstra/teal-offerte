@@ -47,8 +47,9 @@
   .btn-g{background:0;color:var(--dark-grey);border:1px solid #d0d0ce}.btn-g:hover{background:var(--warm-grey)}
   .btn-sm{padding:4px 10px;font-size:12px}
   .btn-xs{padding:3px 8px;font-size:11px;border-radius:5px}
-  .costrow .costmove{opacity:0;transition:opacity .12s}
+  .costrow .costmove{opacity:.5;transition:opacity .12s}
   .costrow:hover .costmove{opacity:1}
+  .costrow .costmove button:disabled{opacity:.35}
   .tbl-scroll{overflow-x:auto;margin:0 -24px;padding:0 24px;-webkit-overflow-scrolling:touch}
   .bt{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
   .bt th{text-align:left;padding:8px 12px;background:var(--warm-grey);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dark-grey);border-bottom:2px solid #d0d0ce}
@@ -852,12 +853,6 @@ function daysBetween(a,b){try{return Math.round((new Date(b)-new Date(a))/864000
 // First changelog date for a given status_* action.
 function statusChangeDate(e,status){try{const cl=(e&&e.changelog)||[];for(const c of cl){if(c.action==='status_'+status)return c.date;}return null;}catch(_e){return null;}}
 
-// ── Bouwblokken-bibliotheek (herbruikbare posten) ──
-const LIBK='teal.offerte.library';
-function loadLibrary(){try{const v=JSON.parse(localStorage.getItem(LIBK)||'{}');return {blocks:Array.isArray(v.blocks)?v.blocks:[]};}catch(_e){return {blocks:[]};}}
-function saveLibrary(lib){try{localStorage.setItem(LIBK,JSON.stringify(lib));}catch(_e){}}
-function addLibraryBlock(block){const lib=loadLibrary();block.id=uid();block.createdAt=new Date().toISOString();lib.blocks.push(block);saveLibrary(lib);return block;}
-function deleteLibraryBlock(id){const lib=loadLibrary();lib.blocks=lib.blocks.filter(b=>b.id!==id);saveLibrary(lib);}
 
 // One-off: renumber existing deliveries from the old "<ref>-OPL<n>" / "OPL-<date>-<n>"
 // format to the new "DL<n>-<ref>" format. Idempotent (new refs don't match).
@@ -921,668 +916,6 @@ async function pullArchive(){
     try{localStorage.setItem(AK,JSON.stringify(merged));}catch(e){}
     return merged.filter(e=>e&&!e.deletedAt);
   }catch(e){return loadArchiveLive();}
-}
-
-// ── Google API Integration ──
-const GOOGLE_CID_KEY='teal.google.clientId';
-const GOOGLE_SCOPES='https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file';
-
-const googleState={token:null,gapiReady:false,gisReady:false};
-
-function getGoogleClientId(){return localStorage.getItem(GOOGLE_CID_KEY)||'';}
-function setGoogleClientId(id){localStorage.setItem(GOOGLE_CID_KEY,id);}
-
-function initGapi(){
-  return new Promise((resolve,reject)=>{
-    if(googleState.gapiReady){resolve();return;}
-    if(!window.gapi){reject(new Error('Google API niet geladen. Herlaad de pagina.'));return;}
-    gapi.load('client',async()=>{
-      await gapi.client.init({});
-      await gapi.client.load('sheets','v4');
-      await gapi.client.load('docs','v1');
-      await gapi.client.load('drive','v3');
-      googleState.gapiReady=true;
-      resolve();
-    });
-  });
-}
-
-function googleAuth(){
-  return new Promise((resolve,reject)=>{
-    const cid=getGoogleClientId();
-    if(!cid){reject(new Error('NO_CLIENT_ID'));return;}
-    if(googleState.token){
-      gapi.client.setToken(googleState.token);
-      resolve(googleState.token);return;
-    }
-    if(!window.google?.accounts?.oauth2){reject(new Error('Google Identity Services niet geladen.'));return;}
-    const client=google.accounts.oauth2.initTokenClient({
-      client_id:cid,scope:GOOGLE_SCOPES,
-      callback:(resp)=>{
-        if(resp.error){reject(new Error(resp.error));return;}
-        googleState.token=resp;
-        gapi.client.setToken(resp);
-        resolve(resp);
-      },
-      error_callback:(err)=>reject(new Error(err.message||'Auth mislukt')),
-    });
-    client.requestAccessToken();
-  });
-}
-
-async function ensureGoogleAuth(){
-  await initGapi();
-  await googleAuth();
-}
-
-// ── Export to Google Sheets (Budget) ── Multi-tab template format
-async function exportBudgetToSheets(d){
-  await ensureGoogleAuth();
-  const L=d.lang||'nl';const NL=L==='nl';const ll=L_(L);
-  const totals=calcTotals(d);
-  const pn=(ph)=>ph.customName||t(ph.name,L);
-  const proj=d.project||{};const cl=d.client||{};
-  const isBuild=d.type==='build';
-
-  // Colour constants (RGBA 0-1)
-  const COL={
-    yellow:{red:1,green:.99,blue:.91,alpha:1},       // #FFFDE7 input cells
-    blue:{red:.92,green:.96,blue:.98,alpha:1},        // #EAF4FB calculated cells
-    header:{red:.83,green:.93,blue:.9,alpha:1},       // #D4ECE6 teal mint
-    dark:{red:.03,green:.08,blue:.07,alpha:1},        // #071412 teal dark
-    white:{red:1,green:1,blue:1,alpha:1},
-    lightGrey:{red:.94,green:.94,blue:.93,alpha:1},
-    subtotalGrey:{red:.96,green:.96,blue:.95,alpha:1},
-  };
-
-  // ─── Tab 1: Quote-Internal ───
-  const qi=[];
-  const qiFmt=[];// {row,col,endCol,bg,bold,curr}
-  qi.push(['TEAL BUDGET - INTERNAL','','','','','','','','','']);
-  qi.push([NL?'NOOIT DELEN MET KLANT':'NEVER SHARE WITH CLIENT','','','','','','','','','']);
-  qi.push(['','','','','','','','','','']);
-
-  // Header row
-  const qiH=isBuild
-    ?[NL?'Fase':'Phase',NL?'Rol':'Role',NL?'Omschrijving':'Description',NL?'Aantal':'Qty',
-      NL?'Ext. tarief':'Ext. rate',NL?'Klantprijs':'Client price',NL?'Int. tarief':'Int. rate',
-      NL?'Kosten':'Est. cost',NL?'Marge':'Margin',NL?'Notities':'Notes']
-    :[NL?'Regel':'Line item',NL?'Aantal':'Qty',NL?'Eenheid':'Unit',
-      NL?'Inkoop/eenheid':'Purchase/unit',NL?'OVH/eenheid':'OVH/unit',
-      NL?'Kostprijs/eenheid':'Cost price/unit',NL?'Marge %':'Margin %',
-      NL?'Verkoopprijs/eenheid':'Sell price/unit',NL?'Totaal':'Total',NL?'Notities':'Notes'];
-  qi.push(qiH);
-  const hdrRow=3;
-  qiFmt.push({row:hdrRow,col:0,endCol:10,bg:COL.lightGrey,bold:true});
-
-  // Labour section header
-  qi.push([NL?'ARBEID':'LABOUR','','','','','','','','','']);
-  qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.header,bold:true});
-
-  // Phase/role items
-  (d.phases||[]).forEach((ph,pi)=>{
-    if(ph.enabled===false)return;
-    const pd=totals.phaseData[pi];if(!pd)return;
-    (ph.items||[]).forEach(it=>{
-      const r=roleMap[it.role];
-      const qty=it.qty||0;const ext=it.extRate||0;const int_=it.intRate||0;
-      const clientPrice=qty*ext;const estCost=qty*int_;
-      const margin=clientPrice>0?(clientPrice-estCost)/clientPrice:0;
-      if(isBuild){
-        qi.push([pn(ph),t(r?.name,L)||it.role,t(it.desc,L)||'',qty,ext,clientPrice,int_,estCost,margin,'']);
-      }else{
-        // ASSEMBLE: flat structure with OVH
-        const ovh=4.24; // workshop overhead per hour (from rates)
-        const costPerUnit=int_+ovh;
-        const sellPerUnit=ext;
-        qi.push([t(r?.name,L)||it.role,qty,r?.unit||'uur',int_,ovh,costPerUnit,
-          clientPrice>0?(clientPrice-qty*costPerUnit)/clientPrice:0.3,sellPerUnit,clientPrice,'']);
-      }
-      // Yellow for input cols, blue for calculated
-      const row=qi.length-1;
-      if(isBuild){
-        qiFmt.push({row,col:3,endCol:5,bg:COL.yellow});// qty, ext rate
-        qiFmt.push({row,col:5,endCol:9,bg:COL.blue});// client price, int rate, cost, margin
-      }else{
-        qiFmt.push({row,col:1,endCol:4,bg:COL.yellow});// qty, unit, purchase
-        qiFmt.push({row,col:4,endCol:9,bg:COL.blue});// ovh, cost, margin, sell, total
-      }
-    });
-    // Contingency row
-    if(ph.contingency>0){
-      const cAmt=pd.total-ph.items.reduce((s,it)=>s+(it.qty||0)*(it.extRate||0),0);
-      if(isBuild){
-        qi.push([pn(ph),'Contingency '+(ph.contingency*100).toFixed(0)+'%','','','',cAmt,'','','','']);
-      }else{
-        qi.push(['Contingency '+(ph.contingency*100).toFixed(0)+'%',1,'fixed','','','','','',cAmt,'']);
-      }
-      qiFmt.push({row:qi.length-1,col:isBuild?5:8,endCol:isBuild?6:9,bg:COL.blue});
-    }
-  });
-  // Labour subtotal
-  qi.push([NL?'Subtotaal arbeid':'Labour subtotal','','','','','','','',totals.blockAClient,'']);
-  qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.subtotalGrey,bold:true});
-
-  qi.push(['','','','','','','','','','']);
-
-  // Materials & Procurement section
-  const hasProc=(d.procOTS||[]).length>0||(d.procCustom||[]).length>0;
-  if(hasProc){
-    qi.push([NL?'MATERIALEN & INKOOP':'MATERIALS & PROCUREMENT','','','','','','','','','']);
-    qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.header,bold:true});
-
-    const addProcRow=(it,type)=>{
-      if(!it.amount)return;
-      const v=it.amount||0;
-      const h=v*(it.handlingPct!=null?it.handlingPct:getHandlingPct(v));
-      const risk=type==='custom'?v*(it.riskPct||0):0;
-      const clientTotal=v+h+risk;
-      const margin=clientTotal>0?(clientTotal-v)/clientTotal:0;
-      if(isBuild){
-        qi.push([type==='ots'?(NL?'Standaard':'Off-the-shelf'):(NL?'Maatwerk':'Custom'),
-          it.desc||'Materials',it.supplier||'','',v,clientTotal,'',v,margin,
-          type==='custom'?'Risk '+(it.riskPct*100).toFixed(0)+'%':'']);
-      }else{
-        qi.push([it.desc||'Materials',1,'lot',v,'n/a',v,margin,clientTotal,clientTotal,'']);
-      }
-      const row=qi.length-1;
-      qiFmt.push({row,col:isBuild?4:3,endCol:isBuild?5:4,bg:COL.yellow});
-      qiFmt.push({row,col:isBuild?5:6,endCol:isBuild?9:9,bg:COL.blue});
-    };
-    (d.procOTS||[]).forEach(it=>addProcRow(it,'ots'));
-    (d.procCustom||[]).forEach(it=>addProcRow(it,'custom'));
-
-    qi.push([NL?'Subtotaal materialen':'Materials subtotal','','','','','','','',totals.procClient,'']);
-    qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.subtotalGrey,bold:true});
-    qi.push(['','','','','','','','','','']);
-  }
-
-  // Subcontractors section
-  if((d.subs||[]).length>0){
-    qi.push([NL?'ONDERAANNEMERS':'SUBCONTRACTORS','','','','','','','','','']);
-    qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.header,bold:true});
-    (d.subs||[]).forEach(it=>{
-      if(!it.amount)return;
-      const v=it.amount||0;
-      const c=v*(it.coordPct!=null?it.coordPct:COORD_MARGIN);
-      const clientTotal=v+c;
-      const margin=clientTotal>0?c/clientTotal:0;
-      if(isBuild){
-        qi.push(['',it.desc||'Subcontractor','','',v,clientTotal,'',v,margin,'']);
-      }else{
-        qi.push([it.desc||'Subcontractor',1,'fixed',v,'n/a',v,margin,clientTotal,clientTotal,'']);
-      }
-      const row=qi.length-1;
-      qiFmt.push({row,col:isBuild?4:3,endCol:isBuild?5:4,bg:COL.yellow});
-      qiFmt.push({row,col:isBuild?5:6,endCol:isBuild?9:9,bg:COL.blue});
-    });
-    qi.push([NL?'Subtotaal onderaannemers':'Subcontractors subtotal','','','','','','','',totals.subClient,'']);
-    qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.subtotalGrey,bold:true});
-    qi.push(['','','','','','','','','','']);
-  }
-
-  // Grand totals
-  qi.push(['','','','','','','','','','']);
-  qi.push([NL?'TOTAAL EXCL. BTW':'TOTAL EXCL. VAT','','','','','','','',totals.grandClient,'']);
-  qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.dark,bold:true,white:true});
-  qi.push(['','','','','','','','','','']);
-
-  // Margin check
-  qi.push([NL?'MARGE-OVERZICHT':'MARGIN CHECK','','','','','','','','','']);
-  qiFmt.push({row:qi.length-1,col:0,endCol:10,bg:COL.header,bold:true});
-  qi.push([NL?'Categorie':'Category',NL?'Kostprijs':'Cost price',NL?'Verkoopprijs':'Sell price',NL?'Marge':'Margin','Marge %','','','','','']);
-  qiFmt.push({row:qi.length-1,col:0,endCol:5,bg:COL.lightGrey,bold:true});
-  qi.push([NL?'Arbeid':'Labour',totals.blockACost,totals.blockAClient,totals.blockAClient-totals.blockACost,
-    totals.blockAClient>0?(totals.blockAClient-totals.blockACost)/totals.blockAClient:0,'','','','','']);
-  qi.push([NL?'Materialen':'Materials',totals.procCost,totals.procClient,totals.procClient-totals.procCost,
-    totals.procClient>0?(totals.procClient-totals.procCost)/totals.procClient:0,'','','','','']);
-  qi.push([NL?'Onderaannemers':'Subcontractors',totals.subFees,totals.subClient,totals.subClient-totals.subFees,
-    totals.subClient>0?(totals.subClient-totals.subFees)/totals.subClient:0,'','','','','']);
-  qi.push(['TOTAAL',totals.grandCost,totals.grandClient,totals.grandClient-totals.grandCost,totals.margin,'','','','','']);
-  qiFmt.push({row:qi.length-1,col:0,endCol:5,bold:true});
-
-  // ─── Tab 2: Quote-External (client-facing) ───
-  const qe=[];
-  const qeFmt=[];
-  qe.push(['TEAL','','','','']);
-  qe.push([NL?'OFFERTE':'QUOTATION','','','','']);
-  qe.push(['','','','','']);
-  qe.push([NL?'Klant':'Client',cl.name||'','','','']);
-  qe.push([NL?'Project':'Project',proj.name||'','','','']);
-  qe.push([NL?'Datum':'Quote date',proj.date||'','','','']);
-  qe.push([NL?'Referentie':'Reference',d.ref||'','','','']);
-  qe.push([NL?'Geldig tot':'Valid until',(d.conditions||{}).validity?d.conditions.validity+' '+(NL?'dagen':'days'):'30 '+(NL?'dagen':'days'),'','','']);
-  qe.push(['','','','','']);
-
-  // External line items header
-  qe.push([NL?'Omschrijving':'Description',NL?'Aantal':'Qty',NL?'Prijs per eenheid':'Unit price',NL?'Totaal':'Total',NL?'Notities':'Notes']);
-  qeFmt.push({row:qe.length-1,col:0,endCol:5,bg:COL.lightGrey,bold:true});
-
-  // Phases as lump sums (no rate breakdown)
-  const finLines=buildFinancialLines(d,totals,L);
-  finLines.forEach(fl=>{
-    qe.push([fl.desc,'','',fl.total,'']);
-  });
-
-  qe.push(['','','','','']);
-  qe.push([NL?'Totaal excl. BTW':'Total excl. VAT','','',totals.grandClient,'']);
-  qeFmt.push({row:qe.length-1,col:0,endCol:5,bold:true});
-  qe.push([NL?'BTW 21%':'VAT 21%','','',totals.grandClient*0.21,'']);
-  qe.push([NL?'TOTAAL INCL. BTW':'TOTAL INCL. VAT','','',totals.grandClient*1.21,'']);
-  qeFmt.push({row:qe.length-1,col:0,endCol:5,bg:COL.dark,bold:true,white:true});
-
-  qe.push(['','','','','']);
-  qe.push([NL?'BETAALSCHEMA':'PAYMENT STRUCTURE','','','','']);
-  qeFmt.push({row:qe.length-1,col:0,endCol:5,bg:COL.header,bold:true});
-  (d.payment?.milestones||[]).forEach(ms=>{
-    const amt=totals.grandClient*(ms.pct||0)/100;
-    qe.push([t(ms.name,L),ms.pct+'%','',amt,'']);
-  });
-
-  qe.push(['','','','','']);
-  qe.push([NL?'VOORWAARDEN':'TERMS & CONDITIONS','','','','']);
-  qeFmt.push({row:qe.length-1,col:0,endCol:5,bg:COL.header,bold:true});
-  const cond=d.conditions||{};
-  qe.push([NL?'Geldigheid: '+((cond.validity||30)+' dagen'):'Validity: '+((cond.validity||30)+' days'),'','','','']);
-  qe.push([NL?'Betalingstermijn: '+((cond.paymentTerm||14)+' dagen'):'Payment term: '+((cond.paymentTerm||14)+' days'),'','','','']);
-  qe.push([NL?'Alle werk valt onder de Algemene Voorwaarden van TEAL B.V.':'All work is subject to TEAL B.V. General Terms and Conditions.','','','','']);
-
-  // ─── Tab 3: Costs-Actual (empty log) ───
-  const ca=[];
-  ca.push([NL?'WERKELIJKE KOSTEN - LOG ELKE FACTUUR HIER':'ACTUAL COSTS - LOG EVERY INVOICE HERE','','','','','','','']);
-  ca.push([NL?'Voeg elke inkoopfactuur toe wanneer deze binnenkomt.':'Add each purchase when the invoice arrives.','','','','','','','']);
-  ca.push(['','','','','','','','']);
-  ca.push([NL?'Budgetregel':'Budget line',NL?'Omschrijving':'Item / description',NL?'Leverancier':'Supplier',
-    NL?'Bedrag excl. BTW':'Amount excl. VAT',NL?'Datum':'Date',NL?'Factuurreferentie':'Invoice reference',
-    NL?'Doorbelasting (J/N)':'Passthrough (Y/N)',NL?'Notities':'Notes']);
-
-  // ─── Tab 4: Balance ───
-  const bal=[];
-  const balFmt=[];
-  bal.push([NL?'PROJECT BALANS - BUDGET vs. WERKELIJK':'PROJECT BALANCE - BUDGET vs. ACTUAL','','','','']);
-  bal.push([NL?'Live overzicht. Werk bij door facturen te loggen in Costs-Actual.':'Live view. Update by logging invoices in Costs-Actual tab.','','','','']);
-  bal.push(['','','','','']);
-  bal.push([NL?'Regel':'Line',NL?'Budget':'Budget',NL?'Werkelijk':'Actual',NL?'Verschil':'Variance',NL?'Status':'Status']);
-  balFmt.push({row:3,col:0,endCol:5,bg:COL.lightGrey,bold:true});
-
-  // Budget lines from totals
-  const balLines=[
-    [NL?'Arbeid':'Labour',totals.blockAClient,0,totals.blockAClient,'\u2713 OK'],
-    [NL?'Materialen':'Materials',totals.procClient,0,totals.procClient,'\u2713 OK'],
-    [NL?'Onderaannemers':'Subcontractors',totals.subClient,0,totals.subClient,'\u2713 OK'],
-  ];
-  balLines.forEach(l=>bal.push(l));
-  bal.push(['','','','','']);
-  bal.push(['TOTAAL',totals.grandClient,0,totals.grandClient,NL?'\u2713 BINNEN BUDGET':'\u2713 WITHIN BUDGET']);
-  balFmt.push({row:bal.length-1,col:0,endCol:5,bold:true});
-
-  bal.push(['','','','','']);
-  bal.push([NL?'MARGE-OVERZICHT':'MARGIN OVERVIEW','','','','']);
-  balFmt.push({row:bal.length-1,col:0,endCol:5,bg:COL.header,bold:true});
-  bal.push([NL?'Offertetotaal excl. BTW':'Quote total excl. VAT',totals.grandClient,'',NL?'Uit interne offerte':'From internal quote','']);
-  bal.push([NL?'Werkelijke kosten':'Actual cost (logged)',0,'',NL?'Uit kostenlog':'From costs log','']);
-  bal.push([NL?'Marge':'Margin',totals.grandClient-totals.grandCost,'','','']);
-  bal.push(['Marge %',totals.margin,'',NL?'Doel: 20-30%':'Target: 20-30%','']);
-
-  // ─── Tab 5: Rates ───
-  const rates=[];
-  const ratesFmt=[];
-  rates.push([NL?'TEAL - TARIEVEN & OVERHEAD':'TEAL - RATES & OVERHEAD','','','','','']);
-  rates.push([NL?'Blauw = invoer, zwart = formule. Pas tarieven hier aan.':'Blue = input, black = formula. Update rates here.','','','','','']);
-  rates.push(['','','','','','']);
-  rates.push([NL?'Rol':'Role',NL?'Inkoop/uur':'Purchase rate/hr',NL?'+ Workshop OVH/uur':'+ Workshop OVH/hr',
-    NL?'= Kostprijs/uur':'= Cost price/hr',NL?'Extern tarief/uur':'External rate/hr',NL?'Marge %':'Margin %']);
-  ratesFmt.push({row:3,col:0,endCol:6,bg:COL.lightGrey,bold:true});
-
-  ROLES.forEach(r=>{
-    const ovh=4.24;
-    const costPrice=r.int+ovh;
-    const margin=r.ext>0?(r.ext-costPrice)/r.ext:0;
-    rates.push([t(r.name,L),r.int,ovh,costPrice,r.ext,margin]);
-    const row=rates.length-1;
-    ratesFmt.push({row,col:1,endCol:3,bg:COL.yellow});
-    ratesFmt.push({row,col:3,endCol:6,bg:COL.blue});
-  });
-
-  rates.push(['','','','','','']);
-  rates.push([NL?'STANDAARD MARGES':'DEFAULT MARGINS','','','','','']);
-  ratesFmt.push({row:rates.length-1,col:0,endCol:6,bg:COL.header,bold:true});
-  const defaultMargins=[
-    [NL?'Eigen uren':'Own hours','30%',NL?'Op verkoopprijs':'On sell price'],
-    [NL?'Freelancer uren':'Freelancer hours','28%',NL?'Op verkoopprijs':'On sell price'],
-    [NL?'Materialen/inkoop':'Materials/sourcing','40%',NL?'Hogere inkoopinspanning = hogere marge. 30-50%':'Higher sourcing effort = higher margin. 30-50%'],
-    [NL?'Klant doorbelasting':'Client passthrough','10%',NL?'Alleen admin fee':'Admin fee only'],
-    [NL?'Contingency (intern)':'Contingency (internal)','10%',NL?'Altijd 10% van subtotaal. Nooit tonen aan klant.':'Always 10% of subtotal. Never shown to client.'],
-  ];
-  defaultMargins.forEach(m=>rates.push(m));
-
-  // ─── Create spreadsheet with all tabs ───
-  const title=`Offerte ${d.ref||'Draft'} - TEAL Budget`;
-  const sheetDefs=[
-    {title:'Quote - Internal',rows:qi,fmt:qiFmt,cols:10},
-    {title:'Quote - External',rows:qe,fmt:qeFmt,cols:5},
-    {title:'Costs - Actual',rows:ca,fmt:[],cols:8},
-    {title:'Balance',rows:bal,fmt:balFmt,cols:5},
-    {title:isBuild?'Data':'Rates',rows:rates,fmt:ratesFmt,cols:6},
-  ];
-
-  const resp=await gapi.client.sheets.spreadsheets.create({
-    resource:{
-      properties:{title},
-      sheets:sheetDefs.map((sd,i)=>({
-        properties:{title:sd.title,index:i,
-          gridProperties:{rowCount:Math.max(sd.rows.length+20,50),columnCount:sd.cols+2}},
-      }))
-    }
-  });
-  const ssId=resp.result.spreadsheetId;
-  const sheetIds=resp.result.sheets.map(s=>s.properties.sheetId);
-
-  // Write data to all tabs
-  const batchData=sheetDefs.map((sd,i)=>({
-    range:`'${sd.title}'!A1`,
-    values:sd.rows,
-  }));
-  await gapi.client.sheets.spreadsheets.values.batchUpdate({
-    spreadsheetId:ssId,
-    resource:{valueInputOption:'RAW',data:batchData}
-  });
-
-  // Build formatting requests for all tabs
-  const requests=[];
-  sheetDefs.forEach((sd,si)=>{
-    const sid=sheetIds[si];
-    // Title rows bold
-    requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:0,endRowIndex:1,startColumnIndex:0,endColumnIndex:sd.cols},
-      cell:{userEnteredFormat:{textFormat:{bold:true,fontSize:14}}},fields:'userEnteredFormat.textFormat'}});
-
-    // Apply cell-level formatting
-    sd.fmt.forEach(f=>{
-      const cell={userEnteredFormat:{}};const fields=[];
-      if(f.bg){cell.userEnteredFormat.backgroundColor=f.bg;fields.push('userEnteredFormat.backgroundColor');}
-      if(f.bold){cell.userEnteredFormat.textFormat={...cell.userEnteredFormat.textFormat||{},bold:true};fields.push('userEnteredFormat.textFormat.bold');}
-      if(f.white){cell.userEnteredFormat.textFormat={...cell.userEnteredFormat.textFormat||{},foregroundColor:COL.white};fields.push('userEnteredFormat.textFormat.foregroundColor');}
-      if(fields.length){
-        requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:f.row,endRowIndex:f.row+1,
-          startColumnIndex:f.col,endColumnIndex:f.endCol},cell,fields:fields.join(',')}});
-      }
-    });
-
-    // Currency format on amount columns
-    if(si===0){// Quote-Internal
-      const currCols=isBuild?[[4,9]]:[[ 3,9]];
-      currCols.forEach(([s,e])=>{
-        requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:4,endRowIndex:sd.rows.length,startColumnIndex:s,endColumnIndex:e},
-          cell:{userEnteredFormat:{numberFormat:{type:'CURRENCY',pattern:'\u20AC #,##0.00'}}},fields:'userEnteredFormat.numberFormat'}});
-      });
-      // Percentage format on margin column
-      const mCol=isBuild?8:6;
-      requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:4,endRowIndex:sd.rows.length,startColumnIndex:mCol,endColumnIndex:mCol+1},
-        cell:{userEnteredFormat:{numberFormat:{type:'PERCENT',pattern:'0%'}}},fields:'userEnteredFormat.numberFormat'}});
-    }
-    if(si===1){// Quote-External: currency on col D
-      requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:9,endRowIndex:sd.rows.length,startColumnIndex:3,endColumnIndex:4},
-        cell:{userEnteredFormat:{numberFormat:{type:'CURRENCY',pattern:'\u20AC #,##0.00'}}},fields:'userEnteredFormat.numberFormat'}});
-    }
-    if(si===3){// Balance: currency on cols B-D
-      requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:4,endRowIndex:sd.rows.length,startColumnIndex:1,endColumnIndex:4},
-        cell:{userEnteredFormat:{numberFormat:{type:'CURRENCY',pattern:'\u20AC #,##0.00'}}},fields:'userEnteredFormat.numberFormat'}});
-    }
-    if(si===4){// Rates: currency on cols B-E, percent on col F
-      requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:4,endRowIndex:sd.rows.length,startColumnIndex:1,endColumnIndex:5},
-        cell:{userEnteredFormat:{numberFormat:{type:'CURRENCY',pattern:'\u20AC #,##0.00'}}},fields:'userEnteredFormat.numberFormat'}});
-      requests.push({repeatCell:{range:{sheetId:sid,startRowIndex:4,endRowIndex:sd.rows.length,startColumnIndex:5,endColumnIndex:6},
-        cell:{userEnteredFormat:{numberFormat:{type:'PERCENT',pattern:'0%'}}},fields:'userEnteredFormat.numberFormat'}});
-    }
-
-    // Auto-resize column widths
-    requests.push({autoResizeDimensions:{dimensions:{sheetId:sid,dimension:'COLUMNS',startIndex:0,endIndex:sd.cols}}});
-  });
-
-  await gapi.client.sheets.spreadsheets.batchUpdate({spreadsheetId:ssId,resource:{requests}});
-
-  return `https://docs.google.com/spreadsheets/d/${ssId}`;
-}
-
-// ── Generate Offerte as Markdown (copy to clipboard) ──
-function generateOfferteMD(d){
-  const L=d.lang||'nl';const NL=L==='nl';const ll=L_(L);
-  const totals=calcTotals(d);
-  const pn=(ph)=>ph.customName||t(ph.name,L);
-  const fmtDateLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
-  const finLines=buildFinancialLines(d,totals,L);
-  const activePhases=(d.phases||[]).filter(p=>p.enabled!==false);
-  const fmtMonth=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{month:'long',year:'numeric'}):'';
-
-  const cl=d.client||{};
-  const proj=d.project||{};const cond=d.conditions||{};
-  const lines=[];
-  const add=(...s)=>lines.push(s.join(''));
-  const blank=()=>lines.push('');
-
-  // Header
-  add('# TEAL');
-  add('## ',NL?'OFFERTE':'QUOTATION');
-  blank();
-  add(ll.referentieLabel,': ',d.ref||'');
-  add(ll.datumPrev,': ',fmtDateLong(proj.date));
-  add(ll.geldigTot,': ',cond.validity||30,' ',NL?'dagen':'days');
-  blank();
-
-  // Client
-  add('## ',ll.klantLabel);
-  if(cl.name)add('**',cl.name,'**');
-  if(cl.contact&&cl.contact!==cl.name)add(cl.contact);
-  if(cl.email)add(cl.email);
-  if(cl.addr)add(cl.addr,', ',cl.zip||'',' ',cl.city||'');
-  if(proj.location)add(ll.locatie,': ',proj.location);
-  blank();
-
-  // Project description
-  if(t(proj.description,L)){
-    add('## ',ll.projectBeschrijving);
-    add(t(proj.description,L));
-    blank();
-  }
-  if(t(proj.tealRole,L)){
-    add('**',ll.rolTeal,'**');
-    add(t(proj.tealRole,L));
-    blank();
-  }
-
-  // Scope & phases
-  if(activePhases.length){
-    add('## ',ll.scopeTimeline);
-    activePhases.forEach(ph=>{
-      const desc=t(ph.description,L);
-      add('**',pn(ph),'**');
-      if(desc)add(desc);
-      blank();
-    });
-  }
-
-  // Financial overview
-  add('## ',ll.kostenLabel);
-  blank();
-  add('| ',NL?'Omschrijving':'Description',' | ',NL?'Bedrag':'Amount',' |');
-  add('| --- | ---: |');
-  finLines.forEach(fl=>{
-    add('| ',fl.desc,' | ',fmtE(fl.total),' |');
-  });
-  add('| **',NL?'Totaal (excl. BTW)':'Total (excl. VAT)','** | **',fmtE(totals.grandClient),'** |');
-  blank();
-
-  // Payment
-  const milestones=d.payment?.milestones||[];
-  if(milestones.length){
-    add('## ',ll.betalingsschema||'PAYMENT SCHEDULE');
-    blank();
-    add('| ',NL?'Mijlpaal':'Milestone',' | % | ',NL?'Bedrag':'Amount',' |');
-    add('| --- | ---: | ---: |');
-    const milestoneDateISOs=()=>{
-      const totalW=activePhases.reduce((s,ph)=>Math.max(s,(ph.startWeek||0)+(ph.durationWeeks||4)),0)||1;
-      const n=milestones.length;
-      return milestones.map((ms,i)=>{
-        if(ms.date)return ms.date;
-        if(!proj.date)return '';
-        const wk=Math.round((i/(n-1||1))*totalW);
-        const dt=new Date(proj.date);dt.setDate(dt.getDate()+wk*7);
-        return dt.toISOString().slice(0,10);
-      });
-    };
-    const mDates=milestoneDateISOs();
-    milestones.forEach((ms,i)=>{
-      const amt=totals.grandClient*(ms.pct||0)/100;
-      const dateStr=mDates[i]?' ('+fmtMonth(mDates[i])+')':'';
-      add('| ',t(ms.name,L),dateStr,' | ',ms.pct,'% | ',fmtE(amt),' |');
-    });
-    blank();
-  }
-
-  // Terms
-  add('## ',ll.voorwaardenLabel);
-  add('- ',ll.geldigheidVw,': ',cond.validity||30,' ',NL?'dagen':'days');
-  add('- ',ll.betalingstermijn,': ',cond.paymentTerm||14,' ',NL?'dagen':'days');
-  {const exStr=(proj.exclusionItems||[]).map(it=>t(it,L)).filter(Boolean).join('; ');if(exStr)add('- ',ll.exclusionsVw,': ',exStr);}
-  if(cond.warrantyEnabled!==false&&t(cond.warranty,L))add('- ',ll.garantieLabel,': ',t(cond.warranty,L));
-  if(cond.meerwerkEnabled!==false&&t(cond.meerwerk,L))add('- ',t(cond.meerwerk,L));
-  if(cond.avNL||cond.avEN)add('- ',ll.avTekst);
-  blank();
-
-  // Signature
-  add('## ',ll.akkoord);
-  if(cond.akkoordEnabled!==false&&t(cond.akkoord,L))add(t(cond.akkoord,L));
-  blank();
-  add('____________________________&emsp;&emsp;&emsp;&emsp;____________________________');
-  add(NL?'Handtekening':'Signature','&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;',NL?'Datum':'Date');
-
-  return lines.join('\n');
-}
-
-// ── Generate Budget as TSV (copy to clipboard, paste into Sheets template) ──
-function generateBudgetTSV(d){
-  const L=d.lang||'nl';const NL=L==='nl';
-  const totals=calcTotals(d);
-  const pn=(ph)=>ph.customName||t(ph.name,L);
-  const proj=d.project||{};const cl=d.client||{};
-  const isBuild=d.type==='build';
-  const n=v=>typeof v==='number'?v.toFixed(2).replace('.',','):'';
-  const pct=v=>typeof v==='number'?(v*100).toFixed(0)+'%':'';
-
-  const rows=[];
-  const add=(...cols)=>rows.push(cols.join('\t'));
-
-  // Header info
-  add(NL?'TEAL BUDGET':'TEAL BUDGET');
-  add('');
-  add(NL?'Project':'Project',proj.name||'');
-  add(NL?'Klant':'Client',cl.name||'');
-  add(NL?'Referentie':'Reference',d.ref||'');
-  add(NL?'Datum':'Date',proj.date||'');
-  add(NL?'Type':'Type',isBuild?'Build':'Assemble');
-  add('');
-
-  // Column headers (matches Quote-Internal template)
-  if(isBuild){
-    add(NL?'Fase':'Phase',NL?'Rol':'Role',NL?'Omschrijving':'Description',
-      NL?'Aantal':'Qty',NL?'Ext. tarief':'Ext. rate',NL?'Klantprijs':'Client price',
-      NL?'Int. tarief':'Int. rate',NL?'Kosten':'Est. cost',NL?'Marge %':'Margin %',NL?'Notities':'Notes');
-  }else{
-    add(NL?'Regel':'Line item',NL?'Aantal':'Qty',NL?'Eenheid':'Unit',
-      NL?'Inkoop/eenheid':'Purchase/unit',NL?'Kostprijs/eenheid':'Cost price/unit',
-      NL?'Marge %':'Margin %',NL?'Verkoopprijs/eenheid':'Sell price/unit',
-      NL?'Totaal':'Total',NL?'Notities':'Notes');
-  }
-
-  // LABOUR
-  add('');
-  add(NL?'ARBEID':'LABOUR');
-  (d.phases||[]).forEach((ph,pi)=>{
-    if(ph.enabled===false)return;
-    const pd=totals.phaseData[pi];if(!pd)return;
-    (ph.items||[]).forEach(it=>{
-      const r=roleMap[it.role];
-      const qty=it.qty||0;const ext=it.extRate||0;const int_=it.intRate||0;
-      const clientPrice=qty*ext;const estCost=qty*int_;
-      const margin=clientPrice>0?(clientPrice-estCost)/clientPrice:0;
-      if(isBuild){
-        add(pn(ph),t(r?.name,L)||it.role,t(it.desc,L)||'',qty,n(ext),n(clientPrice),n(int_),n(estCost),pct(margin),'');
-      }else{
-        const costPerUnit=int_;
-        add(t(r?.name,L)||it.role,qty,r?.unit||'uur',n(int_),n(costPerUnit),pct(margin),n(ext),n(clientPrice),'');
-      }
-    });
-    if(ph.contingency>0){
-      const cAmt=pd.total-ph.items.reduce((s,it)=>s+(it.qty||0)*(it.extRate||0),0);
-      if(isBuild){
-        add(pn(ph),'Contingency '+(ph.contingency*100).toFixed(0)+'%','','','',n(cAmt),'','','','');
-      }else{
-        add('Contingency '+(ph.contingency*100).toFixed(0)+'%','','','','','','',n(cAmt),'');
-      }
-    }
-  });
-  add(NL?'Subtotaal arbeid':'Labour subtotal','','','','',n(totals.blockAClient),'','','','');
-
-  // MATERIALS
-  if((d.procOTS||[]).length||(d.procCustom||[]).length){
-    add('');
-    add(NL?'MATERIALEN & INKOOP':'MATERIALS & PROCUREMENT');
-    const addProc=(it,type)=>{
-      if(!it.amount)return;
-      const v=it.amount||0;
-      const h=v*(it.handlingPct!=null?it.handlingPct:getHandlingPct(v));
-      const risk=type==='custom'?v*(it.riskPct||0):0;
-      const clientTotal=v+h+risk;
-      const margin=clientTotal>0?(clientTotal-v)/clientTotal:0;
-      if(isBuild){
-        add(type==='ots'?(NL?'Standaard':'Off-the-shelf'):(NL?'Maatwerk':'Custom'),
-          it.desc||'',it.supplier||'','',n(v),n(clientTotal),'',n(v),pct(margin),
-          type==='custom'?'Risk '+(it.riskPct*100).toFixed(0)+'%':'');
-      }else{
-        add(it.desc||'Materials',1,'lot',n(v),n(v),pct(margin),n(clientTotal),n(clientTotal),'');
-      }
-    };
-    (d.procOTS||[]).forEach(it=>addProc(it,'ots'));
-    (d.procCustom||[]).forEach(it=>addProc(it,'custom'));
-    add(NL?'Subtotaal materialen':'Materials subtotal','','','','',n(totals.procClient),'','','','');
-  }
-
-  // SUBCONTRACTORS
-  if((d.subs||[]).length){
-    add('');
-    add(NL?'ONDERAANNEMERS':'SUBCONTRACTORS');
-    (d.subs||[]).forEach(it=>{
-      if(!it.amount)return;
-      const v=it.amount||0;
-      const c=v*(it.coordPct!=null?it.coordPct:COORD_MARGIN);
-      const clientTotal=v+c;
-      const margin=clientTotal>0?c/clientTotal:0;
-      if(isBuild){
-        add('',it.desc||'','','',n(v),n(clientTotal),'',n(v),pct(margin),'');
-      }else{
-        add(it.desc||'',1,'fixed',n(v),n(v),pct(margin),n(clientTotal),n(clientTotal),'');
-      }
-    });
-    add(NL?'Subtotaal onderaannemers':'Subcontractors subtotal','','','','',n(totals.subClient),'','','','');
-  }
-
-  // GRAND TOTAL
-  add('');
-  add(NL?'TOTAAL EXCL. BTW':'TOTAL EXCL. VAT','','','','',n(totals.grandClient),'','','','');
-
-  // MARGIN CHECK
-  add('');
-  add(NL?'MARGE-OVERZICHT':'MARGIN CHECK');
-  add(NL?'Categorie':'Category',NL?'Kostprijs':'Cost price',NL?'Verkoopprijs':'Sell price',NL?'Marge':'Margin',NL?'Marge %':'Margin %');
-  add(NL?'Arbeid':'Labour',n(totals.blockACost),n(totals.blockAClient),n(totals.blockAClient-totals.blockACost),
-    pct(totals.blockAClient>0?(totals.blockAClient-totals.blockACost)/totals.blockAClient:0));
-  add(NL?'Materialen':'Materials',n(totals.procCost),n(totals.procClient),n(totals.procClient-totals.procCost),
-    pct(totals.procClient>0?(totals.procClient-totals.procCost)/totals.procClient:0));
-  add(NL?'Onderaannemers':'Subcontractors',n(totals.subFees),n(totals.subClient),n(totals.subClient-totals.subFees),
-    pct(totals.subClient>0?(totals.subClient-totals.subFees)/totals.subClient:0));
-  add('TOTAAL',n(totals.grandCost),n(totals.grandClient),n(totals.grandClient-totals.grandCost),pct(totals.margin));
-
-  return rows.join('\n');
 }
 
 // ── Export Planning to TEAL Planner ──
@@ -1681,51 +1014,6 @@ function exportToPlanner(d){
 }
 
 // ── Components ──
-function GoogleSettingsModal({open,onClose}){
-  const[cid,setCid]=useState(getGoogleClientId());
-  if(!open)return null;
-  return <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={onClose}>
-    <div className="card" style={{maxWidth:520,width:'90%',margin:0}} onClick={e=>e.stopPropagation()}>
-      <div className="card-h">Google API Instellingen</div>
-      <p style={{fontSize:13,color:'#555',marginBottom:16}}>
-        Voer je Google Cloud OAuth Client ID in om direct naar Google Drive te exporteren.
-        Maak een OAuth 2.0 Client ID aan in de <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" style={{color:'var(--green)'}}>Google Cloud Console</a> met
-        als type "Web application" en voeg <strong>{location.origin}</strong> toe als authorized JavaScript origin.
-        Zet ook de Sheets, Docs en Drive API aan.
-      </p>
-      <div className="fg" style={{marginBottom:16}}>
-        <label>OAuth Client ID</label>
-        <input value={cid} onChange={e=>setCid(e.target.value)} placeholder="123456789.apps.googleusercontent.com" style={{fontFamily:'monospace',fontSize:12}}/>
-      </div>
-      <div className="flex g8">
-        <button className="btn btn-p" onClick={()=>{setGoogleClientId(cid);onClose();}}>Opslaan</button>
-        <button className="btn btn-g" onClick={onClose}>Annuleren</button>
-      </div>
-    </div>
-  </div>;
-}
-
-function ExportDropdown({data:d,onExport}){
-  const[open,setOpen]=useState(false);
-  const NL=d?.lang==='nl';
-  const items=[
-    {key:'sheets',label:NL?'Budget kopiëren (Sheets)':'Copy budget (Sheets)',icon:'📊',hint:NL?'Plak in je template':'Paste into your template'},
-    {key:'docs',label:NL?'Offerte kopiëren (Markdown)':'Copy quotation (Markdown)',icon:'📄',hint:NL?'Plak in Docs/Notion':'Paste into Docs/Notion'},
-    {key:'planning',label:NL?'Open in Planner':'Open in Planner',icon:'📅',hint:''},
-  ];
-  return <div style={{position:'relative'}}>
-    <button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}}
-      onClick={()=>setOpen(!open)}>Export ▾</button>
-    {open&&<><div style={{position:'fixed',inset:0,zIndex:199}} onClick={()=>setOpen(false)}/><div style={{position:'absolute',right:0,top:'100%',marginTop:4,background:'#fff',border:'1px solid #d0d0ce',borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:200,minWidth:260,overflow:'hidden'}}>
-      {items.map(it=><button key={it.key} style={{display:'block',width:'100%',padding:'10px 16px',border:0,background:'none',textAlign:'left',fontSize:13,fontFamily:'inherit',cursor:'pointer',borderBottom:'1px solid #eee'}}
-        onMouseOver={e=>e.currentTarget.style.background='var(--mint-light)'}
-        onMouseOut={e=>e.currentTarget.style.background='none'}
-        onClick={()=>{setOpen(false);onExport(it.key);}}
-      ><span>{it.icon} {it.label}</span>{it.hint&&<div style={{fontSize:11,color:'#999',marginTop:2}}>{it.hint}</div>}</button>)}
-    </div></>}
-  </div>;
-}
-
 function Header({data:d,onPdf,onExport,setData,onBack}){
   const ll=d?L_(d.lang):I.nl;
   return <div className="hdr">
@@ -1745,8 +1033,8 @@ function Header({data:d,onPdf,onExport,setData,onBack}){
         }
         setData(nd);
       }}>{d.lang==='nl'?'EN':'NL'}</button>}
-      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={async()=>{await copyShareLink(d,d.lang==='nl');archiveLogAction(d,'shared');}}>{ll.deelLink}</button>}
-      {d&&<ExportDropdown data={d} onExport={onExport}/>}
+      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={async()=>{await copyShareLink(d,d.lang==='nl');archiveLogAction(d,'shared');}}>{ll.deelLink}</button>}{d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>onExport('planning')} title="Open deze offerte in de TEAL Planner">📅 Planner</button>}
+      
       {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>emailQuote(d)} title={d.lang==='nl'?'Stel een e-mail op met de offerte-PDF als bijlage':'Compose an email with the quotation PDF attached'}>{d.lang==='nl'?'Mail':'Email'}</button>}
       {d&&<button className="btn btn-s" onClick={onPdf}>PDF</button>}
     </div>
@@ -2096,16 +1384,11 @@ function BudgetTab({data:d,set}){
     set({...d,install:base});};
   const calSummaryLine=(x)=>{const s=x.stats,p=[];if(s.counts.work)p.push(s.counts.work+(L==='nl'?' werk':' work'));if(s.counts.halfwork)p.push(s.counts.halfwork+(L==='nl'?' ½ werk':' ½ work'));if(s.counts.travel)p.push(s.counts.travel+(L==='nl'?' reis':' travel'));if(s.counts.standby)p.push(s.counts.standby+(L==='nl'?' standby':' standby'));return fmtCalD(s.first)+'–'+fmtCalD(s.last)+' · '+p.join(' · ')+' · '+s.nights+(L==='nl'?' nacht(en)':' night(s)');};
 
-  // Bouwblokken-bibliotheek
-  const[libType,setLibType]=useState(null); // 'ots' | 'custom' | 'sub' → insert-modus
-  const saveToLib=(type,item)=>{const nm=window.prompt('Naam voor dit bouwblok in de bibliotheek:',item.desc||item.showAs||'');if(nm===null)return;if(!nm.trim())return;const {id,...payload}=item;addLibraryBlock({type,name:nm.trim(),payload});alert('Opgeslagen in de bibliotheek. Voeg later in via “Uit bibliotheek”.');};
-  const insertFromLib=(b)=>{const p={...b.payload,id:uid()};if(b.type==='ots')set({...d,procOTS:[...(d.procOTS||[]),p]});else if(b.type==='custom')set({...d,procCustom:[...(d.procCustom||[]),p]});else if(b.type==='sub')set({...d,subs:[...(d.subs||[]),p]});setLibType(null);};
 
   const ll=L_(L);
   const phaseName=(ph)=>ph.customName||t(ph.name,L);
 
   return <>
-    {libType&&<LibraryModal insertMode filterType={libType} onInsert={insertFromLib} onClose={()=>setLibType(null)}/>}
     {/* Block A */}
     <div className="card">
       <div className="card-h">{ll.blockATitle}</div>
@@ -2195,12 +1478,12 @@ function BudgetTab({data:d,set}){
               <td className="tr mono">{Math.round((it.handlingPct||0)*100)}%</td>
               <td className="tr mono">{fmt(h)}</td>
               <td className="tr mono">{fmt((it.amount||0)+h)}</td>
-              <td><div className="flex g6" style={{justifyContent:'flex-end'}}><button className="btn btn-sm btn-g" title="Opslaan in bibliotheek" onClick={()=>saveToLib('ots',it)}>★</button><button className="btn btn-sm btn-g" onClick={()=>rmOTS(i)}>&times;</button></div></td>
+              <td><div className="flex g6" style={{justifyContent:'flex-end'}}><button className="btn btn-sm btn-g" onClick={()=>rmOTS(i)}>&times;</button></div></td>
             </tr>})}
           <tr className="sub"><td colSpan={2}>{ll.subtotaalB1}</td><td className="tr mono">{fmt(totals.b1Purchase)}</td><td></td><td className="tr mono">{fmt(totals.b1Handling)}</td><td className="tr mono">{fmt(totals.b1Purchase+totals.b1Handling)}</td><td></td></tr>
         </tbody>
       </table></div>
-      <div className="flex g8 mt16"><button className="btn btn-sm btn-g" onClick={addOTS}>{ll.inkooppost}</button><button className="btn btn-sm btn-g" onClick={()=>setLibType('ots')}>Uit bibliotheek</button></div>
+      <div className="flex g8 mt16"><button className="btn btn-sm btn-g" onClick={addOTS}>{ll.inkooppost}</button></div>
     </div>
 
     {/* Block B2: Custom */}
@@ -2222,12 +1505,12 @@ function BudgetTab({data:d,set}){
               <td><input type="number" value={Math.round((it.riskPct||0)*100)} onChange={e=>upCust(i,'riskPct',(parseInt(e.target.value)||0)/100)} style={{width:50}}/></td>
               <td className="tr mono">{fmt(r)}</td>
               <td className="tr mono">{fmt((it.amount||0)+h+r)}</td>
-              <td><div className="flex g6" style={{justifyContent:'flex-end'}}><button className="btn btn-sm btn-g" title="Opslaan in bibliotheek" onClick={()=>saveToLib('custom',it)}>★</button><button className="btn btn-sm btn-g" onClick={()=>rmCust(i)}>&times;</button></div></td>
+              <td><div className="flex g6" style={{justifyContent:'flex-end'}}><button className="btn btn-sm btn-g" onClick={()=>rmCust(i)}>&times;</button></div></td>
             </tr>})}
           <tr className="sub"><td colSpan={2}>{ll.subtotaalB2}</td><td className="tr mono">{fmt(totals.b2Purchase)}</td><td></td><td className="tr mono">{fmt(totals.b2Handling)}</td><td></td><td className="tr mono">{fmt(totals.b2Risk)}</td><td className="tr mono">{fmt(totals.b2Purchase+totals.b2Handling+totals.b2Risk)}</td><td></td></tr>
         </tbody>
       </table></div>
-      <div className="flex g8 mt16"><button className="btn btn-sm btn-g" onClick={addCust}>{ll.maatwerk}</button><button className="btn btn-sm btn-g" onClick={()=>setLibType('custom')}>Uit bibliotheek</button></div>
+      <div className="flex g8 mt16"><button className="btn btn-sm btn-g" onClick={addCust}>{ll.maatwerk}</button></div>
     </div>
 
     {/* Block C: Subcontractors */}
@@ -2245,12 +1528,12 @@ function BudgetTab({data:d,set}){
               <td className="tr mono">{Math.round((it.coordPct||COORD_MARGIN)*100)}%</td>
               <td className="tr mono">{fmt(c)}</td>
               <td className="tr mono">{fmt((it.amount||0)+c)}</td>
-              <td><div className="flex g6" style={{justifyContent:'flex-end'}}><button className="btn btn-sm btn-g" title="Opslaan in bibliotheek" onClick={()=>saveToLib('sub',it)}>★</button><button className="btn btn-sm btn-g" onClick={()=>rmSub(i)}>&times;</button></div></td>
+              <td><div className="flex g6" style={{justifyContent:'flex-end'}}><button className="btn btn-sm btn-g" onClick={()=>rmSub(i)}>&times;</button></div></td>
             </tr>})}
           <tr className="sub"><td colSpan={2}>{ll.subtotaalC}</td><td className="tr mono">{fmt(totals.subFees)}</td><td></td><td className="tr mono">{fmt(totals.subCoord)}</td><td className="tr mono">{fmt(totals.subClient)}</td><td></td></tr>
         </tbody>
       </table></div>
-      <div className="flex g8 mt16"><button className="btn btn-sm btn-g" onClick={addSub}>{ll.plusOnderaannemer}</button><button className="btn btn-sm btn-g" onClick={()=>setLibType('sub')}>Uit bibliotheek</button></div>
+      <div className="flex g8 mt16"><button className="btn btn-sm btn-g" onClick={addSub}>{ll.plusOnderaannemer}</button></div>
     </div>
 
     {/* Installatie / reizen */}
@@ -2935,10 +2218,10 @@ function PreviewTab({data:d,set}){
           <div style={{display:'flex',alignItems:'baseline',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
             <div style={{flex:1}}>{NL?'Omschrijving':'Description'}</div><div style={{width:140,textAlign:'right'}}>{NL?'Bedrag':'Amount'}</div>
           </div>
-          {opt.cost_items.map((it,i)=><div key={i} className="costrow" style={{position:'relative',display:'flex',alignItems:'baseline',padding:'12px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
-            {set&&it.k&&<div className="costmove" style={{position:'absolute',left:-52,top:'50%',transform:'translateY(-50%)',display:'flex',gap:2}}>
-              <button title={NL?'Omhoog':'Move up'} disabled={i===0} onClick={()=>moveCost(opt.cost_items,i,-1)} style={{cursor:i===0?'default':'pointer',border:'1px solid '+hair,background:'#fff',color:i===0?faint:body,borderRadius:4,width:20,height:20,lineHeight:'16px',fontSize:12,padding:0}}>↑</button>
-              <button title={NL?'Omlaag':'Move down'} disabled={i===opt.cost_items.length-1} onClick={()=>moveCost(opt.cost_items,i,1)} style={{cursor:i===opt.cost_items.length-1?'default':'pointer',border:'1px solid '+hair,background:'#fff',color:i===opt.cost_items.length-1?faint:body,borderRadius:4,width:20,height:20,lineHeight:'16px',fontSize:12,padding:0}}>↓</button>
+          {opt.cost_items.map((it,i)=><div key={i} className="costrow" style={{display:'flex',alignItems:'center',padding:'12px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
+            {set&&it.k&&<div className="costmove" style={{display:'flex',flexDirection:'column',gap:2,marginRight:10,flexShrink:0}}>
+              <button aria-label={NL?'Omhoog':'Move up'} title={NL?'Omhoog':'Move up'} disabled={i===0} onClick={()=>moveCost(opt.cost_items,i,-1)} style={{cursor:i===0?'default':'pointer',border:'1px solid '+hair,background:'#fff',color:i===0?faint:body,borderRadius:4,width:24,height:18,lineHeight:'14px',fontSize:11,padding:0,touchAction:'manipulation'}}>↑</button>
+              <button aria-label={NL?'Omlaag':'Move down'} title={NL?'Omlaag':'Move down'} disabled={i===opt.cost_items.length-1} onClick={()=>moveCost(opt.cost_items,i,1)} style={{cursor:i===opt.cost_items.length-1?'default':'pointer',border:'1px solid '+hair,background:'#fff',color:i===opt.cost_items.length-1?faint:body,borderRadius:4,width:24,height:18,lineHeight:'14px',fontSize:11,padding:0,touchAction:'manipulation'}}>↓</button>
             </div>}
             <div style={{flex:1,color:ink}}>{it.d}</div><div style={{width:140,textAlign:'right',fontWeight:500,fontVariantNumeric:'tabular-nums'}}>{it.a}</div>
           </div>)}
@@ -3784,7 +3067,6 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
   const[sortBy,setSortBy]=useState('recent');
   const[showAnalytics,setShowAnalytics]=useState(false);
   const[dupFor,setDupFor]=useState(null);
-  const[libOpen,setLibOpen]=useState(false);
   const[importOpen,setImportOpen]=useState(false);
   const[importText,setImportText]=useState('');
   const[importErr,setImportErr]=useState('');
@@ -3974,7 +3256,6 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
         <option value="status">Sorteer: status</option>
         <option value="name">Sorteer: naam (A–Z)</option>
       </select>
-      <button className="btn btn-sm btn-g" onClick={()=>setLibOpen(true)} title="Herbruikbare posten beheren">Bibliotheek</button>
       <button className="btn btn-sm btn-g" onClick={()=>setShowAnalytics(s=>!s)} style={showAnalytics?{borderColor:'#071412',color:'#071412',fontWeight:700}:null}>Analyse {showAnalytics?'▴':'▾'}</button>
     </div>
 
@@ -4110,7 +3391,6 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
         </div>
       </div>;})()}
 
-    {libOpen&&<LibraryModal onClose={()=>setLibOpen(false)}/>}
 
     {importOpen&&<div onClick={()=>setImportOpen(false)} style={{position:'fixed',inset:0,background:'rgba(7,20,18,.35)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,padding:20}}>
       <div onClick={e=>e.stopPropagation()} className="card" style={{maxWidth:520,width:'100%',marginBottom:0}}>
@@ -4128,36 +3408,6 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
 }
 
 // ── Bouwblokken-bibliotheek: overzicht/beheer ──
-function LibraryModal({onClose,onInsert,insertMode,filterType}){
-  const[lib,setLib]=useState(loadLibrary());
-  const refresh=()=>setLib(loadLibrary());
-  const del=(id)=>{deleteLibraryBlock(id);refresh();};
-  const typeLabel={phase_item:'Uurregel',ots:'Inkooppost',custom:'Maatwerk',sub:'Onderaannemer',text:'Standaardtekst'};
-  const typeColor={phase_item:'#071412',ots:'#2D8659',custom:'#6b4ea0',sub:'#0f766e',text:'#8a6d00'};
-  const blocks=filterType?lib.blocks.filter(b=>b.type===filterType):lib.blocks;
-  const groups={};blocks.forEach(b=>{(groups[b.type]=groups[b.type]||[]).push(b);});
-  const summary=(b)=>{if(b.type==='phase_item')return (b.payload.qty||0)+' × '+fmtE(b.payload.extRate||0)+(b.payload.role?(' · '+b.payload.role):'');if(b.type==='text')return (t(b.payload.text||{nl:'',en:''},'nl')||'').slice(0,60)+'…';return fmtE(b.payload.amount||0);};
-  return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(7,20,18,.35)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,padding:20}}>
-    <div onClick={e=>e.stopPropagation()} className="card" style={{maxWidth:560,width:'100%',marginBottom:0,maxHeight:'80vh',overflow:'auto'}}>
-      <div className="between" style={{marginBottom:4}}><div className="card-h" style={{border:0,padding:0,margin:0}}>Bouwblokken-bibliotheek</div><button className="btn btn-sm btn-g" onClick={onClose}>Sluiten</button></div>
-      <p className="sm muted" style={{margin:'0 0 14px'}}>{insertMode?'Kies een blok om in te voegen.':'Herbruikbare posten en teksten. Sla ze op vanuit een offerte (knop “In bibliotheek”) en voeg ze met één klik weer in.'}</p>
-      {blocks.length===0?<p className="sm" style={{color:'#999'}}>Nog geen blokken opgeslagen.</p>:
-        Object.keys(groups).map(tp=><div key={tp} style={{marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,color:typeColor[tp]||'#999',marginBottom:6}}>{typeLabel[tp]||tp}</div>
-          {groups[tp].map(b=><div key={b.id} className="flex" style={{alignItems:'center',gap:10,padding:'7px 0',borderTop:'1px solid #f1f0ec'}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600}}>{b.name}</div>
-              <div style={{fontSize:11,color:'#9a9a94'}}>{summary(b)}</div>
-            </div>
-            {insertMode&&onInsert&&<button className="btn btn-sm btn-p" onClick={()=>{onInsert(b);}}>Invoegen</button>}
-            <button className="btn btn-sm btn-g" style={{color:'var(--red)',borderColor:'#e8cfcd'}} onClick={()=>del(b.id)}>×</button>
-          </div>)}
-        </div>)}
-    </div>
-  </div>;
-}
-
-// ── Change order: editor, preview, flow ──
 function ChangeOrderEditor({data:co,set}){
   const L=co.lang,NL=L==='nl';
   const up=(patch)=>set({...co,...patch});
@@ -4473,20 +3723,6 @@ function App(){
   const handleExport=async(type)=>{
     if(!d)return;
     if(type==='planning'){window.open(exportToPlanner(d),'_blank');archiveLogAction(d,'planner_exported');return;}
-    if(type==='docs'){
-      const md=generateOfferteMD(d);
-      await navigator.clipboard.writeText(md);
-      archiveLogAction(d,'docs_exported');
-      alert(NL_?'Offerte als Markdown gekopieerd. Plak in Google Docs of Notion.':'Quotation copied as Markdown. Paste into Google Docs or Notion.');
-      return;
-    }
-    if(type==='sheets'){
-      const tsv=generateBudgetTSV(d);
-      await navigator.clipboard.writeText(tsv);
-      archiveLogAction(d,'sheets_exported');
-      alert(NL_?'Budget gekopieerd. Plak in je Google Sheets template (Ctrl+V).':'Budget copied. Paste into your Google Sheets template (Ctrl+V).');
-      return;
-    }
   };
 
   const ll=d?L_(d.lang):I.nl;
