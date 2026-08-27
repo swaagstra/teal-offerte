@@ -1385,6 +1385,10 @@ function BudgetTab({data:d,set}){
 
   // Installatie / reizen helpers
   const inst=totals.inst;
+  // Reizen op twee plekken? Waarschuw voor mogelijke dubbeltelling: reizen/mobilisatie per
+  // activiteit (Blok A) én reis/verblijf in de installatiecalculator.
+  const phaseTravelTotal=(totals.phaseData||[]).reduce((s,pd)=>s+((pd&&pd.travel)||0),0);
+  const travelDoubleWarn=phaseTravelTotal>0.5 && !!(d.install&&d.install.enabled) && (inst.beClient||0)>0.5;
   const upInst=(k,v)=>set({...d,install:{...INSTALL_DEFAULT,...(d.install||{}),[k]:v}});
   const toggleInst=on=>{
     const cur=d.install||INSTALL_DEFAULT;
@@ -1466,6 +1470,10 @@ function BudgetTab({data:d,set}){
       <span>🔧 {L==='nl'?'Maatwerk = ding op maat naar jouw spec':'Custom = made to your spec'}</span>
       <span>🤝 {L==='nl'?'Onderaannemer = ingekocht werk dat je aanstuurt':'Subcontractor = outsourced work you direct'}</span>
     </div>
+    {travelDoubleWarn&&<div style={{display:'flex',alignItems:'center',gap:10,background:'#fbf1e0',border:'1px solid #ecd7ad',color:'#7a4a12',borderRadius:10,padding:'10px 14px',marginBottom:16,fontSize:13,lineHeight:1.5}}>
+      <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
+      <span>{L==='nl'?'Je vult reizen op twee plekken in: per activiteit (Reizen/mobilisatie) én in de installatiecalculator. Controleer of dezelfde reis niet dubbel wordt geteld — houd reiskosten bij voorkeur op één plek.':'You have travel in two places: per activity (Travel/mobilisation) and in the installation calculator. Make sure the same trip isn’t counted twice — keep travel in one place.'}</span>
+    </div>}
     {[...d.phases.map((ph,pi)=>({ph,pi})),null].map((entry)=>{
       const isOverig=!entry;
       const ph=entry?entry.ph:{id:'',code:'',name:{nl:'Overig',en:'Other'}};
