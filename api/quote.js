@@ -50,10 +50,33 @@ async function patchArchive(ws, archiveId, mutate) {
   await redis(['SET', 'arch:' + ws, JSON.stringify(arr), 'EX', TTL]);
 }
 
-// Stuur een e-mailmelding bij akkoord via Google Workspace (Gmail API, verstuurd vanaf je eigen
+// Bij publiceren kan de tool de Algemene Voorwaarden (PDF, base64) meesturen. Die zetten we op
+// Vercel Blob (publiek, content-adres) zodat de online klant-weergave er een link naar kan tonen
+// en de klant-PDF hem kan bijvoegen. Best-effort: zonder Blob-token → geen avUrl.
+const { createHash } = require('node:crypto');
+let _put;
+async function getPut() {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return null;
+  if (_put === undefined) { try { _put = (await import('@vercel/blob')).put; } catch (e) { _put = null; } }
+  return _put;
+}
+async function offloadAV(b64) {
+  const put = await getPut();
+  if (!put || !b64) return null;
+  try {
+    const buf = Buffer.from(b64, 'base64');
+    const hash = createHash('sha256').update(buf).digest('hex').slice(0, 16);
+    const { url } = await put('quotes/av/' + hash + '.pdf', buf, {
+      access: 'public', contentType: 'application/pdf', addRandomSuffix: false, allowOverwrite: true,
+    });
+    return url;
+  } catch (e) { return null; }
+}
+
+// Stuur e-mailkopieën bij akkoord via Google Workspace (Gmail API, verstuurd vanaf je eigen
 // adres). Achter env-vars; stil overslaan als niet geconfigureerd, zodat akkoord nooit faalt.
 //   GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET / GMAIL_REFRESH_TOKEN — OAuth2 (scope gmail.send)
-//   NOTIFY_EMAIL  — ontvanger (bijv. erik@teamteal.nl); ook de afzender tenzij NOTIFY_FROM gezet
+//   NOTIFY_EMAIL  — interne ontvanger (bijv. erik@teamteal.nl); ook de afzender tenzij NOTIFY_FROM gezet
 async function gmailAccessToken() {
   const cid = process.env.GMAIL_CLIENT_ID, csec = process.env.GMAIL_CLIENT_SECRET, rt = process.env.GMAIL_REFRESH_TOKEN;
   if (!cid || !csec || !rt) return null;
@@ -64,25 +87,57 @@ async function gmailAccessToken() {
   const j = await r.json();
   return j.access_token || null;
 }
-async function notifyEmail(rec) {
-  const to = process.env.NOTIFY_EMAIL;
-  if (!to) return;
+// Verstuur één bericht via de Gmail API, optioneel met een PDF-bijlage (base64).
+async function sendGmail(token, from, to, subject, text, pdfB64, filename) {
+  const subjLine = 'Subject: =?UTF-8?B?' + Buffer.from(subject, 'utf-8').toString('base64') + '?=';
+  const fn = String(filename || 'offerte.pdf').replace(/[\r\n"]/g, '');
+  let raw;
+  if (pdfB64) {
+    const boundary = 'b' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    raw = 'From: ' + from + '\r\nTo: ' + to + '\r\n' + subjLine + '\r\nMIME-Version: 1.0\r\n' +
+      'Content-Type: multipart/mixed; boundary="' + boundary + '"\r\n\r\n' +
+      '--' + boundary + '\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n' + text + '\r\n\r\n' +
+      '--' + boundary + '\r\nContent-Type: application/pdf; name="' + fn + '"\r\n' +
+      'Content-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename="' + fn + '"\r\n\r\n' +
+      pdfB64.replace(/(.{76})/g, '$1\r\n') + '\r\n--' + boundary + '--';
+  } else {
+    raw = 'From: ' + from + '\r\nTo: ' + to + '\r\n' + subjLine +
+      '\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n' + text;
+  }
+  const b64 = Buffer.from(raw, 'utf-8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ raw: b64 }),
+  });
+}
+
+// Stuur bij akkoord een kopie naar de klant (het opgegeven e-mailadres) én een interne melding.
+// pdfB64 (indien meegestuurd door de browser) gaat als bijlage mee. Nooit blokkerend.
+async function sendCopies(rec, pdfB64, filename) {
   try {
     const token = await gmailAccessToken();
     if (!token) return;
-    const from = process.env.NOTIFY_FROM || to;
-    const proj = rec.projectName || '(zonder naam)';
-    const subject = '✅ Offerte getekend: ' + proj + ' — ' + rec.acceptedBy;
-    const body = rec.acceptedBy + ' heeft de offerte "' + proj + '" online geaccepteerd op ' +
-      rec.acceptedAt + '.' + (rec.note ? ('\n\nOpmerking van de klant:\n' + rec.note) : '');
-    const raw = 'From: ' + from + '\r\nTo: ' + to +
-      '\r\nSubject: =?UTF-8?B?' + Buffer.from(subject, 'utf-8').toString('base64') + '?=' +
-      '\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n' + body;
-    const b64 = Buffer.from(raw, 'utf-8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-      method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ raw: b64 }),
-    });
+    const from = process.env.NOTIFY_FROM || process.env.NOTIFY_EMAIL;
+    if (!from) return;
+    const NL = (rec.lang || 'nl') !== 'en';
+    const proj = rec.projectName || (NL ? 'onze offerte' : 'our quotation');
+    if (rec.acceptedEmail) {
+      const subj = (NL ? 'Je getekende offerte: ' : 'Your signed quotation: ') + proj;
+      const body = NL
+        ? 'Beste ' + rec.acceptedBy + ',\n\nBedankt voor je akkoord op de offerte voor ' + proj + '. ' +
+          (pdfB64 ? 'In de bijlage vind je een kopie van de getekende offerte.' : 'Je kunt de getekende offerte online bekijken.') +
+          '\n\nMet vriendelijke groet,\nTEAL\nteamteal.nl'
+        : 'Dear ' + rec.acceptedBy + ',\n\nThank you for accepting the quotation for ' + proj + '. ' +
+          (pdfB64 ? 'Attached you will find a copy of the signed quotation.' : 'You can view the signed quotation online.') +
+          '\n\nKind regards,\nTEAL\nteamteal.nl';
+      await sendGmail(token, from, rec.acceptedEmail, subj, body, pdfB64, filename);
+    }
+    if (process.env.NOTIFY_EMAIL) {
+      const subj = '✅ Offerte getekend: ' + proj + ' — ' + rec.acceptedBy;
+      const body = rec.acceptedBy + ' (' + (rec.acceptedEmail || 'geen e-mail') + ') heeft "' + proj +
+        '" online geaccepteerd op ' + rec.acceptedAt + '.' + (rec.note ? ('\n\nOpmerking van de klant:\n' + rec.note) : '');
+      await sendGmail(token, from, process.env.NOTIFY_EMAIL, subj, body, pdfB64, filename);
+    }
   } catch (e) { /* mail mag nooit het akkoord blokkeren */ }
 }
 
@@ -102,12 +157,13 @@ module.exports = async (req, res) => {
       if (!body || !body.snapshot || typeof body.snapshot !== 'object') return res.status(400).json({ error: 'bad-snapshot' });
       const newId = genId();
       const vd = Math.max(1, Math.min(3650, parseInt(body.validityDays) || 30));
+      const avUrl = (body.av && typeof body.av === 'string') ? await offloadAV(body.av) : null;
       const rec = {
         ws, archiveId: body.archiveId || null, snapshot: body.snapshot,
         lang: body.lang === 'en' ? 'en' : 'nl', projectName: body.projectName || '',
         status: 'open', createdAt: nowIso(), views: 0, lastView: null, lastViewDay: null,
         validityDays: vd, expiresAt: new Date(Date.now() + vd * 86400000).toISOString(),
-        acceptedBy: null, acceptedAt: null, note: null,
+        avUrl, acceptedBy: null, acceptedAt: null, acceptedEmail: null, note: null,
       };
       const payload = JSON.stringify(rec);
       if (payload.length > 4000000) return res.status(413).json({ error: 'too-large' });
@@ -136,6 +192,7 @@ module.exports = async (req, res) => {
       return res.status(200).json({
         snapshot: rec.snapshot, lang: rec.lang, projectName: rec.projectName,
         status: rec.status, acceptedBy: rec.acceptedBy, acceptedAt: rec.acceptedAt,
+        acceptedEmail: !!rec.acceptedEmail, avUrl: rec.avUrl || null,
         expiresAt: rec.expiresAt || null, expired: !!isExpired,
       });
     }
@@ -149,9 +206,13 @@ module.exports = async (req, res) => {
       if (action === 'accept') {
         const name = String((body && body.name) || '').trim().slice(0, 120);
         if (!name) return res.status(400).json({ error: 'name-required' });
+        const email = String((body && body.email) || '').trim().slice(0, 160);
+        const pdf = (body && typeof body.pdf === 'string' && body.pdf.length < 6000000) ? body.pdf : null;
+        const filename = String((body && body.filename) || 'offerte.pdf').replace(/[\r\n"]/g, '').slice(0, 120);
         if (rec.status !== 'accepted' && rec.expiresAt && Date.now() > new Date(rec.expiresAt).getTime()) return res.status(403).json({ error: 'expired' });
         if (rec.status !== 'accepted') {
           rec.status = 'accepted'; rec.acceptedBy = name; rec.acceptedAt = nowIso();
+          rec.acceptedEmail = email || null;
           rec.note = String((body && body.note) || '').slice(0, 1000) || null;
           await putRec(id, rec);
           const when = rec.acceptedAt;
@@ -160,9 +221,9 @@ module.exports = async (req, res) => {
             if (!Array.isArray(e.changelog)) e.changelog = [];
             e.changelog.push({ action: 'geaccepteerd door ' + name, date: when });
           });
-          await notifyEmail(rec);
+          await sendCopies(rec, pdf, filename);
         }
-        return res.status(200).json({ ok: true, status: 'accepted', acceptedBy: rec.acceptedBy, acceptedAt: rec.acceptedAt });
+        return res.status(200).json({ ok: true, status: 'accepted', acceptedBy: rec.acceptedBy, acceptedAt: rec.acceptedAt, acceptedEmail: !!rec.acceptedEmail });
       }
       return res.status(400).json({ error: 'bad-action' });
     }

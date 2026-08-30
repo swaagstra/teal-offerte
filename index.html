@@ -1033,7 +1033,7 @@ function Header({data:d,onPdf,onExport,setData,onBack}){
         }
         setData(nd);
       }}>{d.lang==='nl'?'EN':'NL'}</button>}
-      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={async()=>{await copyShareLink(d,d.lang==='nl');archiveLogAction(d,'shared');}}>{ll.deelLink}</button>}{d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>onExport('planning')} title="Open deze offerte in de TEAL Planner">📅 Planner</button>}{d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} title="Publiceer een klant-weergave met online akkoord (geen editor, geen marges/interne data)" onClick={async(ev)=>{const btn=ev.currentTarget;const prev=btn.textContent;btn.disabled=true;btn.textContent='…';try{const ws=getWorkspaceId();const snap=mapQuoteToTokens(d);const r=await fetch('/api/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ws,archiveId:d._archiveId,snapshot:snap,lang:d.lang,projectName:d.project&&d.project.name,validityDays:(d.conditions&&d.conditions.validity)||30})});const j=await r.json();if(j&&j.id){const url=location.origin+'/v/'+j.id;try{await navigator.clipboard.writeText(url);}catch(e){}if(d._archiveId){archiveSetStatus(d._archiveId,'verstuurd');}archiveLogAction(d,'ter akkoord gedeeld');window.prompt(d.lang==='nl'?'Deel deze link met de klant (gekopieerd). De klant kan de offerte bekijken en online akkoord geven:':'Share this link with the client (copied). They can view and accept online:',url);}else{alert('Publiceren mislukt: '+((j&&j.error)||'onbekend'));}}catch(e){alert('Publiceren mislukt: '+e);}btn.disabled=false;btn.textContent=prev;}}>{d.lang==='nl'?'Ter akkoord':'For approval'}</button>}{d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} title={d.lang==='nl'?'Open deze offerte in Claude (via de connector) om te bewerken of aan te vullen':'Open this quote in Claude (via the connector) to edit or extend'} onClick={()=>{const instr=window.prompt(d.lang==='nl'?('Wat moet Claude doen met offerte '+d.ref+'? (Claude gebruikt de connector)'):('What should Claude do with quote '+d.ref+'? (Claude uses the connector)'),'');if(instr&&instr.trim())openInClaude(d.lang==='nl'?('Gebruik de connector "TEAL Offerte Tool". Lees offerte '+d.ref+' met read_quote, en: '+instr.trim()+'\n\nSchrijf de aangepaste offerte daarna terug met write_quote (zelfde _archiveId) en vat kort samen wat je wijzigde.'):('Use the "TEAL Offerte Tool" connector. Read quote '+d.ref+' with read_quote, then: '+instr.trim()+'\n\nWrite the updated quote back with write_quote (same _archiveId) and briefly summarise what you changed.'));}}>🤖 Claude</button>}
+      {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={async()=>{await copyShareLink(d,d.lang==='nl');archiveLogAction(d,'shared');}}>{ll.deelLink}</button>}{d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>onExport('planning')} title="Open deze offerte in de TEAL Planner">📅 Planner</button>}{d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} title="Publiceer een klant-weergave met online akkoord (geen editor, geen marges/interne data)" onClick={async(ev)=>{const btn=ev.currentTarget;const prev=btn.textContent;btn.disabled=true;btn.textContent='…';try{const ws=getWorkspaceId();const snap=mapQuoteToTokens(d);const _avOn=d.lang==='nl'?(d.conditions&&d.conditions.avNL!==false):(d.conditions&&d.conditions.avEN===true);const _av=_avOn?getAVB64(d.lang):null;const r=await fetch('/api/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ws,archiveId:d._archiveId,snapshot:snap,lang:d.lang,projectName:d.project&&d.project.name,validityDays:(d.conditions&&d.conditions.validity)||30,av:_av||undefined})});const j=await r.json();if(j&&j.id){const url=location.origin+'/v/'+j.id;try{await navigator.clipboard.writeText(url);}catch(e){}if(d._archiveId){archiveSetStatus(d._archiveId,'verstuurd');}archiveLogAction(d,'ter akkoord gedeeld');window.prompt(d.lang==='nl'?'Deel deze link met de klant (gekopieerd). De klant kan de offerte bekijken en online akkoord geven:':'Share this link with the client (copied). They can view and accept online:',url);}else{alert('Publiceren mislukt: '+((j&&j.error)||'onbekend'));}}catch(e){alert('Publiceren mislukt: '+e);}btn.disabled=false;btn.textContent=prev;}}>{d.lang==='nl'?'Ter akkoord':'For approval'}</button>}{d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} title={d.lang==='nl'?'Open deze offerte in Claude (via de connector) om te bewerken of aan te vullen':'Open this quote in Claude (via the connector) to edit or extend'} onClick={()=>{const instr=window.prompt(d.lang==='nl'?('Wat moet Claude doen met offerte '+d.ref+'? (Claude gebruikt de connector)'):('What should Claude do with quote '+d.ref+'? (Claude uses the connector)'),'');if(instr&&instr.trim())openInClaude(d.lang==='nl'?('Gebruik de connector "TEAL Offerte Tool". Lees offerte '+d.ref+' met read_quote, en: '+instr.trim()+'\n\nSchrijf de aangepaste offerte daarna terug met write_quote (zelfde _archiveId) en vat kort samen wat je wijzigde.'):('Use the "TEAL Offerte Tool" connector. Read quote '+d.ref+' with read_quote, then: '+instr.trim()+'\n\nWrite the updated quote back with write_quote (same _archiveId) and briefly summarise what you changed.'));}}>🤖 Claude</button>}
       
       {d&&<button className="btn btn-g" style={{color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} onClick={()=>emailQuote(d)} title={d.lang==='nl'?'Stel een e-mail op met de offerte-PDF als bijlage':'Compose an email with the quotation PDF attached'}>{d.lang==='nl'?'Mail':'Email'}</button>}
       {d&&<button className="btn btn-s" onClick={onPdf}>PDF</button>}
@@ -2229,14 +2229,16 @@ function QuoteDoc({T,L,editable,onMove}){
         <SecHead n={pn()} title={NL?'Voorwaarden':'Terms & conditions'}/>
         {T.conditions.map((c,i)=><div key={i} style={{display:'flex',gap:10,fontSize:14,lineHeight:1.6,color:body,marginBottom:9}}><span style={{color:muted}}>·</span><span>{c}</span></div>)}
       </div>}
+      {T.avUrl&&<div style={{marginTop:20,fontSize:14,lineHeight:1.6,color:body}}>{NL?'De Algemene Voorwaarden van TEAL zijn op deze offerte van toepassing: ':'The General Terms and Conditions of TEAL apply to this quotation: '}<a href={T.avUrl} target="_blank" rel="noopener noreferrer" style={{color:'#0a6b57',fontWeight:600,textDecoration:'underline'}}>{NL?'algemene voorwaarden (PDF)':'general terms & conditions (PDF)'}</a>.</div>}
       <div style={{flex:1}}/>
       <div style={{marginTop:40}}>
         {T.sign_line&&<div style={{fontSize:13,color:body,marginBottom:22,maxWidth:'60ch'}}>{T.sign_line}</div>}
         <Eyebrow mb={6}>{NL?'Akkoord namens':'Accepted by'}</Eyebrow>
-        <div style={{fontSize:15,fontWeight:500,color:ink}}>{T.accepted_by||'[Client]'}</div>
-        <div style={{display:'flex',gap:32,marginTop:64,alignItems:'flex-end'}}>
-          {[NL?'Naam':'Name',NL?'Handtekening':'Signature',NL?'Datum':'Date'].map((lab,i)=><div key={i} style={{width:i===2?130:undefined,flex:i===2?undefined:1}}>
-            <div style={{height:16}}/><div style={{borderTop:'1px solid '+ink,paddingTop:5,fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:muted}}>{lab}</div>
+        <div style={{fontSize:15,fontWeight:500,color:ink}}>{(T.signed&&T.signed_name)||T.accepted_by||'[Client]'}</div>
+        <div style={{display:'flex',gap:32,marginTop:T.signed?34:64,alignItems:'flex-end'}}>
+          {[{lab:NL?'Naam':'Name',val:T.signed_name,cursive:false},{lab:NL?'Handtekening':'Signature',val:T.signed_name,cursive:true},{lab:NL?'Datum':'Date',val:T.signed_date,cursive:false}].map((f,i)=><div key={i} style={{width:i===2?130:undefined,flex:i===2?undefined:1}}>
+            <div style={{height:30,display:'flex',alignItems:'flex-end',overflow:'hidden'}}>{T.signed&&f.val?<span style={{fontFamily:f.cursive?"'Snell Roundhand','Segoe Script','Bradley Hand','Brush Script MT',cursive":'inherit',fontStyle:f.cursive?'italic':'normal',fontSize:f.cursive?27:14,lineHeight:1,color:ink,whiteSpace:'nowrap'}}>{f.val}</span>:null}</div>
+            <div style={{borderTop:'1px solid '+ink,paddingTop:5,fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:muted}}>{f.lab}</div>
           </div>)}
         </div>
       </div>
@@ -2593,10 +2595,11 @@ function buildQuoteDocDef(D, logoImg){
   function bullets(arr){return (arr||[]).map(function(t){return {columns:[{width:'auto',text:'·',color:muted,fontSize:14*k},{width:'*',text:t,fontSize:14*k,color:body,lineHeight:1.6}],columnGap:7.5,margin:[0,0,0,6.75]};});}
   if(D.payment&&D.payment.length)c.push({stack:[secHead(nx(),L('Betaling','Payment'))].concat(bullets(D.payment)),margin:[0,36,0,0],unbreakable:true});
   if(D.conditions&&D.conditions.length)c.push({stack:[secHead(nx(),L('Voorwaarden','Terms & conditions'))].concat(bullets(D.conditions)),margin:[0,36,0,0],unbreakable:true});
-  c.push({stack:[{text:D.sign_line||L('Door dit document te ondertekenen gaat u akkoord met de inhoud ervan.','By signing below, you agree to the information outlined in this document.'),fontSize:13*k,color:body,margin:[0,0,0,16.5]},eyebrow(L('Akkoord namens','Accepted by'),4.5),{text:D.accepted_by||'',font:'I5',fontSize:15*k,color:ink},
-    {columns:[{width:'*',stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:140,y2:0,lineWidth:0.5,lineColor:ink}]},{text:L('NAAM','NAME'),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]},
-      {width:'*',stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:140,y2:0,lineWidth:0.5,lineColor:ink}]},{text:L('HANDTEKENING','SIGNATURE'),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]},
-      {width:130,stack:[{text:' ',margin:[0,12,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:97,y2:0,lineWidth:0.5,lineColor:ink}]},{text:L('DATUM','DATE'),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]}],columnGap:24,margin:[0,48,0,0]}],margin:[0,40,0,0],unbreakable:true});
+  var _sigCell=function(val,big){return (D.signed&&val)?{text:val,font:'I5',fontSize:(big?18:13)*k,color:ink,margin:[0,12,0,2]}:{text:' ',margin:[0,12,0,0]};};
+  c.push({stack:[{text:D.sign_line||L('Door dit document te ondertekenen gaat u akkoord met de inhoud ervan.','By signing below, you agree to the information outlined in this document.'),fontSize:13*k,color:body,margin:[0,0,0,16.5]},eyebrow(L('Akkoord namens','Accepted by'),4.5),{text:(D.signed&&D.signed_name)||D.accepted_by||'',font:'I5',fontSize:15*k,color:ink},
+    {columns:[{width:'*',stack:[_sigCell(D.signed_name,false),{canvas:[{type:'line',x1:0,y1:0,x2:140,y2:0,lineWidth:0.5,lineColor:ink}]},{text:L('NAAM','NAME'),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]},
+      {width:'*',stack:[_sigCell(D.signed_name,true),{canvas:[{type:'line',x1:0,y1:0,x2:140,y2:0,lineWidth:0.5,lineColor:ink}]},{text:L('HANDTEKENING','SIGNATURE'),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]},
+      {width:130,stack:[_sigCell(D.signed_date,false),{canvas:[{type:'line',x1:0,y1:0,x2:97,y2:0,lineWidth:0.5,lineColor:ink}]},{text:L('DATUM','DATE'),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,4,0,0]}]}],columnGap:24,margin:[0,48,0,0]}],margin:[0,40,0,0],unbreakable:true});
   // (Scope of work / responsibilities now renders above, directly under the scope section.)
   if(D.meerwerkClause)c.push({stack:[secHead(nxA(),D.nl?'Meerwerk':'Additional work'),paras(D.meerwerkClause,14*k)],margin:[0,36,0,0],unbreakable:true});
   if(D.rateCard&&D.rateCard.length){var rcb=[[{text:(D.nl?'Activiteit':'Activity').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:(D.nl?'Tarief (excl. btw)':'Rate (ex VAT)').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];D.rateCard.forEach(function(r){rcb.push([{text:r.label,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:[{text:(r.rate||''),font:'I5',color:ink},{text:(r.unit?'  '+r.unit:''),color:muted,fontSize:11*k}],fontSize:13*k,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});c.push({stack:[secHead(nxA(),D.nl?'Tarievenkaart':'Rate card'),{table:{widths:['*','auto'],body:rcb},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}],margin:[0,36,0,0],unbreakable:true});}
@@ -2733,6 +2736,32 @@ function quotePdfBytes(d,cb){
     } else { cb(buf); }
   });
   });
+}
+// Bouw de getekende offerte-PDF client-side vanaf de klant-veilige tokens (snapshot) + de naam/
+// datum van ondertekening, en plak de AV (vanaf de publieke Blob-URL) erachter. Geeft base64
+// terug voor verzending via /api/quote. Gebruikt in de publieke klant-weergave bij akkoord.
+function _u8ToB64(u8){var CH=0x8000,s='';for(var i=0;i<u8.length;i+=CH){s+=String.fromCharCode.apply(null,u8.subarray(i,i+CH));}return btoa(s);}
+async function buildSignedPdfB64(tokens,avUrl){
+  if(window.pdfMake){
+    pdfMake.vfs=Object.assign({},pdfMake.vfs||{},window._PDF_VFS||{});
+    pdfMake.fonts={I4:{normal:'I4.ttf',bold:'I7.ttf'},I5:{normal:'I5.ttf',bold:'I7.ttf'},I6:{normal:'I6.ttf',bold:'I7.ttf'},I7:{normal:'I7.ttf',bold:'I7.ttf'},M4:{normal:'M4.ttf',bold:'M5.ttf'},I5d:{normal:'I5d.ttf',bold:'I7d.ttf'},I7d:{normal:'I7d.ttf',bold:'I7d.ttf'},I4d:{normal:'I4d.ttf',bold:'I7d.ttf'}};
+  }
+  const D=await resolveRemoteImages(tokens);
+  const docDef=buildQuoteDocDef(D,window._TEAL_LOGO_PNG);
+  const buf=await new Promise(function(res){pdfMake.createPdf(docDef).getBuffer(function(b){res(b);});});
+  let bytes=(buf instanceof Uint8Array)?buf:new Uint8Array(buf);
+  if(avUrl&&window.PDFLib){
+    try{
+      const avBytes=new Uint8Array(await (await fetch(avUrl)).arrayBuffer());
+      const merged=await PDFLib.PDFDocument.create();
+      const q=await PDFLib.PDFDocument.load(bytes);
+      const av=await PDFLib.PDFDocument.load(avBytes);
+      (await merged.copyPages(q,q.getPageIndices())).forEach(function(p){merged.addPage(p);});
+      (await merged.copyPages(av,av.getPageIndices())).forEach(function(p){merged.addPage(p);});
+      bytes=await merged.save();
+    }catch(e){/* AV niet mee te plakken → alleen de offerte */}
+  }
+  return _u8ToB64(bytes);
 }
 function exportPDF(d,setData){
   const pdfFilename=`${d.lang==='en'?'Quotation':'Offerte'} ${d.ref||'Draft'} - TEAL.pdf`;
@@ -3850,33 +3879,64 @@ function getViewId(){
 }
 function PublicView({id}){
   const[state,setState]=useState({loading:true});
-  const[name,setName]=useState('');const[note,setNote]=useState('');const[agree,setAgree]=useState(false);const[busy,setBusy]=useState(false);const[scale,setScale]=useState(1);
+  const[name,setName]=useState('');const[email,setEmail]=useState('');const[note,setNote]=useState('');const[agree,setAgree]=useState(false);const[busy,setBusy]=useState(false);const[scale,setScale]=useState(1);
   useEffect(()=>{fetch('/api/quote?id='+encodeURIComponent(id)).then(r=>r.ok?r.json():Promise.reject(r.status)).then(j=>setState({loading:false,data:j})).catch(e=>setState({loading:false,error:e}));},[]);
   useEffect(()=>{const f=()=>{const w=window.innerWidth;setScale(w<834?Math.max(0.42,(w-8)/834):1);};f();window.addEventListener('resize',f);return ()=>window.removeEventListener('resize',f);},[]);
   if(state.loading)return <div style={{padding:40,fontFamily:'system-ui',color:'#555'}}>Laden…</div>;
   if(state.error||!state.data||!state.data.snapshot)return <div style={{padding:40,fontFamily:'system-ui',color:'#b3261e'}}>Deze offerte is niet (meer) beschikbaar.</div>;
-  const T=state.data.snapshot, L=state.data.lang, NL=L!=='en';
+  const snap=state.data.snapshot, L=state.data.lang, NL=L!=='en';
   const accepted=state.data.status==='accepted'||!!state.data.acceptedBy;
   const expired=(state.data.status==='expired'||!!state.data.expired)&&!accepted;
   const expDate=state.data.expiresAt?new Date(state.data.expiresAt).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
+  const validEmail=e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e||'').trim());
+  const signDateLong=state.data.acceptedAt?new Date(state.data.acceptedAt).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
+  // Toon het document; na akkoord met naam + cursieve handtekening + tekendatum ingevuld.
+  const T=Object.assign({},snap,{avUrl:state.data.avUrl||null,signed:accepted,
+    signed_name:accepted?(state.data.acceptedBy||''):'',
+    signed_date:accepted?signDateLong:'',
+    accepted_by:accepted?(state.data.acceptedBy||snap.accepted_by):snap.accepted_by});
   const doAccept=async()=>{
-    if(!name.trim()||!agree||busy)return;setBusy(true);
-    try{const r=await fetch('/api/quote?id='+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'accept',name:name.trim(),note})});const j=await r.json();if(j&&j.ok)setState(s=>({...s,data:{...s.data,status:'accepted',acceptedBy:j.acceptedBy,acceptedAt:j.acceptedAt}}));else alert(NL?'Akkoord mislukt. Probeer opnieuw.':'Could not accept. Please retry.');}catch(e){alert('Error: '+e);}
+    if(!name.trim()||!validEmail(email)||!agree||busy)return;setBusy(true);
+    const post=async(pdf,filename)=>{
+      const r=await fetch('/api/quote?id='+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'accept',name:name.trim(),email:email.trim(),note,pdf,filename})});
+      return r.json();
+    };
+    let pdf=null,filename=null;
+    try{
+      const now=new Date();const signDate=now.toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
+      const tokens=Object.assign({},snap,{accepted_by:name.trim(),signed:true,signed_name:name.trim(),signed_date:signDate});
+      const b64=await buildSignedPdfB64(tokens,state.data.avUrl||null);
+      if(b64&&b64.length<3500000){pdf=b64;filename=(NL?'Offerte':'Quotation')+' '+((snap&&snap.number)||'')+' - TEAL.pdf';}
+    }catch(e){/* val terug op mail met link i.p.v. bijlage */}
+    try{
+      let j=await post(pdf,filename);
+      if((!j||!j.ok)&&pdf){j=await post(null,null);}   // te grote PDF geweigerd → akkoord zonder bijlage
+      if(j&&j.ok)setState(s=>({...s,data:{...s.data,status:'accepted',acceptedBy:j.acceptedBy,acceptedAt:j.acceptedAt,acceptedEmail:j.acceptedEmail}}));
+      else alert(NL?'Akkoord mislukt. Probeer opnieuw.':'Could not accept. Please retry.');
+    }catch(e){alert('Error: '+e);}
     setBusy(false);
   };
-  return <div style={{minHeight:'100vh',background:'#d8d6cf',paddingBottom:130}}>
+  const canAccept=name.trim()&&validEmail(email)&&agree;
+  return <div style={{minHeight:'100vh',background:'#d8d6cf',paddingBottom:accepted||expired?96:170}}>
     <div style={{zoom:scale}}><QuoteDoc T={T} L={L} editable={false} onMove={()=>{}}/></div>
     <div style={{position:'fixed',left:0,right:0,bottom:0,background:'#05100e',color:'#fff',padding:'16px 20px',boxShadow:'0 -4px 24px rgba(0,0,0,.28)'}}>
       <div style={{maxWidth:794,margin:'0 auto'}}>
         {accepted
-          ? <div style={{fontSize:15,display:'flex',alignItems:'center',gap:10}}><span style={{color:'#7ee0c0',fontSize:20}}>✓</span><span>{(NL?'Akkoord gegeven door ':'Accepted by ')}<strong>{state.data.acceptedBy}</strong>{state.data.acceptedAt?' · '+new Date(state.data.acceptedAt).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):''}</span></div>
+          ? <div style={{fontSize:15,display:'flex',alignItems:'center',gap:10}}><span style={{color:'#7ee0c0',fontSize:20}}>✓</span><span>{(NL?'Akkoord gegeven door ':'Accepted by ')}<strong>{state.data.acceptedBy}</strong>{signDateLong?' · '+signDateLong:''}{state.data.acceptedEmail?(NL?' · kopie gemaild':' · copy emailed'):''}</span></div>
           : expired
           ? <div style={{fontSize:14,color:'#f3c9c9',display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:18}}>⏳</span><span>{NL?('Deze offerte is verlopen'+(expDate?' op '+expDate:'')+'. Neem contact op voor een bijgewerkte offerte.'):('This quotation has expired'+(expDate?' on '+expDate:'')+'. Please contact us for an updated one.')}</span></div>
-          : <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
-              <span style={{fontSize:13,color:'#c9d3d0'}}>{NL?'Akkoord met deze offerte?':'Accept this quotation?'}</span>
-              <input value={name} onChange={e=>setName(e.target.value)} placeholder={NL?'Uw naam':'Your name'} style={{padding:'10px 12px',borderRadius:6,border:0,fontSize:14,flex:'1 1 180px',minWidth:140}}/>
-              <label style={{display:'flex',gap:8,alignItems:'center',fontSize:13,cursor:'pointer'}}><input type="checkbox" checked={agree} onChange={e=>setAgree(e.target.checked)}/> {NL?'Ik ga akkoord':'I agree'}</label>
-              <button onClick={doAccept} disabled={!name.trim()||!agree||busy} style={{padding:'10px 22px',borderRadius:6,border:0,background:(!name.trim()||!agree)?'#33443f':'#d4ece6',color:(!name.trim()||!agree)?'#7f9a93':'#05100e',fontWeight:600,fontSize:14,cursor:(!name.trim()||!agree||busy)?'default':'pointer'}}>{busy?'…':(NL?'Accepteren':'Accept')}</button>
+          : <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+                <span style={{fontSize:13,color:'#c9d3d0',flexShrink:0}}>{NL?'Akkoord met deze offerte?':'Accept this quotation?'}</span>
+                <input value={name} onChange={e=>setName(e.target.value)} placeholder={NL?'Uw naam':'Your name'} style={{padding:'10px 12px',borderRadius:6,border:0,fontSize:14,flex:'1 1 170px',minWidth:130}}/>
+                <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder={NL?'Uw e-mail (voor een kopie)':'Your email (for a copy)'} style={{padding:'10px 12px',borderRadius:6,border:0,fontSize:14,flex:'1 1 210px',minWidth:170}}/>
+              </div>
+              <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
+                {name.trim()?<span style={{fontSize:12,color:'#8fa39d',display:'flex',alignItems:'baseline',gap:6}}>{NL?'Handtekening:':'Signature:'}<span style={{fontFamily:"'Snell Roundhand','Segoe Script','Bradley Hand','Brush Script MT',cursive",fontStyle:'italic',fontSize:23,color:'#eafff8',lineHeight:1}}>{name.trim()}</span></span>:null}
+                <div style={{flex:1,minWidth:8}}/>
+                <label style={{display:'flex',gap:8,alignItems:'center',fontSize:13,cursor:'pointer',color:'#c9d3d0'}}><input type="checkbox" checked={agree} onChange={e=>setAgree(e.target.checked)}/> {NL?(state.data.avUrl?'Ik ga akkoord met de offerte en de algemene voorwaarden':'Ik ga akkoord met de offerte'):(state.data.avUrl?'I agree to the quotation and the general terms':'I agree to the quotation')}</label>
+                <button onClick={doAccept} disabled={!canAccept||busy} style={{padding:'10px 22px',borderRadius:6,border:0,background:canAccept?'#d4ece6':'#33443f',color:canAccept?'#05100e':'#7f9a93',fontWeight:600,fontSize:14,cursor:(!canAccept||busy)?'default':'pointer',flexShrink:0}}>{busy?(NL?'Bezig…':'Working…'):(NL?'Accepteren':'Accept')}</button>
+              </div>
             </div>}
       </div>
     </div>
