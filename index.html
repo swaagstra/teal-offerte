@@ -2688,13 +2688,35 @@ function mapQuoteToTokens(d){
 
 // ── PDF ──
 // Produce the final quotation PDF bytes (with the general-terms PDF appended when enabled)
+// pdfmake kan afbeeldingen alleen als base64 embedden, niet als remote URL. Sinds afbeeldingen
+// naar Vercel Blob verhuizen (https-URL's), moeten we ze vóór het genereren ophalen en naar een
+// data-URL omzetten. We raken alleen 'src'-velden aan (afbeeldingen); links gebruiken 'url'.
+function urlToDataUrl(url){
+  return fetch(url).then(function(r){return r.blob();}).then(function(b){
+    return new Promise(function(res,rej){var fr=new FileReader();fr.onload=function(){res(fr.result);};fr.onerror=rej;fr.readAsDataURL(b);});
+  });
+}
+async function resolveRemoteImages(d){
+  const clone=JSON.parse(JSON.stringify(d));
+  const cache={};
+  async function conv(url){if(cache[url])return cache[url];try{const u=await urlToDataUrl(url);cache[url]=u;return u;}catch(e){return url;}}
+  async function walk(node){
+    if(Array.isArray(node)){for(const v of node)if(v&&typeof v==='object')await walk(v);}
+    else if(node&&typeof node==='object'){for(const k of Object.keys(node)){const v=node[k];
+      if(k==='src'&&typeof v==='string'&&/^https?:\/\//i.test(v))node[k]=await conv(v);
+      else if(v&&typeof v==='object')await walk(v);}}
+  }
+  await walk(clone);
+  return clone;
+}
 function quotePdfBytes(d,cb){
   const NL=d.lang==='nl';
   if(window.pdfMake){
     pdfMake.vfs=Object.assign({},pdfMake.vfs||{},window._PDF_VFS||{});
     pdfMake.fonts={I4:{normal:'I4.ttf',bold:'I7.ttf'},I5:{normal:'I5.ttf',bold:'I7.ttf'},I6:{normal:'I6.ttf',bold:'I7.ttf'},I7:{normal:'I7.ttf',bold:'I7.ttf'},M4:{normal:'M4.ttf',bold:'M5.ttf'},I5d:{normal:'I5d.ttf',bold:'I7d.ttf'},I7d:{normal:'I7d.ttf',bold:'I7d.ttf'},I4d:{normal:'I4d.ttf',bold:'I7d.ttf'}};
   }
-  const D=mapQuoteToTokens(d);
+  resolveRemoteImages(d).then(function(dd){
+  const D=mapQuoteToTokens(dd);
   const docDef=buildQuoteDocDef(D,window._TEAL_LOGO_PNG);
   pdfMake.createPdf(docDef).getBuffer(function(buf){
     const shouldAppendAV=d.conditions.avNL||d.conditions.avEN;
@@ -2709,6 +2731,7 @@ function quotePdfBytes(d,cb){
         cb(await mergedPdf.save());
       }catch(e){console.error('AV merge failed',e);cb(buf);}})();
     } else { cb(buf); }
+  });
   });
 }
 function exportPDF(d,setData){

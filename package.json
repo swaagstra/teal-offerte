@@ -1,0 +1,9 @@
+{
+  "name": "teal-offerte",
+  "private": true,
+  "version": "1.0.0",
+  "description": "TEAL Offerte Tool — single-file webapp + serverless API (Vercel).",
+  "dependencies": {
+    "@vercel/blob": "^0.27.0"
+  }
+}
