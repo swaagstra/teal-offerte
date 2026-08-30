@@ -34,23 +34,40 @@ async function uploadDataImage(archiveId: string, dataUrl: string): Promise<stri
   });
   return url;
 }
+interface OffloadResult { moved: number; failed: number; error: string }
 // Recursief: vervang elke data:image-string door zijn Blob https-URL (mutatie). Best-effort: een
-// mislukte upload behoudt de originele data: URL, zodat opslaan nooit breekt.
-async function offloadImages(node: unknown, archiveId: string): Promise<void> {
+// mislukte upload behoudt de originele data: URL, zodat opslaan nooit breekt. Telt resultaten in `r`.
+async function offloadImages(node: unknown, archiveId: string, r: OffloadResult): Promise<void> {
+  const one = async (get: () => unknown, set: (u: string) => void): Promise<void> => {
+    const v = get();
+    if (isDataImage(v)) {
+      try { set(await uploadDataImage(archiveId, v)); r.moved += 1; }
+      catch (e) { r.failed += 1; if (!r.error) r.error = String((e as Error).message || e).slice(0, 160); }
+    } else if (v && typeof v === 'object') { await offloadImages(v, archiveId, r); }
+  };
   if (Array.isArray(node)) {
-    for (let i = 0; i < node.length; i += 1) {
-      const v = node[i];
-      if (isDataImage(v)) { try { node[i] = await uploadDataImage(archiveId, v); } catch { /* keep */ } }
-      else if (v && typeof v === 'object') await offloadImages(v, archiveId);
-    }
+    for (let i = 0; i < node.length; i += 1) await one(() => node[i], (u) => { node[i] = u; });
   } else if (node && typeof node === 'object') {
     const obj = node as Record<string, unknown>;
-    for (const k of Object.keys(obj)) {
-      const v = obj[k];
-      if (isDataImage(v)) { try { obj[k] = await uploadDataImage(archiveId, v); } catch { /* keep */ } }
-      else if (v && typeof v === 'object') await offloadImages(v, archiveId);
-    }
+    for (const k of Object.keys(obj)) await one(() => obj[k], (u) => { obj[k] = u; });
   }
+}
+function countDataImages(node: unknown): number {
+  let n = 0;
+  if (isDataImage(node)) return 1;
+  if (Array.isArray(node)) for (const v of node) n += countDataImages(v);
+  else if (node && typeof node === 'object') for (const v of Object.values(node)) n += countDataImages(v);
+  return n;
+}
+// Voer de offload uit (indien geconfigureerd) en geef een korte diagnose-regel terug.
+async function offloadNote(doc: unknown, archiveId: string): Promise<string> {
+  const pending = countDataImages(doc);
+  if (!pending) return '';
+  if (!blobConfigured()) return `\n[${pending} afbeelding(en) als data-URL bewaard — Blob niet geconfigureerd (BLOB_READ_WRITE_TOKEN ontbreekt).]`;
+  const r: OffloadResult = { moved: 0, failed: 0, error: '' };
+  await offloadImages(doc, archiveId, r);
+  if (r.failed) return `\n[${r.moved} naar Blob, ${r.failed} mislukt: ${r.error}]`;
+  return r.moved ? `\n[${r.moved} afbeelding(en) naar Blob verplaatst.]` : '';
 }
 
 // ── Minimale Vercel-request/response types (geen @vercel/node-dependency nodig) ──
@@ -354,7 +371,7 @@ async function callTool(ws: string, name: string, args: Dict): Promise<ToolResul
     if (args.dry_run) {
       return { text: 'DRY RUN — zou wijzigen in ' + (entry.ref || '?') + ':\n' + pathsText };
     }
-    if (blobConfigured()) await offloadImages(doc, entry.id);
+    const imgNote = await offloadNote(doc, entry.id);
     entry.data = doc;
     entry.ref = (doc.ref as string) || entry.ref;
     entry.projectName = ((doc.project as Dict) || {}).name as string || entry.projectName;
@@ -363,7 +380,7 @@ async function callTool(ws: string, name: string, args: Dict): Promise<ToolResul
     if (!Array.isArray(entry.changelog)) entry.changelog = [];
     entry.changelog.push({ action: (args.message as string) || 'gepatcht via Claude', date: nowIso() });
     await setArchive(ws, archive);
-    return { text: 'Offerte ' + (entry.ref || '?') + ' gepatcht (' + changed.length + ' pad(en)). Gewijzigd:\n' + pathsText + '\n\nHerlaad de Offerte Tool om de wijziging te zien.' };
+    return { text: 'Offerte ' + (entry.ref || '?') + ' gepatcht (' + changed.length + ' pad(en)). Gewijzigd:\n' + pathsText + imgNote + '\n\nHerlaad de Offerte Tool om de wijziging te zien.' };
   }
 
   if (name === 'write_quote') {
@@ -378,11 +395,11 @@ async function callTool(ws: string, name: string, args: Dict): Promise<ToolResul
     const projectName = ((data.project as Dict) || {}).name as string || '';
     const clientName = ((data.client as Dict) || {}).name as string || '';
     const action = (args.message as string) || 'bewerkt via Claude';
-    let verb: string; let ref: string;
+    let verb: string; let ref: string; let imgNote = '';
     if (idx >= 0) {
       const e = archive[idx];
       const d2: Dict = { ...data, _archiveId: e.id };
-      if (blobConfigured()) await offloadImages(d2, e.id);
+      imgNote = await offloadNote(d2, e.id);
       e.ref = (data.ref as string) || e.ref; e.type = (data.type as string) || e.type; e.lang = (data.lang as string) || e.lang;
       e.projectName = projectName; e.clientName = clientName; e.updatedAt = now;
       if (!Array.isArray(e.changelog)) e.changelog = [];
@@ -391,7 +408,7 @@ async function callTool(ws: string, name: string, args: Dict): Promise<ToolResul
     } else {
       const newId = aid || genId();
       const d2: Dict = { ...data, _archiveId: newId };
-      if (blobConfigured()) await offloadImages(d2, newId);
+      imgNote = await offloadNote(d2, newId);
       archive.push({
         id: newId, ref: (data.ref as string) || '', type: (data.type as string) || 'assemble', lang: (data.lang as string) || 'nl',
         kind: 'quote', parentRef: null, parentId: null, projectName, clientName,
@@ -401,7 +418,7 @@ async function callTool(ws: string, name: string, args: Dict): Promise<ToolResul
       verb = 'aangemaakt'; ref = (d2.ref as string) || '';
     }
     await setArchive(ws, archive);
-    return { text: 'Offerte ' + (ref || '?') + ' (' + (projectName || '—') + ') ' + verb + ' en gesynct. Ververs de Offerte Tool om de wijziging te zien.' };
+    return { text: 'Offerte ' + (ref || '?') + ' (' + (projectName || '—') + ') ' + verb + ' en gesynct.' + imgNote + ' Ververs de Offerte Tool om de wijziging te zien.' };
   }
 
   if (name === 'create_quote') {
@@ -418,7 +435,7 @@ async function callTool(ws: string, name: string, args: Dict): Promise<ToolResul
     const now = nowIso();
     const newId = genId();
     data._archiveId = newId;
-    if (blobConfigured()) await offloadImages(data, newId);
+    const imgNote = await offloadNote(data, newId);
     const projectName = ((data.project as Dict) || {}).name as string || '';
     const clientName = ((data.client as Dict) || {}).name as string || '';
     archive.push({
@@ -428,7 +445,7 @@ async function callTool(ws: string, name: string, args: Dict): Promise<ToolResul
       changelog: [{ action: 'aangemaakt via Claude', date: now }], data,
     });
     await setArchive(ws, archive);
-    return { text: 'Nieuwe offerte ' + ref + ' (' + (projectName || '—') + ') aangemaakt en gesynct. Ververs de Offerte Tool om hem te zien.' };
+    return { text: 'Nieuwe offerte ' + ref + ' (' + (projectName || '—') + ') aangemaakt en gesynct.' + imgNote + ' Ververs de Offerte Tool om hem te zien.' };
   }
 
   return { text: 'Onbekende tool: ' + name, isError: true };
