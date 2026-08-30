@@ -9,8 +9,49 @@
 // env TEAL_OFFERTE_WS. Ingesloten base64-afbeeldingen worden bij opslaan naar Vercel Blob verplaatst
 // (zie lib/images.ts), zodat documenten klein blijven.
 
-import { offloadImages, blobConfigured } from '../lib/images.ts';
+import { put } from '@vercel/blob';
+import { createHash } from 'node:crypto';
 import quoteTemplates from '../lib/quoteTemplates.js';
+
+// NB: dezelfde offload-logica staat ook in lib/images.ts (voor scripts/migrate-images.ts). Hier
+// inline gehouden zodat de serverless-route geen relatieve .ts-import heeft (die faalt op Vercel).
+const DATA_IMG = /^data:image\/([a-zA-Z0-9.+-]+);base64,/;
+const isDataImage = (v: unknown): v is string => typeof v === 'string' && DATA_IMG.test(v);
+const blobConfigured = (): boolean => !!process.env.BLOB_READ_WRITE_TOKEN;
+function extFromMime(mime: string): string {
+  const t = mime.toLowerCase();
+  if (t === 'jpeg' || t === 'jpg') return 'jpg';
+  if (t === 'svg+xml') return 'svg';
+  return t.replace(/[^a-z0-9]/g, '') || 'png';
+}
+async function uploadDataImage(archiveId: string, dataUrl: string): Promise<string> {
+  const m = DATA_IMG.exec(dataUrl);
+  if (!m) return dataUrl;
+  const buf = Buffer.from(dataUrl.slice(m[0].length), 'base64');
+  const hash = createHash('sha256').update(buf).digest('hex').slice(0, 16);
+  const { url } = await put(`quotes/${archiveId}/${hash}.${extFromMime(m[1])}`, buf, {
+    access: 'public', contentType: `image/${m[1]}`, addRandomSuffix: false, allowOverwrite: true,
+  });
+  return url;
+}
+// Recursief: vervang elke data:image-string door zijn Blob https-URL (mutatie). Best-effort: een
+// mislukte upload behoudt de originele data: URL, zodat opslaan nooit breekt.
+async function offloadImages(node: unknown, archiveId: string): Promise<void> {
+  if (Array.isArray(node)) {
+    for (let i = 0; i < node.length; i += 1) {
+      const v = node[i];
+      if (isDataImage(v)) { try { node[i] = await uploadDataImage(archiveId, v); } catch { /* keep */ } }
+      else if (v && typeof v === 'object') await offloadImages(v, archiveId);
+    }
+  } else if (node && typeof node === 'object') {
+    const obj = node as Record<string, unknown>;
+    for (const k of Object.keys(obj)) {
+      const v = obj[k];
+      if (isDataImage(v)) { try { obj[k] = await uploadDataImage(archiveId, v); } catch { /* keep */ } }
+      else if (v && typeof v === 'object') await offloadImages(v, archiveId);
+    }
+  }
+}
 
 // ── Minimale Vercel-request/response types (geen @vercel/node-dependency nodig) ──
 interface VercelReq {
@@ -313,7 +354,7 @@ async function callTool(ws: string, name: string, args: Dict): Promise<ToolResul
     if (args.dry_run) {
       return { text: 'DRY RUN — zou wijzigen in ' + (entry.ref || '?') + ':\n' + pathsText };
     }
-    if (blobConfigured()) await offloadImages(doc, entry.id, { apply: true });
+    if (blobConfigured()) await offloadImages(doc, entry.id);
     entry.data = doc;
     entry.ref = (doc.ref as string) || entry.ref;
     entry.projectName = ((doc.project as Dict) || {}).name as string || entry.projectName;
@@ -341,7 +382,7 @@ async function callTool(ws: string, name: string, args: Dict): Promise<ToolResul
     if (idx >= 0) {
       const e = archive[idx];
       const d2: Dict = { ...data, _archiveId: e.id };
-      if (blobConfigured()) await offloadImages(d2, e.id, { apply: true });
+      if (blobConfigured()) await offloadImages(d2, e.id);
       e.ref = (data.ref as string) || e.ref; e.type = (data.type as string) || e.type; e.lang = (data.lang as string) || e.lang;
       e.projectName = projectName; e.clientName = clientName; e.updatedAt = now;
       if (!Array.isArray(e.changelog)) e.changelog = [];
@@ -350,7 +391,7 @@ async function callTool(ws: string, name: string, args: Dict): Promise<ToolResul
     } else {
       const newId = aid || genId();
       const d2: Dict = { ...data, _archiveId: newId };
-      if (blobConfigured()) await offloadImages(d2, newId, { apply: true });
+      if (blobConfigured()) await offloadImages(d2, newId);
       archive.push({
         id: newId, ref: (data.ref as string) || '', type: (data.type as string) || 'assemble', lang: (data.lang as string) || 'nl',
         kind: 'quote', parentRef: null, parentId: null, projectName, clientName,
@@ -377,7 +418,7 @@ async function callTool(ws: string, name: string, args: Dict): Promise<ToolResul
     const now = nowIso();
     const newId = genId();
     data._archiveId = newId;
-    if (blobConfigured()) await offloadImages(data, newId, { apply: true });
+    if (blobConfigured()) await offloadImages(data, newId);
     const projectName = ((data.project as Dict) || {}).name as string || '';
     const clientName = ((data.client as Dict) || {}).name as string || '';
     archive.push({
