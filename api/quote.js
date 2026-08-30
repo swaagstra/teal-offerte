@@ -105,10 +105,11 @@ async function sendGmail(token, from, to, subject, text, pdfB64, filename) {
       '\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n' + text;
   }
   const b64 = Buffer.from(raw, 'utf-8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+  const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify({ raw: b64 }),
   });
+  if (!r.ok) throw new Error('gmail-send-' + r.status);
 }
 
 // Stuur bij akkoord een kopie naar de klant (het opgegeven e-mailadres) én een interne melding.
