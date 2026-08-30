@@ -3882,8 +3882,8 @@ function PublicView({id}){
   const[name,setName]=useState('');const[email,setEmail]=useState('');const[note,setNote]=useState('');const[agree,setAgree]=useState(false);const[busy,setBusy]=useState(false);const[scale,setScale]=useState(1);
   useEffect(()=>{fetch('/api/quote?id='+encodeURIComponent(id)).then(r=>r.ok?r.json():Promise.reject(r.status)).then(j=>setState({loading:false,data:j})).catch(e=>setState({loading:false,error:e}));},[]);
   useEffect(()=>{const f=()=>{const w=window.innerWidth;setScale(w<834?Math.max(0.42,(w-8)/834):1);};f();window.addEventListener('resize',f);return ()=>window.removeEventListener('resize',f);},[]);
-  if(state.loading)return <div style={{padding:40,fontFamily:'system-ui',color:'#555'}}>Laden…</div>;
-  if(state.error||!state.data||!state.data.snapshot)return <div style={{padding:40,fontFamily:'system-ui',color:'#b3261e'}}>Deze offerte is niet (meer) beschikbaar.</div>;
+  if(state.loading)return <div style={{padding:40,fontFamily:'system-ui',color:'#555'}}>Laden… · Loading…</div>;
+  if(state.error||!state.data||!state.data.snapshot)return <div style={{padding:40,fontFamily:'system-ui',color:'#b3261e'}}>Deze offerte is niet (meer) beschikbaar. · This quotation is no longer available.</div>;
   const snap=state.data.snapshot, L=state.data.lang, NL=L!=='en';
   const accepted=state.data.status==='accepted'||!!state.data.acceptedBy;
   const expired=(state.data.status==='expired'||!!state.data.expired)&&!accepted;
@@ -3911,7 +3911,7 @@ function PublicView({id}){
     try{
       let j=await post(pdf,filename);
       if((!j||!j.ok)&&pdf){j=await post(null,null);}   // te grote PDF geweigerd → akkoord zonder bijlage
-      if(j&&j.ok)setState(s=>({...s,data:{...s.data,status:'accepted',acceptedBy:j.acceptedBy,acceptedAt:j.acceptedAt,acceptedEmail:j.acceptedEmail}}));
+      if(j&&j.ok)setState(s=>({...s,data:{...s.data,status:'accepted',acceptedBy:j.acceptedBy,acceptedAt:j.acceptedAt,emailed:j.emailed}}));
       else alert(NL?'Akkoord mislukt. Probeer opnieuw.':'Could not accept. Please retry.');
     }catch(e){alert('Error: '+e);}
     setBusy(false);
@@ -3922,7 +3922,7 @@ function PublicView({id}){
     <div style={{position:'fixed',left:0,right:0,bottom:0,background:'#05100e',color:'#fff',padding:'16px 20px',boxShadow:'0 -4px 24px rgba(0,0,0,.28)'}}>
       <div style={{maxWidth:794,margin:'0 auto'}}>
         {accepted
-          ? <div style={{fontSize:15,display:'flex',alignItems:'center',gap:10}}><span style={{color:'#7ee0c0',fontSize:20}}>✓</span><span>{(NL?'Akkoord gegeven door ':'Accepted by ')}<strong>{state.data.acceptedBy}</strong>{signDateLong?' · '+signDateLong:''}{state.data.acceptedEmail?(NL?' · kopie gemaild':' · copy emailed'):''}</span></div>
+          ? <div style={{fontSize:15,display:'flex',alignItems:'center',gap:10}}><span style={{color:'#7ee0c0',fontSize:20}}>✓</span><span>{(NL?'Akkoord gegeven door ':'Accepted by ')}<strong>{state.data.acceptedBy}</strong>{signDateLong?' · '+signDateLong:''}{state.data.emailed?(NL?' · kopie gemaild':' · copy emailed'):''}</span></div>
           : expired
           ? <div style={{fontSize:14,color:'#f3c9c9',display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:18}}>⏳</span><span>{NL?('Deze offerte is verlopen'+(expDate?' op '+expDate:'')+'. Neem contact op voor een bijgewerkte offerte.'):('This quotation has expired'+(expDate?' on '+expDate:'')+'. Please contact us for an updated one.')}</span></div>
           : <div style={{display:'flex',flexDirection:'column',gap:10}}>

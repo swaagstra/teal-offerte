@@ -114,11 +114,12 @@ async function sendGmail(token, from, to, subject, text, pdfB64, filename) {
 // Stuur bij akkoord een kopie naar de klant (het opgegeven e-mailadres) én een interne melding.
 // pdfB64 (indien meegestuurd door de browser) gaat als bijlage mee. Nooit blokkerend.
 async function sendCopies(rec, pdfB64, filename) {
+  let sentToClient = false;
   try {
     const token = await gmailAccessToken();
-    if (!token) return;
+    if (!token) return false;
     const from = process.env.NOTIFY_FROM || process.env.NOTIFY_EMAIL;
-    if (!from) return;
+    if (!from) return false;
     const NL = (rec.lang || 'nl') !== 'en';
     const proj = rec.projectName || (NL ? 'onze offerte' : 'our quotation');
     if (rec.acceptedEmail) {
@@ -131,6 +132,7 @@ async function sendCopies(rec, pdfB64, filename) {
           (pdfB64 ? 'Attached you will find a copy of the signed quotation.' : 'You can view the signed quotation online.') +
           '\n\nKind regards,\nTEAL\nteamteal.nl';
       await sendGmail(token, from, rec.acceptedEmail, subj, body, pdfB64, filename);
+      sentToClient = true;
     }
     if (process.env.NOTIFY_EMAIL) {
       const subj = '✅ Offerte getekend: ' + proj + ' — ' + rec.acceptedBy;
@@ -139,6 +141,7 @@ async function sendCopies(rec, pdfB64, filename) {
       await sendGmail(token, from, process.env.NOTIFY_EMAIL, subj, body, pdfB64, filename);
     }
   } catch (e) { /* mail mag nooit het akkoord blokkeren */ }
+  return sentToClient;
 }
 
 module.exports = async (req, res) => {
@@ -192,7 +195,7 @@ module.exports = async (req, res) => {
       return res.status(200).json({
         snapshot: rec.snapshot, lang: rec.lang, projectName: rec.projectName,
         status: rec.status, acceptedBy: rec.acceptedBy, acceptedAt: rec.acceptedAt,
-        acceptedEmail: !!rec.acceptedEmail, avUrl: rec.avUrl || null,
+        emailed: !!rec.emailedCopy, avUrl: rec.avUrl || null,
         expiresAt: rec.expiresAt || null, expired: !!isExpired,
       });
     }
@@ -221,9 +224,10 @@ module.exports = async (req, res) => {
             if (!Array.isArray(e.changelog)) e.changelog = [];
             e.changelog.push({ action: 'geaccepteerd door ' + name, date: when });
           });
-          await sendCopies(rec, pdf, filename);
+          const emailed = await sendCopies(rec, pdf, filename);
+          if (emailed) { rec.emailedCopy = true; await putRec(id, rec); }
         }
-        return res.status(200).json({ ok: true, status: 'accepted', acceptedBy: rec.acceptedBy, acceptedAt: rec.acceptedAt, acceptedEmail: !!rec.acceptedEmail });
+        return res.status(200).json({ ok: true, status: 'accepted', acceptedBy: rec.acceptedBy, acceptedAt: rec.acceptedAt, emailed: !!rec.emailedCopy });
       }
       return res.status(400).json({ error: 'bad-action' });
     }
