@@ -885,6 +885,7 @@ function migrateDeliveryRefs(){
 const WSK='teal.offerte.ws';
 function getWorkspaceId(){
   try{
+    if(window._SESSION_WS)return window._SESSION_WS;
     const q=new URLSearchParams(location.search).get('ws');
     if(q&&/^[a-z0-9]{8,40}$/i.test(q)){localStorage.setItem(WSK,q);return q;}
     let w=localStorage.getItem(WSK);
@@ -3284,6 +3285,7 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
       <div className="flex g8" style={{alignItems:'center'}}>
         <span className="sm" style={{color:synced?'var(--green)':'#999'}} title="Back-up naar de cloud">{synced?'● Back-up actief':'○ Synchroniseren…'}</span>
         <button className="btn btn-g btn-sm" onClick={copyWsUrl} title="Kopieer een prive-link om je offertes op een ander apparaat te openen">Apparaten</button>
+        {window._SESSION_EMAIL&&<button className="btn btn-g btn-sm" onClick={doLogout} title={'Ingelogd als '+window._SESSION_EMAIL+' — uitloggen'}>Uitloggen</button>}
         <button className="btn btn-p" onClick={()=>onNew('build')}>+ Build</button>
         <button className="btn btn-p" onClick={()=>onNew('assemble')}>+ Assemble</button>
         <button className="btn btn-g" onClick={()=>setBaseOpen(true)} title="Start een nieuwe offerte met de fases, inzet en prijzen van een eerdere offerte als basis">+ Op basis van…</button>
@@ -3944,8 +3946,61 @@ function PublicView({id}){
   </div>;
 }
 
+// ── Authenticatie (Google Sign-In) ──────────────────────────────────────────
+// Slapend tot GOOGLE_CLIENT_ID in de omgeving staat: zonder client-id draait de
+// tool als voorheen (ws-token). Met client-id vereist de editor login; de
+// publieke klant-weergave (/v/) blijft altijd open.
+function GoogleLogin({clientId,onDone}){
+  const ref=React.useRef(null);
+  const[err,setErr]=useState('');
+  useEffect(()=>{
+    let tries=0,stop=false;
+    const init=()=>{
+      if(stop)return;
+      if(!(window.google&&google.accounts&&google.accounts.id)){ if(tries++<60)setTimeout(init,100); else setErr('Google-login kon niet laden.'); return; }
+      try{
+        google.accounts.id.initialize({client_id:clientId,callback:async(resp)=>{
+          try{
+            const r=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'verify',credential:resp.credential})});
+            const j=await r.json();
+            if(r.ok&&j&&j.email)onDone(j);
+            else setErr(j&&j.error==='not-allowed'?'Dit account heeft geen toegang tot deze werkruimte.':'Inloggen mislukt. Probeer opnieuw.');
+          }catch(e){setErr('Inloggen mislukt: '+e);}
+        }});
+        if(ref.current)google.accounts.id.renderButton(ref.current,{theme:'outline',size:'large',type:'standard',text:'signin_with',shape:'pill'});
+      }catch(e){setErr('Google-login kon niet laden.');}
+    };
+    init();
+    return ()=>{stop=true;};
+  },[clientId]);
+  return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#0b1a17',fontFamily:'system-ui',padding:20}}>
+    <div style={{background:'#0f2420',border:'1px solid #1d3b34',borderRadius:14,padding:'40px 44px',maxWidth:380,width:'100%',textAlign:'center',boxShadow:'0 10px 40px rgba(0,0,0,.35)'}}>
+      <div style={{color:'#d4ece6',fontSize:20,fontWeight:600,letterSpacing:'.02em',marginBottom:6}}>TEAL Offerte Tool</div>
+      <div style={{color:'#8fa39d',fontSize:14,marginBottom:26}}>Log in om je offertes te zien.</div>
+      <div ref={ref} style={{display:'flex',justifyContent:'center',minHeight:44}}/>
+      {err&&<div style={{color:'#f3c9c9',fontSize:13,marginTop:16,lineHeight:1.5}}>{err}</div>}
+    </div>
+  </div>;
+}
+function AuthGate(){
+  const[st,setSt]=useState({loading:true});
+  useEffect(()=>{(async()=>{
+    try{
+      const cfg=await (await fetch('/api/auth?action=config')).json();
+      if(!cfg||!cfg.clientId){setSt({loading:false,disabled:true});return;}   // auth uit → oude gedrag
+      const me=await (await fetch('/api/auth?action=me')).json();
+      if(me&&me.authed&&me.ws){window._SESSION_WS=me.ws;window._SESSION_EMAIL=me.email;setSt({loading:false,authed:true});}
+      else setSt({loading:false,clientId:cfg.clientId});
+    }catch(e){setSt({loading:false,disabled:true});}                          // fout → niet buitensluiten
+  })();},[]);
+  if(st.loading)return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#8fa39d',fontFamily:'system-ui'}}>Laden…</div>;
+  if(st.disabled||st.authed)return <App/>;
+  return <GoogleLogin clientId={st.clientId} onDone={()=>location.reload()}/>;
+}
+async function doLogout(){try{await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout'})});}catch(e){}window._SESSION_WS=null;location.reload();}
+
 const _viewId=getViewId();
-ReactDOM.createRoot(document.getElementById('root')).render(_viewId?<PublicView id={_viewId}/>:<App/>);
+ReactDOM.createRoot(document.getElementById('root')).render(_viewId?<PublicView id={_viewId}/>:<AuthGate/>);
 </script>
 </body>
 </html>
