@@ -73,10 +73,18 @@ async function verifyGoogleIdToken(idToken) {
 // Werkruimte voor dit account: bestaand paar, anders startwaarde (PRIMARY_WS voor
 // het primaire account) en persist. Zo blijven bestaande offertes gekoppeld.
 async function resolveWs(email) {
-  const key = 'acct:' + String(email).toLowerCase();
+  const e = String(email).toLowerCase();
+  const key = 'acct:' + e;
+  // Het primaire account is altijd gebonden aan PRIMARY_WS wanneer die gezet is —
+  // dit overschrijft een eerder (per ongeluk) opgeslagen mapping, zodat de binding
+  // ook achteraf te corrigeren blijft via de env-var.
+  if (e === primaryEmail() && process.env.PRIMARY_WS) {
+    await redis(['SET', key, process.env.PRIMARY_WS]);
+    return process.env.PRIMARY_WS;
+  }
   const existing = await redis(['GET', key]);
   if (existing) return existing;
-  const seed = (String(email).toLowerCase() === primaryEmail() && process.env.PRIMARY_WS) ? process.env.PRIMARY_WS : mintWs();
+  const seed = mintWs();
   await redis(['SET', key, seed]);
   return seed;
 }
