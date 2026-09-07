@@ -2948,7 +2948,8 @@ function defaultDischarge(){
       nl:'Risico, zorg en beheer van de installatie gaan bij ondertekening over op de opdrachtgever. De garantie gaat in op de opleverdatum en dekt gebreken in fabricage en assemblage onder normale gebruiksomstandigheden. De eindfactuur wordt na ondertekening van dit certificaat verstuurd en is betaalbaar binnen 14 dagen na factuurdatum.',
       en:'Risk, care and custody of the installation transfer to the client on the date of signing. The warranty commences on the completion date and covers defects in fabrication and assembly under normal operating conditions. The final invoice is issued following signature of this certificate, payable within 14 days of the invoice date.'},
     items:[{item:'',status:''}],
-    documents:['']
+    documents:[''],
+    worksEnabled:true, documentsEnabled:true, statementEnabled:true, transferEnabled:true
   };
 }
 
@@ -2964,9 +2965,12 @@ function buildDischargeDocDef(D, logoImg){
   det.push({text:[{text:(D.nl?'Geïnspecteerd':'Inspected')+'  ',color:muted},{text:D.inspected,color:body}],fontSize:13*k,lineHeight:1.7});
   det.push({text:[{text:(D.nl?'Garantie':'Warranty')+'  ',color:muted},{text:D.warranty,color:body}],fontSize:13*k,lineHeight:1.7});
 
+  // Sectienummers lopen door en slaan uitgezette secties over (01 Opdrachtgever, 02 Details vast).
+  var _n=2; function sn(){_n+=1;return String(_n).padStart(2,'0');}
+
   var c=[];
-  // Header
-  c.push({columns:[{width:'auto',image:logoImg,fit:[240,34*k]},{width:'*',text:(D.nl?'Dechargeverklaring':'Discharge certificate').toUpperCase(),font:'I7d',fontSize:24*k,color:'#000',characterSpacing:lsf(0.04,24*k),alignment:'right'}]});
+  // Header — wordmerk bewust lichter (medium i.p.v. bold) zodat de projecttitel domineert, net als op de offerte.
+  c.push({columns:[{width:'auto',image:logoImg,fit:[240,34*k]},{width:'*',text:(D.nl?'Dechargeverklaring':'Discharge certificate').toUpperCase(),font:'I5d',fontSize:19*k,color:'#000',characterSpacing:lsf(0.04,19*k),alignment:'right',margin:[0,6*k,0,0]}]});
   c.push({columns:[
     {width:'*',text:[{text:(D.nl?'Afgegeven door ':'Issued by ')+D.prepared_by+'\n'},{text:D.address+'\n'},{text:D.registration}],fontSize:12*k,color:sec,lineHeight:1.7},
     {width:'auto',stack:[
@@ -2984,37 +2988,36 @@ function buildDischargeDocDef(D, logoImg){
     {width:'*',stack:[secHead('01',D.nl?'Opdrachtgever':'Client'),{text:[D.client_name,D.client_contact,D.client_email].filter(Boolean).join('\n'),fontSize:13*k,color:body,lineHeight:1.6}]},
     {width:'*',stack:[secHead('02',D.nl?'Opleverdetails':'Handover details'),{stack:det}]}
   ],columnGap:48*k,margin:[0,48*k,0,0]});
-  // 03 works delivered
-  // 03 — kop, intro, en per werkzaamheid een regel met hairline eronder
-  var worksRows=[secHead('03',D.nl?'Opgeleverde werkzaamheden':'Works delivered'),{text:D.works_intro,fontSize:14*k,color:body,lineHeight:1.65}];
-  (D.items||[]).forEach(function(it,i){
-    worksRows.push({stack:[
-      {columns:[{width:24*k,text:it.no,font:'M4',fontSize:11*k,color:faint},{width:'*',text:it.item,fontSize:13*k,color:ink},{width:120*k,text:it.status||'',fontSize:13*k,color:sec}],columnGap:16*k,margin:[0,11*k,0,11*k]},
-      {canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}]}
-    ],margin:[0,i?0:18*k,0,0],unbreakable:true});
-  });
-  c.push({stack:worksRows,margin:[0,48*k,0,0]});
-
-  // ── page 2 ──
-  c.push({columns:[{width:'auto',image:logoImg,fit:[240,20*k]},{width:'*',text:D.title,font:'M4',fontSize:11*k,color:sec,alignment:'right',margin:[0,3,0,0]}],pageBreak:'before'});
-  c.push({canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,13.5,0,0]});
-  // 04 documents handed over (twee kolommen)
-  var docRows=[];
-  var docs=D.documents||[];
-  for(var di=0;di<docs.length;di+=2){
-    var cell=function(s){return s?{columns:[{width:'auto',canvas:[{type:'rect',x:0,y:4*k,w:7*k,h:7*k,color:ink}]},{width:'*',text:s,fontSize:13*k,color:body,margin:[10*k,0,0,0]}],margin:[0,10*k,0,10*k]}:{text:'',width:'*'};};
-    docRows.push({columns:[
-      {width:'*',stack:[cell(docs[di]),{canvas:[{type:'line',x1:0,y1:0,x2:(CW-48*k)/2,y2:0,lineWidth:0.5,lineColor:hair}]}]},
-      {width:'*',stack:docs[di+1]?[cell(docs[di+1]),{canvas:[{type:'line',x1:0,y1:0,x2:(CW-48*k)/2,y2:0,lineWidth:0.5,lineColor:hair}]}]:[{text:''}]}
-    ],columnGap:48*k});
+  // Works delivered — kop, intro, en per werkzaamheid een regel met hairline eronder
+  if(D.worksEnabled!==false){
+    var worksRows=[secHead(sn(),D.nl?'Opgeleverde werkzaamheden':'Works delivered'),{text:D.works_intro,fontSize:14*k,color:body,lineHeight:1.65}];
+    (D.items||[]).forEach(function(it,i){
+      worksRows.push({stack:[
+        {columns:[{width:24*k,text:it.no,font:'M4',fontSize:11*k,color:faint},{width:'*',text:it.item,fontSize:13*k,color:ink},{width:120*k,text:it.status||'',fontSize:13*k,color:sec}],columnGap:16*k,margin:[0,11*k,0,11*k]},
+        {canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}]}
+      ],margin:[0,i?0:18*k,0,0],unbreakable:true});
+    });
+    c.push({stack:worksRows,margin:[0,36*k,0,0]});
   }
-  c.push({stack:[secHead('04',D.nl?'Overgedragen documenten':'Documents handed over')].concat(docRows.length?docRows:[{text:'—',fontSize:13*k,color:muted}]),margin:[0,48*k,0,0]});
-  // 05 discharge statement
-  c.push({stack:[
-    secHead('05',D.nl?'Dechargeverklaring':'Discharge statement'),
-    {text:D.discharge_statement,fontSize:14*k,color:body,lineHeight:1.65},
-    {text:D.transfer_clause,fontSize:14*k,color:body,lineHeight:1.65,margin:[0,12*k,0,0]}
-  ],margin:[0,48*k,0,0],unbreakable:true});
+  // Documents handed over (twee kolommen)
+  if(D.documentsEnabled!==false){
+    var docRows=[];
+    var docs=D.documents||[];
+    for(var di=0;di<docs.length;di+=2){
+      var cell=function(s){return s?{columns:[{width:'auto',canvas:[{type:'rect',x:0,y:4*k,w:7*k,h:7*k,color:ink}]},{width:'*',text:s,fontSize:13*k,color:body,margin:[10*k,0,0,0]}],margin:[0,10*k,0,10*k]}:{text:'',width:'*'};};
+      docRows.push({columns:[
+        {width:'*',stack:[cell(docs[di]),{canvas:[{type:'line',x1:0,y1:0,x2:(CW-48*k)/2,y2:0,lineWidth:0.5,lineColor:hair}]}]},
+        {width:'*',stack:docs[di+1]?[cell(docs[di+1]),{canvas:[{type:'line',x1:0,y1:0,x2:(CW-48*k)/2,y2:0,lineWidth:0.5,lineColor:hair}]}]:[{text:''}]}
+      ],columnGap:48*k});
+    }
+    c.push({stack:[secHead(sn(),D.nl?'Overgedragen documenten':'Documents handed over')].concat(docRows.length?docRows:[{text:'—',fontSize:13*k,color:muted}]),margin:[0,36*k,0,0]});
+  }
+  // Discharge statement (+ optionele risico/factuur-clausule)
+  if(D.statementEnabled!==false){
+    var stStack=[secHead(sn(),D.nl?'Dechargeverklaring':'Discharge statement'),{text:D.discharge_statement,fontSize:14*k,color:body,lineHeight:1.65}];
+    if(D.transferEnabled!==false)stStack.push({text:D.transfer_clause,fontSize:14*k,color:body,lineHeight:1.65,margin:[0,12*k,0,0]});
+    c.push({stack:stStack,margin:[0,36*k,0,0],unbreakable:true});
+  }
   // signatures — twee partijen
   var partyGap=48*k, partyW=(CW-partyGap)/2, dateW=96*k, innerGap=24*k, sigW=partyW-dateW-innerGap;
   function ruleCell(w,label){return {width:w,stack:[{text:' ',margin:[0,52*k,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:w,y2:0,lineWidth:0.5,lineColor:ink}]},{text:String(label).toUpperCase(),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,5*k,0,0]}]};}
@@ -3027,10 +3030,11 @@ function buildDischargeDocDef(D, logoImg){
     {canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,0,0,30*k]},
     {text:(D.nl?'Ondertekend voor akkoord':'Signed for acceptance').toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.14,11*k),margin:[0,0,0,22*k]},
     {columns:[party(D.nl?'Namens TEAL':'On behalf of TEAL',D.teal_signatory),party(D.nl?'Namens de opdrachtgever':'On behalf of the client',D.client_signatory)],columnGap:partyGap}
-  ],margin:[0,48*k,0,0],unbreakable:true});
+  ],margin:[0,40*k,0,0],unbreakable:true});
 
   return {pageSize:'A4',pageMargins:[ML,MT,ML,MB],
     background:function(cp,ps){return {canvas:[{type:'rect',x:0,y:0,w:ps.width,h:ps.height,color:paper}]};},
+    header:function(cp){if(cp===1)return null;return {margin:[ML,20*k,ML,0],columns:[{width:'auto',image:logoImg,fit:[150,12]},{width:'*',text:D.title+' · '+(D.nl?'Dechargeverklaring':'Discharge certificate'),font:'I4',fontSize:10*k,color:sec,alignment:'right',margin:[0,1,0,0]}]};},
     footer:function(cp,pc){return {margin:[ML,10*k,ML,0],stack:[
       {canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}]},
       {text:(D.nl?'Dechargeverklaring ':'Discharge certificate ')+D.certNo+' · '+cp+' / '+pc,font:'M4',fontSize:10*k,color:muted,characterSpacing:lsf(0.03,10*k),alignment:'right',margin:[0,10*k,0,0]}
@@ -3064,7 +3068,9 @@ function mapDischargeToTokens(d){
     transfer_clause:t(dc.transferClause,L)||'',
     teal_signatory:dc.tealSignatory||'Erik Swaagstra',
     client_signatory:dc.clientSignatory||S.client.name||d.client.name||'',
-    items:items, documents:docs, nl:NL
+    items:items, documents:docs, nl:NL,
+    worksEnabled:dc.worksEnabled!==false, documentsEnabled:dc.documentsEnabled!==false,
+    statementEnabled:dc.statementEnabled!==false, transferEnabled:dc.transferEnabled!==false
   };
 }
 
@@ -3853,19 +3859,22 @@ function DeliveryFlow({data:dv,set,onBack}){
   </div>;
 }
 
-// ── Discharge certificate on-screen preview (spiegelt de PDF/template 1-op-1) ──
+// ── Discharge certificate on-screen preview — één doorlopend vel, zoals de offerte-preview ──
 function DischargeDoc({T,L}){
   const NL=L==='nl';
   const ink='#05100e',body='#2b302f',sec='#4a4f4e',muted='#7a807e',faint='#9aa09e',hair='#e5e4e0',paper='#f6f5f1',mono="'JetBrains Mono',monospace";
-  const Sheet=({children})=><div style={{width:794,minHeight:1123,flexShrink:0,background:paper,boxSizing:'border-box',padding:'64px 57px',color:ink,display:'flex',flexDirection:'column',boxShadow:'0 1px 3px rgba(5,16,14,.16)'}}>{children}</div>;
   const SecHead=({n,title})=><div style={{display:'flex',alignItems:'baseline',gap:12,marginBottom:14}}><span style={{fontFamily:mono,fontSize:13,color:muted}}>{n}</span><span style={{fontSize:13,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:ink}}>{title}</span></div>;
   const items=T.items||[],docs=T.documents||[];
   const parties=[[NL?'Namens TEAL':'On behalf of TEAL',T.teal_signatory],[NL?'Namens de opdrachtgever':'On behalf of the client',T.client_signatory]];
+  let _n=2;const sn=()=>String(++_n).padStart(2,'0');
+  const worksNo=T.worksEnabled!==false?sn():null;
+  const docsNo=T.documentsEnabled!==false?sn():null;
+  const stmtNo=T.statementEnabled!==false?sn():null;
   return <div style={{background:'#d8d6cf',padding:28,display:'flex',flexDirection:'column',alignItems:'center',gap:28,borderRadius:8,overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
-    <Sheet>
+    <div style={{width:794,flexShrink:0,background:paper,boxSizing:'border-box',padding:'64px 57px',color:ink,display:'flex',flexDirection:'column',boxShadow:'0 1px 3px rgba(5,16,14,.16)'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
         <Logo color={ink} h={34}/>
-        <div style={{fontSize:24,lineHeight:1,letterSpacing:'0.04em',textTransform:'uppercase',fontWeight:700,color:'#000'}}>{NL?'Dechargeverklaring':'Discharge certificate'}</div>
+        <div style={{fontSize:20,lineHeight:1,letterSpacing:'0.04em',textTransform:'uppercase',fontWeight:500,color:'#000'}}>{NL?'Dechargeverklaring':'Discharge certificate'}</div>
       </div>
       <div style={{display:'flex',justifyContent:'space-between',marginTop:18}}>
         <div style={{fontSize:12,lineHeight:1.7,color:sec}}>{(NL?'Afgegeven door ':'Issued by ')+T.prepared_by}<br/>{T.address}<br/>{T.registration}</div>
@@ -3890,8 +3899,8 @@ function DischargeDoc({T,L}){
           </div>
         </div>
       </div>
-      <div style={{marginTop:48}}>
-        <SecHead n="03" title={NL?'Opgeleverde werkzaamheden':'Works delivered'}/>
+      {worksNo&&<div style={{marginTop:44}}>
+        <SecHead n={worksNo} title={NL?'Opgeleverde werkzaamheden':'Works delivered'}/>
         <div style={{fontSize:14,lineHeight:1.65,color:body,whiteSpace:'pre-wrap'}}>{T.works_intro}</div>
         <div style={{marginTop:18}}>
           {items.map((it,i)=><div key={i} style={{display:'flex',alignItems:'baseline',gap:16,padding:'11px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
@@ -3900,27 +3909,19 @@ function DischargeDoc({T,L}){
             <div style={{width:150,color:sec}}>{it.status}</div>
           </div>)}
         </div>
-      </div>
-      <div style={{flex:1}}/>
-      <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:30,display:'flex',justifyContent:'flex-end'}}><span>{(NL?'Dechargeverklaring ':'Discharge certificate ')+T.certNo+' · 1 / 2'}</span></div>
-    </Sheet>
-    <Sheet>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid '+hair,paddingBottom:18}}>
-        <Logo color={ink} h={20}/>
-        <div style={{fontFamily:mono,fontSize:11,color:sec}}>{T.title}</div>
-      </div>
-      <div style={{marginTop:48}}>
-        <SecHead n="04" title={NL?'Overgedragen documenten':'Documents handed over'}/>
+      </div>}
+      {docsNo&&<div style={{marginTop:44}}>
+        <SecHead n={docsNo} title={NL?'Overgedragen documenten':'Documents handed over'}/>
         {docs.length?<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 48px'}}>
           {docs.map((s,i)=><div key={i} style={{display:'flex',alignItems:'baseline',gap:12,padding:'10px 0',borderBottom:'1px solid '+hair,fontSize:13,color:body}}><span style={{width:7,height:7,background:ink,display:'inline-block',flex:'none'}}/><span>{s}</span></div>)}
         </div>:<div style={{fontSize:13,color:muted}}>—</div>}
-      </div>
-      <div style={{marginTop:48}}>
-        <SecHead n="05" title={NL?'Dechargeverklaring':'Discharge statement'}/>
+      </div>}
+      {stmtNo&&<div style={{marginTop:44}}>
+        <SecHead n={stmtNo} title={NL?'Dechargeverklaring':'Discharge statement'}/>
         <div style={{fontSize:14,lineHeight:1.65,color:body,whiteSpace:'pre-wrap'}}>{T.discharge_statement}</div>
-        <div style={{fontSize:14,lineHeight:1.65,color:body,marginTop:12,whiteSpace:'pre-wrap'}}>{T.transfer_clause}</div>
-      </div>
-      <div style={{marginTop:48,borderTop:'1px solid '+hair,paddingTop:30}}>
+        {T.transferEnabled!==false&&<div style={{fontSize:14,lineHeight:1.65,color:body,marginTop:12,whiteSpace:'pre-wrap'}}>{T.transfer_clause}</div>}
+      </div>}
+      <div style={{marginTop:44,borderTop:'1px solid '+hair,paddingTop:30}}>
         <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:600,color:ink,marginBottom:22}}>{NL?'Ondertekend voor akkoord':'Signed for acceptance'}</div>
         <div style={{display:'flex',gap:48}}>
           {parties.map(([lab,name],i)=><div key={i} style={{flex:1}}>
@@ -3933,9 +3934,9 @@ function DischargeDoc({T,L}){
           </div>)}
         </div>
       </div>
-      <div style={{flex:1}}/>
-      <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:30,display:'flex',justifyContent:'flex-end'}}><span>{(NL?'Dechargeverklaring ':'Discharge certificate ')+T.certNo+' · 2 / 2'}</span></div>
-    </Sheet>
+      <div style={{flex:1,minHeight:24}}/>
+      <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:30,display:'flex',justifyContent:'flex-end'}}><span>{(NL?'Dechargeverklaring ':'Discharge certificate ')+T.certNo}</span></div>
+    </div>
   </div>;
 }
 
@@ -3970,7 +3971,10 @@ function DischargeTab({data:d,set}){
     </div>
 
     <div className="card">
-      <div className="card-h">{NL?'Opgeleverde werkzaamheden':'Works delivered'}</div>
+      <div className="between" style={{alignItems:'center',marginBottom:10}}>
+        <div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Opgeleverde werkzaamheden':'Works delivered'}</div>
+        <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#555',cursor:'pointer',margin:0}}><input type="checkbox" checked={dc.worksEnabled!==false} onChange={e=>up({worksEnabled:e.target.checked})}/>{NL?'opnemen':'include'}</label>
+      </div>
       {items.map((it,i)=><div key={i} className="row" style={{alignItems:'center'}}>
         <div className="fg" style={{flex:3}}><input placeholder={NL?'Omschrijving werkzaamheid':'Work item'} value={it.item||''} onChange={e=>{const a=items.slice();a[i]={...a[i],item:e.target.value};setItems(a);}}/></div>
         <div className="fg" style={{flex:1}}><input placeholder={NL?'Status (bv. Geïnstalleerd)':'Status (e.g. Installed)'} value={it.status||''} onChange={e=>{const a=items.slice();a[i]={...a[i],status:e.target.value};setItems(a);}}/></div>
@@ -3980,7 +3984,10 @@ function DischargeTab({data:d,set}){
     </div>
 
     <div className="card">
-      <div className="card-h">{NL?'Overgedragen documenten':'Documents handed over'}</div>
+      <div className="between" style={{alignItems:'center',marginBottom:10}}>
+        <div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Overgedragen documenten':'Documents handed over'}</div>
+        <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#555',cursor:'pointer',margin:0}}><input type="checkbox" checked={dc.documentsEnabled!==false} onChange={e=>up({documentsEnabled:e.target.checked})}/>{NL?'opnemen':'include'}</label>
+      </div>
       {docs.map((s,i)=><div key={i} className="row" style={{alignItems:'center'}}>
         <div className="fg" style={{flex:1}}><input placeholder={NL?'Documentnaam':'Document name'} value={s} onChange={e=>{const a=docs.slice();a[i]=e.target.value;setDocs(a);}}/></div>
         <button className="btn btn-sm btn-g" onClick={()=>{const a=docs.slice();a.splice(i,1);setDocs(a.length?a:['']);}}>×</button>
@@ -3998,8 +4005,11 @@ function DischargeTab({data:d,set}){
 
     <div className="card">
       <div className="card-h">{NL?'Juridische teksten':'Legal copy'}</div>
-      {[['worksIntro',NL?'Inleiding werkzaamheden':'Works intro'],['dischargeStatement',NL?'Dechargeverklaring':'Discharge statement'],['transferClause',NL?'Risico-overgang, garantie & eindfactuur':'Risk transfer, warranty & final invoice']].map(([f,lab])=><div key={f} style={{marginBottom:10}}>
-        <div className="between" style={{alignItems:'center'}}><label style={{margin:0}}>{lab}</label><button className="btn btn-sm btn-g" style={{padding:'2px 8px',fontSize:11}} onClick={()=>up({[f]:defaultDischarge()[f]})}>{NL?'standaardtekst':'default text'}</button></div>
+      {[['worksIntro',NL?'Inleiding werkzaamheden':'Works intro',null],['dischargeStatement',NL?'Dechargeverklaring':'Discharge statement','statementEnabled'],['transferClause',NL?'Risico-overgang, garantie & eindfactuur':'Risk transfer, warranty & final invoice','transferEnabled']].map(([f,lab,flag])=><div key={f} style={{marginBottom:10}}>
+        <div className="between" style={{alignItems:'center'}}>
+          <label style={{margin:0,display:'flex',alignItems:'center',gap:8}}>{flag&&<input type="checkbox" checked={dc[flag]!==false} onChange={e=>up({[flag]:e.target.checked})}/>}<span>{lab}{flag&&dc[flag]===false?(NL?' — uit':' — off'):''}</span></label>
+          <button className="btn btn-sm btn-g" style={{padding:'2px 8px',fontSize:11}} onClick={()=>up({[f]:defaultDischarge()[f]})}>{NL?'standaardtekst':'default text'}</button>
+        </div>
         <textarea rows={3} value={t(dc[f],d.lang)} onChange={e=>upBil(f,e.target.value)}/>
       </div>)}
     </div>
