@@ -3853,6 +3853,92 @@ function DeliveryFlow({data:dv,set,onBack}){
   </div>;
 }
 
+// ── Discharge certificate on-screen preview (spiegelt de PDF/template 1-op-1) ──
+function DischargeDoc({T,L}){
+  const NL=L==='nl';
+  const ink='#05100e',body='#2b302f',sec='#4a4f4e',muted='#7a807e',faint='#9aa09e',hair='#e5e4e0',paper='#f6f5f1',mono="'JetBrains Mono',monospace";
+  const Sheet=({children})=><div style={{width:794,minHeight:1123,flexShrink:0,background:paper,boxSizing:'border-box',padding:'64px 57px',color:ink,display:'flex',flexDirection:'column',boxShadow:'0 1px 3px rgba(5,16,14,.16)'}}>{children}</div>;
+  const SecHead=({n,title})=><div style={{display:'flex',alignItems:'baseline',gap:12,marginBottom:14}}><span style={{fontFamily:mono,fontSize:13,color:muted}}>{n}</span><span style={{fontSize:13,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:ink}}>{title}</span></div>;
+  const items=T.items||[],docs=T.documents||[];
+  const parties=[[NL?'Namens TEAL':'On behalf of TEAL',T.teal_signatory],[NL?'Namens de opdrachtgever':'On behalf of the client',T.client_signatory]];
+  return <div style={{background:'#d8d6cf',padding:28,display:'flex',flexDirection:'column',alignItems:'center',gap:28,borderRadius:8,overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
+    <Sheet>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <Logo color={ink} h={34}/>
+        <div style={{fontSize:24,lineHeight:1,letterSpacing:'0.04em',textTransform:'uppercase',fontWeight:700,color:'#000'}}>{NL?'Dechargeverklaring':'Discharge certificate'}</div>
+      </div>
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:18}}>
+        <div style={{fontSize:12,lineHeight:1.7,color:sec}}>{(NL?'Afgegeven door ':'Issued by ')+T.prepared_by}<br/>{T.address}<br/>{T.registration}</div>
+        <div style={{fontSize:12,lineHeight:1.7,color:sec,textAlign:'right'}}><span style={{color:faint}}>No.</span> {T.certNo}<br/><span style={{color:faint}}>{NL?'Afgegeven':'Issued'}</span> {T.issued}<br/><span style={{color:faint}}>{NL?'Offerteref.':'Quotation ref.'}</span> {T.quoteRef}</div>
+      </div>
+      <div style={{height:1,background:hair,margin:'30px 0'}}/>
+      <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:600,color:ink}}>{NL?'Project':'Project'}</div>
+      <h1 style={{fontSize:36,lineHeight:1.06,letterSpacing:'-0.02em',fontWeight:500,margin:'10px 0 0'}}>{T.title||'[Project]'}</h1>
+      {T.subtitle&&<div style={{fontSize:18,fontWeight:400,color:sec,marginTop:8}}>{T.subtitle}</div>}
+      <div style={{display:'flex',gap:48,marginTop:48}}>
+        <div style={{flex:1}}>
+          <SecHead n="01" title={NL?'Opdrachtgever':'Client'}/>
+          <div style={{fontSize:13,lineHeight:1.6,color:body}}>{[T.client_name,T.client_contact,T.client_email].filter(Boolean).map((x,i)=><React.Fragment key={i}>{i?<br/>:null}{x}</React.Fragment>)}</div>
+        </div>
+        <div style={{flex:1}}>
+          <SecHead n="02" title={NL?'Opleverdetails':'Handover details'}/>
+          <div style={{fontSize:13,lineHeight:1.7,color:body}}>
+            <span style={{color:muted}}>{NL?'Locatie':'Location'}</span>{'  '}{T.location||'-'}<br/>
+            <span style={{color:muted}}>{NL?'Opgeleverd':'Completed'}</span>{'  '}{T.completed}<br/>
+            <span style={{color:muted}}>{NL?'Geïnspecteerd':'Inspected'}</span>{'  '}{T.inspected}<br/>
+            <span style={{color:muted}}>{NL?'Garantie':'Warranty'}</span>{'  '}{T.warranty}
+          </div>
+        </div>
+      </div>
+      <div style={{marginTop:48}}>
+        <SecHead n="03" title={NL?'Opgeleverde werkzaamheden':'Works delivered'}/>
+        <div style={{fontSize:14,lineHeight:1.65,color:body,whiteSpace:'pre-wrap'}}>{T.works_intro}</div>
+        <div style={{marginTop:18}}>
+          {items.map((it,i)=><div key={i} style={{display:'flex',alignItems:'baseline',gap:16,padding:'11px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
+            <div style={{width:24,fontFamily:mono,fontSize:11,color:faint}}>{it.no}</div>
+            <div style={{flex:1,color:ink}}>{it.item}</div>
+            <div style={{width:150,color:sec}}>{it.status}</div>
+          </div>)}
+        </div>
+      </div>
+      <div style={{flex:1}}/>
+      <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:30,display:'flex',justifyContent:'flex-end'}}><span>{(NL?'Dechargeverklaring ':'Discharge certificate ')+T.certNo+' · 1 / 2'}</span></div>
+    </Sheet>
+    <Sheet>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid '+hair,paddingBottom:18}}>
+        <Logo color={ink} h={20}/>
+        <div style={{fontFamily:mono,fontSize:11,color:sec}}>{T.title}</div>
+      </div>
+      <div style={{marginTop:48}}>
+        <SecHead n="04" title={NL?'Overgedragen documenten':'Documents handed over'}/>
+        {docs.length?<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 48px'}}>
+          {docs.map((s,i)=><div key={i} style={{display:'flex',alignItems:'baseline',gap:12,padding:'10px 0',borderBottom:'1px solid '+hair,fontSize:13,color:body}}><span style={{width:7,height:7,background:ink,display:'inline-block',flex:'none'}}/><span>{s}</span></div>)}
+        </div>:<div style={{fontSize:13,color:muted}}>—</div>}
+      </div>
+      <div style={{marginTop:48}}>
+        <SecHead n="05" title={NL?'Dechargeverklaring':'Discharge statement'}/>
+        <div style={{fontSize:14,lineHeight:1.65,color:body,whiteSpace:'pre-wrap'}}>{T.discharge_statement}</div>
+        <div style={{fontSize:14,lineHeight:1.65,color:body,marginTop:12,whiteSpace:'pre-wrap'}}>{T.transfer_clause}</div>
+      </div>
+      <div style={{marginTop:48,borderTop:'1px solid '+hair,paddingTop:30}}>
+        <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:600,color:ink,marginBottom:22}}>{NL?'Ondertekend voor akkoord':'Signed for acceptance'}</div>
+        <div style={{display:'flex',gap:48}}>
+          {parties.map(([lab,name],i)=><div key={i} style={{flex:1}}>
+            <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted,marginBottom:6}}>{lab}</div>
+            <div style={{fontSize:15,fontWeight:500,color:ink}}>{name||'—'}</div>
+            <div style={{display:'flex',gap:24,marginTop:52,alignItems:'flex-end'}}>
+              <div style={{flex:1}}><div style={{height:16}}/><div style={{borderTop:'1px solid '+ink,paddingTop:5,fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:muted}}>{NL?'Handtekening':'Signature'}</div></div>
+              <div style={{width:96}}><div style={{height:16}}/><div style={{borderTop:'1px solid '+ink,paddingTop:5,fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:muted}}>{NL?'Datum':'Date'}</div></div>
+            </div>
+          </div>)}
+        </div>
+      </div>
+      <div style={{flex:1}}/>
+      <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:30,display:'flex',justifyContent:'flex-end'}}><span>{(NL?'Dechargeverklaring ':'Discharge certificate ')+T.certNo+' · 2 / 2'}</span></div>
+    </Sheet>
+  </div>;
+}
+
 // ── Discharge certificate editor ──
 function DischargeTab({data:d,set}){
   const NL=d.lang==='nl';
@@ -3921,6 +4007,7 @@ function DischargeTab({data:d,set}){
 }
 function DischargeFlow({data:dv,set,onBack}){
   const NL=dv.lang==='nl';
+  const[showPrev,setShowPrev]=useState(true);
   const upProj=(patch)=>set({...dv,project:{...dv.project,...patch}});
   const upClient=(patch)=>set({...dv,client:{...dv.client,...patch}});
   const S=resolveSharedInfo(dv);
@@ -3932,6 +4019,7 @@ function DischargeFlow({data:dv,set,onBack}){
         <span style={{fontSize:12,color:'#999'}}>{dv.ref}{dv.parentRef?' · '+(NL?'bij ':'for ')+dv.parentRef:''}</span>
       </div>
       <div className="flex g8" style={{alignItems:'center'}}>
+        <button className="btn btn-g btn-sm" onClick={()=>setShowPrev(s=>!s)}>{showPrev?(NL?'Voorbeeld verbergen':'Hide preview'):(NL?'Voorbeeld tonen':'Show preview')}</button>
         <div className="flex" style={{border:'1px solid #d0d0ce',borderRadius:4,overflow:'hidden'}}>
           {['nl','en'].map(lng=><button key={lng} className="btn btn-sm" onClick={()=>set({...dv,lang:lng})} style={{borderRadius:0,border:0,background:dv.lang===lng?'#071412':'#fff',color:dv.lang===lng?'#fff':'#555',fontWeight:dv.lang===lng?700:600}}>{lng.toUpperCase()}</button>)}
         </div>
@@ -3957,6 +4045,10 @@ function DischargeFlow({data:dv,set,onBack}){
           </div>
         </div>}
     <DischargeTab data={dv} set={set}/>
+    {showPrev&&<div style={{marginTop:24}}>
+      <div className="card-h" style={{marginBottom:12}}>{NL?'Voorbeeld':'Preview'}</div>
+      <DischargeDoc T={mapDischargeToTokens(dv)} L={dv.lang}/>
+    </div>}
   </div>;
 }
 
