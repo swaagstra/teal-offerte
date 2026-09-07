@@ -703,7 +703,7 @@ const loadHash=()=>{try{const h=location.hash.slice(1);if(!h)return null;const p
 // Merges onto a fresh createProject() so external/partial JSON (e.g. from the intake skill) is always safe to open.
 function importOfferte(obj){
   if(!obj||typeof obj!=='object')return null;
-  if(obj.kind==='change_order'||obj.kind==='delivery')return migrateConds(obj);
+  if(obj.kind==='change_order'||obj.kind==='delivery'||obj.kind==='discharge')return migrateConds(obj);
   const type=(obj.type==='assemble')?'assemble':'build';
   const base=createProject(type);
   const merged={...base,...obj,type,
@@ -818,12 +818,12 @@ function archiveLogExport(d){archiveLogAction(d,'pdf_exported');bumpSent(d&&d._a
 // ── Status lifecycle ──
 const STATUS_ORDER=['concept','verstuurd','geaccepteerd','afgewezen'];
 function quoteExpiry(data){try{const base=(data&&data.project&&data.project.date)||(data&&data.date);const days=parseInt((data&&data.conditions&&data.conditions.validity)||(data&&data.validity))||0;if(!base||!days)return null;const dt=new Date(base);dt.setDate(dt.getDate()+days);return dt;}catch(e){return null;}}
-function entryTotal(e){try{const dt=e.data||{};if((e.kind==='delivery')||dt.kind==='delivery')return 0;if((e.kind==='change_order')||dt.kind==='change_order'){return (dt.costItems||[]).reduce((s,it)=>s+(+it.amount||0),0);}return calcTotals(primaryBundle(dt)).grandClient;}catch(_e){return 0;}}
+function entryTotal(e){try{const dt=e.data||{};if((e.kind==='delivery')||dt.kind==='delivery'||(e.kind==='discharge')||dt.kind==='discharge')return 0;if((e.kind==='change_order')||dt.kind==='change_order'){return (dt.costItems||[]).reduce((s,it)=>s+(+it.amount||0),0);}return calcTotals(primaryBundle(dt)).grandClient;}catch(_e){return 0;}}
 function effectiveStatus(entry){const s=(entry&&entry.status)||'concept';if(s==='verstuurd'){const ex=quoteExpiry(entry.data);if(ex&&ex<new Date())return 'verlopen';}return s;}
 function archiveSetStatus(id,status){if(!id)return;const all=loadArchive();const idx=all.findIndex(x=>x.id===id);if(idx>=0){const now=new Date().toISOString();all[idx].status=status;all[idx].statusAt=now;all[idx].updatedAt=now;all[idx].changelog.push({action:'status_'+status,date:now});saveArchive(all);}}
 function bumpSent(id){if(!id)return;const all=loadArchive();const i=all.findIndex(x=>x.id===id);if(i>=0&&((all[i].status||'concept')==='concept'))archiveSetStatus(id,'verstuurd');}
 function currentVersion(ref){const parts=String(ref||'').split('-');const v=parseInt(parts[parts.length-1]);return isNaN(v)?1:v;}
-function entryItemCount(e){try{const d=(e&&e.data)||{};if(d.kind==='change_order')return (d.costItems||[]).length;if(d.kind==='delivery')return (d.deliverables||[]).length;let n=0;(d.phases||[]).forEach(p=>{if(p.enabled!==false)n+=(p.items||[]).length;});n+=(d.procOTS||[]).length+(d.procCustom||[]).length+(d.subs||[]).length;return n;}catch(_e){return 0;}}
+function entryItemCount(e){try{const d=(e&&e.data)||{};if(d.kind==='change_order')return (d.costItems||[]).length;if(d.kind==='delivery')return (d.deliverables||[]).length;if(d.kind==='discharge')return ((d.discharge&&d.discharge.items)||[]).filter(x=>x&&String(x.item||'').trim()).length;let n=0;(d.phases||[]).forEach(p=>{if(p.enabled!==false)n+=(p.items||[]).length;});n+=(d.procOTS||[]).length+(d.procCustom||[]).length+(d.subs||[]).length;return n;}catch(_e){return 0;}}
 function archiveBumpVersion(id,note){const all=loadArchive();const idx=all.findIndex(x=>x.id===id);if(idx<0)return null;const e=all[idx];const parts=String(e.ref||(e.data&&e.data.ref)||'').split('-');let v=parseInt(parts[parts.length-1]);if(isNaN(v)){parts.push('2');v=2;}else{v=v+1;parts[parts.length-1]=String(v);}const oldRef=e.ref||(e.data&&e.data.ref)||'';const closedV=isNaN(parseInt(parts[parts.length-1]))?1:v-1;const newRef=parts.join('-');const now=new Date().toISOString();
   // Snapshot the version we're closing so we can show a diff later.
   const snap={version:closedV,ref:oldRef,date:now,note:note||'',total:entryTotal(e),items:entryItemCount(e)};
@@ -841,7 +841,7 @@ function needsFollowUp(e){
     const st=effectiveStatus(e);
     if(st!=='verstuurd'&&st!=='verlopen')return false;
     const kind=(e&&(e.kind||(e.data&&e.data.kind)))||'quote';
-    if(kind==='delivery')return false;
+    if(kind==='delivery'||kind==='discharge')return false;
     const sentAt=e.statusAt||e.updatedAt;
     const daysSince=sentAt?Math.floor((new Date()-new Date(sentAt))/86400000):0;
     const du=daysUntilExpiry(e);
@@ -2925,6 +2925,175 @@ function createDelivery(parent,lang){
   };
 }
 
+// ── Discharge certificate (decharge / handover acceptance) — separate 2-page PDF ──
+// Ontwerp één-op-één overgenomen uit de goedgekeurde Claude Design-template
+// (design_handoff_discharge_certificate). Gerenderd met pdfmake (geen headless
+// browser in dit project), maar met exact dezelfde kleuren/maten/afstanden als de
+// offerte- en opleverdocumenten, zodat ze één familie vormen.
+function defaultDischarge(){
+  return {
+    issuedDate:'', completionDate:'', inspectionDate:'',
+    warranty:{nl:'12 maanden vanaf oplevering',en:'12 months from completion'},
+    tealSignatory:'Erik Swaagstra', clientSignatory:'',
+    worksIntro:{
+      nl:'De hieronder beschreven werkzaamheden zijn door TEAL gefabriceerd, geassembleerd, getest en op locatie geïnstalleerd, conform het overeengekomen technisch ontwerp en de goedgekeurde materiaalstaat.',
+      en:'The works described below have been fabricated, assembled, tested and installed on site by TEAL in accordance with the agreed technical design and the approved bill of materials.'},
+    dischargeStatement:{
+      nl:'De werkzaamheden zijn opgeleverd conform de overeenkomst en het goedgekeurde technisch ontwerp. De opdrachtgever aanvaardt de werkzaamheden hierbij als volledig en neemt deze zonder voorbehoud in gebruik. Er resteren geen openstaande punten. Ondertekening ontslaat TEAL van alle verdere verplichtingen, met uitzondering van de hieronder genoemde garantie.',
+      en:'The works have been delivered in accordance with the contract and the approved technical design. The client hereby accepts the works as complete and takes them into use without reservation. No outstanding items remain. Signing discharges TEAL from all further obligations except the warranty stated below.'},
+    transferClause:{
+      nl:'Risico, zorg en beheer van de installatie gaan bij ondertekening over op de opdrachtgever. De garantie gaat in op de opleverdatum en dekt gebreken in fabricage en assemblage onder normale gebruiksomstandigheden. De eindfactuur wordt na ondertekening van dit certificaat verstuurd en is betaalbaar binnen 14 dagen na factuurdatum.',
+      en:'Risk, care and custody of the installation transfer to the client on the date of signing. The warranty commences on the completion date and covers defects in fabrication and assembly under normal operating conditions. The final invoice is issued following signature of this certificate, payable within 14 days of the invoice date.'},
+    items:[{item:'',status:''}],
+    documents:['']
+  };
+}
+
+function buildDischargeDocDef(D, logoImg){
+  var ink='#05100e',paper='#f6f5f1',body='#2b302f',sec='#4a4f4e',muted='#7a807e',faint='#9aa09e',hair='#e5e4e0';
+  var PW=595.28,k=0.75,ML=42.5,MT=48.2,MB=48.2,CW=PW-2*ML;
+  var lsf=function(em,fs){return em*fs;};
+  function secHead(no,title){return {columns:[{width:'auto',text:no,font:'M4',fontSize:13*k,color:muted,margin:[0,0,9,0]},{width:'*',text:String(title).toUpperCase(),font:'I6',fontSize:13*k,color:ink,characterSpacing:lsf(0.12,13*k)}],margin:[0,0,0,14*k]};}
+
+  var det=[];
+  det.push({text:[{text:(D.nl?'Locatie':'Location')+'  ',color:muted},{text:D.location||'-',color:body}],fontSize:13*k,lineHeight:1.7});
+  det.push({text:[{text:(D.nl?'Opgeleverd':'Completed')+'  ',color:muted},{text:D.completed,color:body}],fontSize:13*k,lineHeight:1.7});
+  det.push({text:[{text:(D.nl?'Geïnspecteerd':'Inspected')+'  ',color:muted},{text:D.inspected,color:body}],fontSize:13*k,lineHeight:1.7});
+  det.push({text:[{text:(D.nl?'Garantie':'Warranty')+'  ',color:muted},{text:D.warranty,color:body}],fontSize:13*k,lineHeight:1.7});
+
+  var c=[];
+  // Header
+  c.push({columns:[{width:'auto',image:logoImg,fit:[240,34*k]},{width:'*',text:(D.nl?'Dechargeverklaring':'Discharge certificate').toUpperCase(),font:'I7d',fontSize:24*k,color:'#000',characterSpacing:lsf(0.04,24*k),alignment:'right'}]});
+  c.push({columns:[
+    {width:'*',text:[{text:(D.nl?'Afgegeven door ':'Issued by ')+D.prepared_by+'\n'},{text:D.address+'\n'},{text:D.registration}],fontSize:12*k,color:sec,lineHeight:1.7},
+    {width:'auto',stack:[
+      {text:[{text:'No. ',color:faint},{text:D.certNo}],fontSize:12*k,color:sec,alignment:'right',lineHeight:1.7},
+      {text:[{text:(D.nl?'Afgegeven ':'Issued '),color:faint},{text:D.issued}],fontSize:12*k,color:sec,alignment:'right',lineHeight:1.7},
+      {text:[{text:(D.nl?'Offerteref. ':'Quotation ref. '),color:faint},{text:D.quoteRef}],fontSize:12*k,color:sec,alignment:'right',lineHeight:1.7}
+    ]}
+  ],margin:[0,11,0,0]});
+  c.push({canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,22.5*k,0,22.5*k]});
+  c.push({text:(D.nl?'Project':'Project').toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.14,11*k)});
+  c.push({text:D.title,font:'I5d',fontSize:36*k,color:ink,characterSpacing:lsf(-0.02,36*k),margin:[0,10*k,0,0]});
+  if(D.subtitle)c.push({text:D.subtitle,font:'I4d',fontSize:18*k,color:sec,margin:[0,8*k,0,0]});
+  // 01 client / 02 handover details
+  c.push({columns:[
+    {width:'*',stack:[secHead('01',D.nl?'Opdrachtgever':'Client'),{text:[D.client_name,D.client_contact,D.client_email].filter(Boolean).join('\n'),fontSize:13*k,color:body,lineHeight:1.6}]},
+    {width:'*',stack:[secHead('02',D.nl?'Opleverdetails':'Handover details'),{stack:det}]}
+  ],columnGap:48*k,margin:[0,48*k,0,0]});
+  // 03 works delivered
+  // 03 — kop, intro, en per werkzaamheid een regel met hairline eronder
+  var worksRows=[secHead('03',D.nl?'Opgeleverde werkzaamheden':'Works delivered'),{text:D.works_intro,fontSize:14*k,color:body,lineHeight:1.65}];
+  (D.items||[]).forEach(function(it,i){
+    worksRows.push({stack:[
+      {columns:[{width:24*k,text:it.no,font:'M4',fontSize:11*k,color:faint},{width:'*',text:it.item,fontSize:13*k,color:ink},{width:120*k,text:it.status||'',fontSize:13*k,color:sec}],columnGap:16*k,margin:[0,11*k,0,11*k]},
+      {canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}]}
+    ],margin:[0,i?0:18*k,0,0],unbreakable:true});
+  });
+  c.push({stack:worksRows,margin:[0,48*k,0,0]});
+
+  // ── page 2 ──
+  c.push({columns:[{width:'auto',image:logoImg,fit:[240,20*k]},{width:'*',text:D.title,font:'M4',fontSize:11*k,color:sec,alignment:'right',margin:[0,3,0,0]}],pageBreak:'before'});
+  c.push({canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,13.5,0,0]});
+  // 04 documents handed over (twee kolommen)
+  var docRows=[];
+  var docs=D.documents||[];
+  for(var di=0;di<docs.length;di+=2){
+    var cell=function(s){return s?{columns:[{width:'auto',canvas:[{type:'rect',x:0,y:4*k,w:7*k,h:7*k,color:ink}]},{width:'*',text:s,fontSize:13*k,color:body,margin:[10*k,0,0,0]}],margin:[0,10*k,0,10*k]}:{text:'',width:'*'};};
+    docRows.push({columns:[
+      {width:'*',stack:[cell(docs[di]),{canvas:[{type:'line',x1:0,y1:0,x2:(CW-48*k)/2,y2:0,lineWidth:0.5,lineColor:hair}]}]},
+      {width:'*',stack:docs[di+1]?[cell(docs[di+1]),{canvas:[{type:'line',x1:0,y1:0,x2:(CW-48*k)/2,y2:0,lineWidth:0.5,lineColor:hair}]}]:[{text:''}]}
+    ],columnGap:48*k});
+  }
+  c.push({stack:[secHead('04',D.nl?'Overgedragen documenten':'Documents handed over')].concat(docRows.length?docRows:[{text:'—',fontSize:13*k,color:muted}]),margin:[0,48*k,0,0]});
+  // 05 discharge statement
+  c.push({stack:[
+    secHead('05',D.nl?'Dechargeverklaring':'Discharge statement'),
+    {text:D.discharge_statement,fontSize:14*k,color:body,lineHeight:1.65},
+    {text:D.transfer_clause,fontSize:14*k,color:body,lineHeight:1.65,margin:[0,12*k,0,0]}
+  ],margin:[0,48*k,0,0],unbreakable:true});
+  // signatures — twee partijen
+  var partyGap=48*k, partyW=(CW-partyGap)/2, dateW=96*k, innerGap=24*k, sigW=partyW-dateW-innerGap;
+  function ruleCell(w,label){return {width:w,stack:[{text:' ',margin:[0,52*k,0,0]},{canvas:[{type:'line',x1:0,y1:0,x2:w,y2:0,lineWidth:0.5,lineColor:ink}]},{text:String(label).toUpperCase(),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,5*k,0,0]}]};}
+  function party(label,name){return {width:partyW,stack:[
+    {text:String(label).toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),margin:[0,0,0,6*k]},
+    {text:name||'',font:'I5',fontSize:15*k,color:ink},
+    {columns:[ruleCell(sigW,D.nl?'Handtekening':'Signature'),ruleCell(dateW,D.nl?'Datum':'Date')],columnGap:innerGap}
+  ]};}
+  c.push({stack:[
+    {canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,0,0,30*k]},
+    {text:(D.nl?'Ondertekend voor akkoord':'Signed for acceptance').toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.14,11*k),margin:[0,0,0,22*k]},
+    {columns:[party(D.nl?'Namens TEAL':'On behalf of TEAL',D.teal_signatory),party(D.nl?'Namens de opdrachtgever':'On behalf of the client',D.client_signatory)],columnGap:partyGap}
+  ],margin:[0,48*k,0,0],unbreakable:true});
+
+  return {pageSize:'A4',pageMargins:[ML,MT,ML,MB],
+    background:function(cp,ps){return {canvas:[{type:'rect',x:0,y:0,w:ps.width,h:ps.height,color:paper}]};},
+    footer:function(cp,pc){return {margin:[ML,10*k,ML,0],stack:[
+      {canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}]},
+      {text:(D.nl?'Dechargeverklaring ':'Discharge certificate ')+D.certNo+' · '+cp+' / '+pc,font:'M4',fontSize:10*k,color:muted,characterSpacing:lsf(0.03,10*k),alignment:'right',margin:[0,10*k,0,0]}
+    ]};},
+    content:c, defaultStyle:{font:'I4',color:body}};
+}
+
+function mapDischargeToTokens(d){
+  const L=d.lang,NL=L==='nl';
+  const fmtLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'-';
+  const dc=d.discharge||defaultDischarge();
+  const S=resolveSharedInfo(d);
+  const items=(dc.items||[]).filter(x=>x&&String(x.item||'').trim()).map((x,i)=>({no:String(i+1).padStart(2,'0'),item:x.item,status:x.status||''}));
+  const docs=(dc.documents||[]).map(s=>String(s||'').trim()).filter(Boolean);
+  return {
+    prepared_by:d.project.preparedBy||'Erik Swaagstra',
+    address:TEAL.addr+', '+TEAL.zip,
+    registration:'KvK '+TEAL.kvk+' · BTW '+TEAL.btw,
+    certNo:d.ref||'-',
+    issued:dc.issuedDate?fmtLong(dc.issuedDate):fmtLong(new Date().toISOString().slice(0,10)),
+    quoteRef:S.linkedRef||d.parentRef||'-',
+    title:S.projectName||d.project.name||(NL?'Project':'Project'),
+    subtitle:S.phase||d.project.subtitle||'',
+    client_name:S.client.name||d.client.name||'',client_contact:S.client.contact||d.client.contact||'',client_email:S.client.email||d.client.email||'',
+    location:S.location||d.project.location||'',
+    completed:dc.completionDate?fmtLong(dc.completionDate):'-',
+    inspected:dc.inspectionDate?fmtLong(dc.inspectionDate):'-',
+    warranty:t(dc.warranty,L)||'-',
+    works_intro:t(dc.worksIntro,L)||'',
+    discharge_statement:t(dc.dischargeStatement,L)||'',
+    transfer_clause:t(dc.transferClause,L)||'',
+    teal_signatory:dc.tealSignatory||'Erik Swaagstra',
+    client_signatory:dc.clientSignatory||S.client.name||d.client.name||'',
+    items:items, documents:docs, nl:NL
+  };
+}
+
+function exportDischargePDF(d){
+  const pdfFilename=`${d.lang==='en'?'Discharge certificate':'Dechargeverklaring'} ${d.ref||'Draft'} - TEAL.pdf`;
+  if(window.pdfMake){
+    pdfMake.vfs=Object.assign({},pdfMake.vfs||{},window._PDF_VFS||{});
+    pdfMake.fonts={I4:{normal:'I4.ttf',bold:'I7.ttf'},I5:{normal:'I5.ttf',bold:'I7.ttf'},I6:{normal:'I6.ttf',bold:'I7.ttf'},I7:{normal:'I7.ttf',bold:'I7.ttf'},M4:{normal:'M4.ttf',bold:'M5.ttf'},I5d:{normal:'I5d.ttf',bold:'I7d.ttf'},I7d:{normal:'I7d.ttf',bold:'I7d.ttf'},I4d:{normal:'I4d.ttf',bold:'I7d.ttf'},Sig:{normal:'Sacramento.ttf',bold:'Sacramento.ttf'}};
+  }
+  const D=mapDischargeToTokens(d);
+  const docDef=buildDischargeDocDef(D,window._TEAL_LOGO_PNG);
+  pdfMake.createPdf(docDef).getBuffer(function(buf){const blob=new Blob([buf],{type:'application/pdf'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=pdfFilename;a.click();URL.revokeObjectURL(url);});
+}
+
+// Discharge certificate factory — hangt onder een offerte, net als change order / oplevering
+function createDischarge(parent,lang){
+  const L=lang||(parent&&parent.lang)||'nl';
+  const parentRef=parent?(parent.ref||''):'';
+  let n=1;
+  try{if(parentRef)n=loadArchiveLive().filter(e=>e.kind==='discharge'&&e.parentRef===parentRef).length+1;}catch(e){}
+  const ref=parentRef?('DC'+n+'-'+parentRef):('DC-'+new Date().toISOString().slice(2,10).replace(/-/g,'')+'-1');
+  const pp=(parent&&parent.data&&parent.data.project)||{};
+  const pc=(parent&&parent.data&&parent.data.client)||{};
+  return {
+    kind:'discharge',v:1,lang:L,ref:ref,
+    parentId:parent?parent.id:null,parentRef:parentRef,
+    project:{name:parent?(parent.projectName||pp.name||''):'',preparedBy:'Erik Swaagstra',location:pp.location||'',phaseLabel:pp.phaseLabel||''},
+    client:{name:pc.name||'',contact:pc.contact||'',email:pc.email||''},
+    discharge:defaultDischarge(),
+  };
+}
+
 // ── Change order: factory, tokens, PDF ──
 function createChangeOrder(parent,lang){
   const L=lang||(parent&&parent.lang)||'nl';
@@ -2956,7 +3125,7 @@ function createChangeOrder(parent,lang){
 function resolveSharedInfo(doc){
   if(!doc)return {projectName:'',client:{},location:'',phase:'',linkedRef:'',source:'self',editable:true};
   var arch=[];try{arch=loadArchiveLive();}catch(e){}
-  var isQuote=function(x){return x.kind!=='change_order'&&x.kind!=='delivery';};
+  var isQuote=function(x){return x.kind!=='change_order'&&x.kind!=='delivery'&&x.kind!=='discharge';};
   var pref=(doc.parentRef||'').trim(),pid=doc.parentId||null,par=null;
   if(pref)par=arch.find(function(x){return isQuote(x)&&x.ref===pref;});
   if(!par&&pid)par=arch.find(function(x){return isQuote(x)&&x.id===pid;});
@@ -3095,7 +3264,7 @@ async function pushToOdoo(entry,opts={}){
 }
 
 // ── Dashboard ──
-function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,onImport,onDuplicate,onDelete,onNewCO,onNewDelivery,onNewCOForProject,onNewDeliveryForProject,onBumpVersion}){
+function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,onImport,onDuplicate,onDelete,onNewCO,onNewDelivery,onNewCOForProject,onNewDeliveryForProject,onNewDischargeForProject,onBumpVersion}){
   const[archive,setArchive]=useState(loadArchiveLive());
   const[baseOpen,setBaseOpen]=useState(false);
   const[expandedId,setExpandedId]=useState(null);
@@ -3137,7 +3306,7 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
   };
   // Classify: quotations (parents) vs standalone children (change orders + deliveries)
   const kindOf=e=>e.kind||(e.data&&e.data.kind)||'quote';
-  const isChild=e=>{const k=kindOf(e);return k==='change_order'||k==='delivery';};
+  const isChild=e=>{const k=kindOf(e);return k==='change_order'||k==='delivery'||k==='discharge';};
   const parents=archive.filter(e=>!isChild(e)).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
   const childrenByParent={};const orphanChildren=[];
   archive.filter(isChild).forEach(c=>{const pid=c.parentId||(c.data&&c.data.parentId);const pref=c.parentRef||(c.data&&c.data.parentRef);const parent=parents.find(p=>p.ref===pref)||parents.find(p=>p.id===pid);if(parent){(childrenByParent[parent.id]=childrenByParent[parent.id]||[]).push(c);}else{orphanChildren.push(c);}});
@@ -3149,7 +3318,7 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
   orphanChildren.forEach(c=>{const nm=(c.projectName||(c.data&&c.data.project&&c.data.project.name)||'').trim();if(!nm){namelessOrphans.push(c);return;}if(!projMap[nm]){projMap[nm]={key:nm,name:nm,first:null,offertes:[],loose:[]};projOrder.push(nm);}projMap[nm].loose.push(c);});
   Object.keys(projMap).forEach(k=>(projMap[k].loose||[]).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt)));
   // Filters (doc-type + status)
-  const matchType=e=>{if(typeFilter==='alle')return true;const k=kindOf(e);if(typeFilter==='offertes')return k!=='change_order'&&k!=='delivery';if(typeFilter==='change_orders')return k==='change_order';if(typeFilter==='deliveries')return k==='delivery';return true;};
+  const matchType=e=>{if(typeFilter==='alle')return true;const k=kindOf(e);if(typeFilter==='offertes')return k!=='change_order'&&k!=='delivery'&&k!=='discharge';if(typeFilter==='change_orders')return k==='change_order';if(typeFilter==='deliveries')return k==='delivery';if(typeFilter==='discharges')return k==='discharge';return true;};
   const matchStatus=e=>filter==='alle'?true:filter==='opvolgen'?needsFollowUp(e):effectiveStatus(e)===filter;
   const qn=q.trim().toLowerCase();
   const matchQ=e=>{if(!qn)return true;const hay=[(e.projectName||''),clientLabel(e),(e.ref||''),(e.data&&e.data.project&&(e.data.project.subtitle||e.data.project.phaseLabel))||''].join(' ').toLowerCase();return hay.includes(qn);};
@@ -3157,14 +3326,14 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
   // KPI's (deliveries carry no money)
   const _now=new Date();const _q0=new Date(_now.getFullYear(),Math.floor(_now.getMonth()/3)*3,1);
   let openVal=0,wonQ=0,acc=0,rej=0;
-  archive.forEach(e=>{if(kindOf(e)==='delivery')return;const st=effectiveStatus(e);const tot=entryTotal(e);
+  archive.forEach(e=>{if(kindOf(e)==='delivery'||kindOf(e)==='discharge')return;const st=effectiveStatus(e);const tot=entryTotal(e);
     if(st==='concept'||st==='verstuurd')openVal+=tot;
     if(st==='geaccepteerd'){acc++;const at=new Date(e.statusAt||e.updatedAt);if(at>=_q0)wonQ+=tot;}
     if(st==='afgewezen')rej++;});
   const winRate=(acc+rej)>0?Math.round(acc/(acc+rej)*100):null;
   const counts={alle:archive.length};STATUS_ORDER.concat('verlopen').forEach(s=>{counts[s]=archive.filter(e=>effectiveStatus(e)===s).length;});
   counts.opvolgen=archive.filter(needsFollowUp).length;
-  const typeCounts={alle:archive.length,offertes:archive.filter(e=>kindOf(e)!=='change_order'&&kindOf(e)!=='delivery').length,change_orders:archive.filter(e=>kindOf(e)==='change_order').length,deliveries:archive.filter(e=>kindOf(e)==='delivery').length};
+  const typeCounts={alle:archive.length,offertes:archive.filter(e=>kindOf(e)!=='change_order'&&kindOf(e)!=='delivery'&&kindOf(e)!=='discharge').length,change_orders:archive.filter(e=>kindOf(e)==='change_order').length,deliveries:archive.filter(e=>kindOf(e)==='delivery').length,discharges:archive.filter(e=>kindOf(e)==='discharge').length};
   // Build visible project groups (an offerte shows if it or any of its children matches the filters)
   const groups=projOrder.map(key=>{const g=projMap[key];const rows=[];g.offertes.forEach(off=>{const kids=childrenByParent[off.id]||[];const visKids=kids.filter(docVisible);if(docVisible(off)||visKids.length){rows.push({e:off,child:false});visKids.forEach(c=>rows.push({e:c,child:true}));}});(g.loose||[]).filter(docVisible).forEach(c=>rows.push({e:c,child:false}));const src=g.first||{projectName:g.name,type:'build',data:{client:((g.loose&&g.loose[0]&&g.loose[0].data&&g.loose[0].data.client)||{})}};return {key,name:g.name,src,external:!g.first,rows};}).filter(g=>g.rows.length);
   // Sort project groups by chosen key
@@ -3182,8 +3351,8 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
   const anyVisible=groups.length>0||orphanRows.length>0;
   const renderRow=(item,indent)=>{
     const isExpanded=expandedId===item.id;
-    const k=kindOf(item);const isCO=k==='change_order';const isDel=k==='delivery';
-    const badge=isCO?{t:'CO',c:'#6b4ea0',label:'Change order'}:isDel?{t:'OPL',c:'#0f766e',label:'Oplevering'}:{t:(item.type==='build'?'B':'A'),c:item.type==='build'?'#071412':'#2D8659',label:(item.type==='build'?'Build offerte':'Assemble offerte')};
+    const k=kindOf(item);const isCO=k==='change_order';const isDel=k==='delivery';const isDC=k==='discharge';
+    const badge=isCO?{t:'CO',c:'#6b4ea0',label:'Change order'}:isDel?{t:'OPL',c:'#0f766e',label:'Oplevering'}:isDC?{t:'DC',c:'#0f766e',label:'Dechargeverklaring'}:{t:(item.type==='build'?'B':'A'),c:item.type==='build'?'#071412':'#2D8659',label:(item.type==='build'?'Build offerte':'Assemble offerte')};
     const meta=statusMeta[effectiveStatus(item)]||statusMeta.concept;
     const phase=item.data&&item.data.project&&(item.data.project.subtitle||item.data.project.phaseLabel);
     const title=(!indent&&phase)?phase:(item.projectName||badge.label);
@@ -3330,7 +3499,7 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
       const bt=byType('build'),at=byType('assemble');
       const cycles=parentsA.map(e=>{const acD=statusChangeDate(e,'geaccepteerd');if(!acD)return null;const start=statusChangeDate(e,'verstuurd')||e.createdAt;return daysBetween(start,acD);}).filter(v=>v!=null&&v>=0);
       const avgCycle=cycles.length?Math.round(cycles.reduce((s,v)=>s+v,0)/cycles.length):null;
-      const qMap={};archive.forEach(e=>{if(kindOf(e)==='delivery')return;if(effectiveStatus(e)!=='geaccepteerd')return;const at2=e.statusAt||statusChangeDate(e,'geaccepteerd')||e.updatedAt;if(!at2)return;const dt=new Date(at2);const key=dt.getFullYear()+'-Q'+(Math.floor(dt.getMonth()/3)+1);qMap[key]=(qMap[key]||0)+entryTotal(e);});
+      const qMap={};archive.forEach(e=>{if(kindOf(e)==='delivery'||kindOf(e)==='discharge')return;if(effectiveStatus(e)!=='geaccepteerd')return;const at2=e.statusAt||statusChangeDate(e,'geaccepteerd')||e.updatedAt;if(!at2)return;const dt=new Date(at2);const key=dt.getFullYear()+'-Q'+(Math.floor(dt.getMonth()/3)+1);qMap[key]=(qMap[key]||0)+entryTotal(e);});
       const qKeys=Object.keys(qMap).sort();const qMax=Math.max(1,...qKeys.map(k=>qMap[k]));
       const rateBar=(lab,o,col)=>{return <div style={{marginBottom:10}}>
         <div className="flex" style={{justifyContent:'space-between',fontSize:12,marginBottom:3}}><span style={{fontWeight:600}}>{lab}</span><span style={{color:'#888'}}>{o.rate==null?'—':o.rate+'%'} · {o.a}/{o.a+o.r} <span style={{color:'#b0b4b2'}}>({o.n} tot.)</span></span></div>
@@ -3366,8 +3535,8 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
 
     {/* Doc-type filter */}
     <div className="flex g8" style={{marginBottom:8,flexWrap:'wrap'}}>
-      {[['alle','Alle'],['offertes','Offertes'],['change_orders','Change orders'],['deliveries','Opleveringen']].map(([id,lab])=>{
-        const on=typeFilter===id;const c=id==='change_orders'?'#6b4ea0':id==='deliveries'?'#0f766e':'#071412';
+      {[['alle','Alle'],['offertes','Offertes'],['change_orders','Change orders'],['deliveries','Opleveringen'],['discharges','Decharges']].map(([id,lab])=>{
+        const on=typeFilter===id;const c=id==='change_orders'?'#6b4ea0':id==='deliveries'?'#0f766e':id==='discharges'?'#0f766e':'#071412';
         return <button key={id} className="btn btn-sm" onClick={()=>setTypeFilter(id)} style={{border:'1px solid '+(on?c:'#d0d0ce'),background:on?c:'#fff',color:on?'#fff':'#555',fontWeight:on?700:600}}>{lab} <span style={{opacity:.7}}>({typeCounts[id]||0})</span></button>;
       })}
     </div>
@@ -3398,12 +3567,13 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
             <button className="btn btn-xs btn-g" title="Nieuwe offerte in dit project" onClick={()=>onNewInProject(g.src)}>+ Offerte</button>
             <button className="btn btn-xs btn-g" title="Change order" onClick={()=>onNewCOForProject(g.name)}>+ CO</button>
             <button className="btn btn-xs btn-g" title="Oplevering" onClick={()=>onNewDeliveryForProject(g.name)}>+ Oplev.</button>
+            <button className="btn btn-xs btn-g" title="Dechargeverklaring (oplever-certificaat)" onClick={()=>onNewDischargeForProject(g.name)}>+ Decharge</button>
           </div>
         </div>
         {!isColl&&g.rows.length>1&&(()=>{
           const seq=g.rows.slice().sort((a,b)=>new Date(a.e.createdAt||a.e.updatedAt||0)-new Date(b.e.createdAt||b.e.updatedAt||0));
           return <div style={{display:'flex',alignItems:'flex-start',gap:0,padding:'12px 18px 4px',overflowX:'auto',borderBottom:'1px solid #f1f0ec'}}>
-            {seq.map((r,i)=>{const e=r.e;const k=kindOf(e);const m=statusMeta[effectiveStatus(e)]||statusMeta.concept;const tl=k==='change_order'?'CO':k==='delivery'?'OPL':(e.type==='build'?'B':'A');return <div key={e.id} style={{display:'flex',alignItems:'center',flexShrink:0}}>
+            {seq.map((r,i)=>{const e=r.e;const k=kindOf(e);const m=statusMeta[effectiveStatus(e)]||statusMeta.concept;const tl=k==='change_order'?'CO':k==='delivery'?'OPL':k==='discharge'?'DC':(e.type==='build'?'B':'A');return <div key={e.id} style={{display:'flex',alignItems:'center',flexShrink:0}}>
               {i>0&&<div style={{width:28,height:2,background:'#e6e5e0',margin:'0 2px',marginBottom:22}}/>}
               <div title={tl+' '+e.ref+' — '+m.label} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,minWidth:44}}>
                 <span style={{width:12,height:12,borderRadius:12,background:m.color,border:'2px solid #fff',boxShadow:'0 0 0 1px '+m.color}}/>
@@ -3680,6 +3850,113 @@ function DeliveryFlow({data:dv,set,onBack}){
   </div>;
 }
 
+// ── Discharge certificate editor ──
+function DischargeTab({data:d,set}){
+  const NL=d.lang==='nl';
+  const dc=d.discharge||defaultDischarge();
+  const up=(patch)=>set({...d,discharge:{...dc,...patch}});
+  const upBil=(field,val)=>{const o=dc[field];const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[d.lang]=val;up({[field]:nn});};
+  const items=dc.items&&dc.items.length?dc.items:[{item:'',status:''}];
+  const setItems=(arr)=>up({items:arr});
+  const docs=dc.documents&&dc.documents.length?dc.documents:[''];
+  const setDocs=(arr)=>up({documents:arr});
+  const hasContent=items.some(x=>String(x.item||'').trim());
+  return <div>
+    <div className="card">
+      <div className="between" style={{alignItems:'center'}}>
+        <div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Dechargeverklaring':'Discharge certificate'}</div>
+        <button className="btn btn-s" disabled={!hasContent} onClick={()=>exportDischargePDF(d)}>{NL?'Download certificaat':'Download certificate'}</button>
+      </div>
+      <p className="sm muted" style={{margin:'6px 0 0'}}>{NL?'Het document dat bij oplevering wordt getekend: wat is opgeleverd, welke documenten zijn overgedragen, en de decharge van TEAL. Aparte A4-PDF met handtekeningvelden voor beide partijen.':'The document signed at handover: what was delivered, which documents transferred, and TEAL’s discharge. A separate A4 PDF with signature fields for both parties.'}</p>
+    </div>
+
+    <div className="card">
+      <div className="card-h">{NL?'Datums & garantie':'Dates & warranty'}</div>
+      <div className="row3">
+        <div className="fg"><label>{NL?'Afgiftedatum':'Issue date'}</label><input type="date" value={dc.issuedDate||''} onChange={e=>up({issuedDate:e.target.value})}/></div>
+        <div className="fg"><label>{NL?'Opleverdatum':'Completion date'}</label><input type="date" value={dc.completionDate||''} onChange={e=>up({completionDate:e.target.value})}/></div>
+        <div className="fg"><label>{NL?'Inspectiedatum':'Inspection date'}</label><input type="date" value={dc.inspectionDate||''} onChange={e=>up({inspectionDate:e.target.value})}/></div>
+      </div>
+      <div className="fg"><label>{NL?'Garantie':'Warranty'}</label><input value={t(dc.warranty,d.lang)} onChange={e=>upBil('warranty',e.target.value)}/></div>
+    </div>
+
+    <div className="card">
+      <div className="card-h">{NL?'Opgeleverde werkzaamheden':'Works delivered'}</div>
+      {items.map((it,i)=><div key={i} className="row" style={{alignItems:'center'}}>
+        <div className="fg" style={{flex:3}}><input placeholder={NL?'Omschrijving werkzaamheid':'Work item'} value={it.item||''} onChange={e=>{const a=items.slice();a[i]={...a[i],item:e.target.value};setItems(a);}}/></div>
+        <div className="fg" style={{flex:1}}><input placeholder={NL?'Status (bv. Geïnstalleerd)':'Status (e.g. Installed)'} value={it.status||''} onChange={e=>{const a=items.slice();a[i]={...a[i],status:e.target.value};setItems(a);}}/></div>
+        <button className="btn btn-sm btn-g" onClick={()=>{const a=items.slice();a.splice(i,1);setItems(a.length?a:[{item:'',status:''}]);}}>×</button>
+      </div>)}
+      <button className="btn btn-sm btn-g" onClick={()=>setItems([...items,{item:'',status:''}])}>+ {NL?'Regel':'Row'}</button>
+    </div>
+
+    <div className="card">
+      <div className="card-h">{NL?'Overgedragen documenten':'Documents handed over'}</div>
+      {docs.map((s,i)=><div key={i} className="row" style={{alignItems:'center'}}>
+        <div className="fg" style={{flex:1}}><input placeholder={NL?'Documentnaam':'Document name'} value={s} onChange={e=>{const a=docs.slice();a[i]=e.target.value;setDocs(a);}}/></div>
+        <button className="btn btn-sm btn-g" onClick={()=>{const a=docs.slice();a.splice(i,1);setDocs(a.length?a:['']);}}>×</button>
+      </div>)}
+      <button className="btn btn-sm btn-g" onClick={()=>setDocs([...docs,''])}>+ {NL?'Document':'Document'}</button>
+    </div>
+
+    <div className="card">
+      <div className="card-h">{NL?'Handtekeningen':'Signatures'}</div>
+      <div className="row">
+        <div className="fg"><label>{NL?'Namens TEAL':'On behalf of TEAL'}</label><input value={dc.tealSignatory||''} onChange={e=>up({tealSignatory:e.target.value})}/></div>
+        <div className="fg"><label>{NL?'Namens opdrachtgever':'On behalf of the client'}</label><input value={dc.clientSignatory||''} onChange={e=>up({clientSignatory:e.target.value})}/></div>
+      </div>
+    </div>
+
+    <div className="card">
+      <div className="card-h">{NL?'Juridische teksten':'Legal copy'}</div>
+      {[['worksIntro',NL?'Inleiding werkzaamheden':'Works intro'],['dischargeStatement',NL?'Dechargeverklaring':'Discharge statement'],['transferClause',NL?'Risico-overgang, garantie & eindfactuur':'Risk transfer, warranty & final invoice']].map(([f,lab])=><div key={f} style={{marginBottom:10}}>
+        <div className="between" style={{alignItems:'center'}}><label style={{margin:0}}>{lab}</label><button className="btn btn-sm btn-g" style={{padding:'2px 8px',fontSize:11}} onClick={()=>up({[f]:defaultDischarge()[f]})}>{NL?'standaardtekst':'default text'}</button></div>
+        <textarea rows={3} value={t(dc[f],d.lang)} onChange={e=>upBil(f,e.target.value)}/>
+      </div>)}
+    </div>
+  </div>;
+}
+function DischargeFlow({data:dv,set,onBack}){
+  const NL=dv.lang==='nl';
+  const upProj=(patch)=>set({...dv,project:{...dv.project,...patch}});
+  const upClient=(patch)=>set({...dv,client:{...dv.client,...patch}});
+  const S=resolveSharedInfo(dv);
+  return <div>
+    <div className="between mb16" style={{flexWrap:'wrap',gap:8}}>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <button className="btn btn-g btn-sm" onClick={onBack}>‹ Dashboard</button>
+        <span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'#0f766e'}}>{NL?'decharge':'discharge'}</span>
+        <span style={{fontSize:12,color:'#999'}}>{dv.ref}{dv.parentRef?' · '+(NL?'bij ':'for ')+dv.parentRef:''}</span>
+      </div>
+      <div className="flex g8" style={{alignItems:'center'}}>
+        <div className="flex" style={{border:'1px solid #d0d0ce',borderRadius:4,overflow:'hidden'}}>
+          {['nl','en'].map(lng=><button key={lng} className="btn btn-sm" onClick={()=>set({...dv,lang:lng})} style={{borderRadius:0,border:0,background:dv.lang===lng?'#071412':'#fff',color:dv.lang===lng?'#fff':'#555',fontWeight:dv.lang===lng?700:600}}>{lng.toUpperCase()}</button>)}
+        </div>
+      </div>
+    </div>
+    {S.editable
+      ? <div className="card"><div className="card-h">{NL?'Projectgegevens':'Project details'}</div>
+          <div className="row"><div className="fg"><label>{NL?'Projectnaam':'Project name'}</label><input value={dv.project.name} onChange={e=>upProj({name:e.target.value})}/></div>
+            <div className="fg"><label>{NL?'Gekoppelde offerte (ref.)':'Linked quotation (ref.)'}</label><input value={dv.parentRef||''} onChange={e=>{const pr=e.target.value;let pid=null;if(pr.trim()){try{const par=loadArchiveLive().find(x=>x.kind!=='change_order'&&x.kind!=='delivery'&&x.kind!=='discharge'&&x.ref===pr.trim());pid=par?par.id:null;}catch(_e){}}set({...dv,parentRef:pr,parentId:pid});}}/></div></div>
+          <div className="row3"><div className="fg"><label>{NL?'Klant':'Client'}</label><input value={dv.client.name} onChange={e=>upClient({name:e.target.value})}/></div>
+            <div className="fg"><label>Contact</label><input value={dv.client.contact} onChange={e=>upClient({contact:e.target.value})}/></div>
+            <div className="fg"><label>E-mail</label><input value={dv.client.email} onChange={e=>upClient({email:e.target.value})}/></div></div>
+          <div className="row"><div className="fg"><label>{NL?'Locatie':'Location'}</label><input value={dv.project.location||''} onChange={e=>upProj({location:e.target.value})}/></div></div>
+        </div>
+      : <div className="card">
+          <div className="between" style={{alignItems:'baseline'}}><div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Projectgegevens':'Project details'}</div>
+            <span className="sm muted">{S.source==='offerte'?(NL?'overgenomen van de offerte':'inherited from the quotation'):(NL?'overgenomen van het project':'inherited from the project')}</span></div>
+          <div className="sm" style={{marginTop:10,lineHeight:1.8,color:'#2b302f'}}>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Project':'Project'}</span>{S.projectName||'-'}{S.phase?' · '+S.phase:''}</div>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Klant':'Client'}</span>{[S.client.name,S.client.contact,S.client.email].filter(Boolean).join(' · ')||'-'}</div>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Gekoppelde offerte':'Linked quotation'}</span>{S.linkedRef||'-'}</div>
+            {S.location&&<div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Locatie':'Location'}</span>{S.location}</div>}
+          </div>
+        </div>}
+    <DischargeTab data={dv} set={set}/>
+  </div>;
+}
+
 // ── App ──
 // Open Claude (webapp) met een kant-en-klare prompt, zodat Claude via de "TEAL Offerte Tool"-
 // connector de offerte maakt/bijwerkt. Gebruikt je Claude-abonnement (geen API-kosten). De prompt
@@ -3698,7 +3975,7 @@ function App(){
 
   useEffect(()=>{
     migrateDeliveryRefs();
-    const _std=x=>x&&(x.kind==='change_order'||x.kind==='delivery');
+    const _std=x=>x&&(x.kind==='change_order'||x.kind==='delivery'||x.kind==='discharge');
     const imp=loadImportHash();
     if(imp){const saved=archiveSave(imp,'created');save(saved);setD(saved);setShowDash(false);history.replaceState(null,'',location.pathname);return;}
     const sid=loadShortId();
@@ -3716,7 +3993,7 @@ function App(){
     else{setD(null);}
   },[]);
 
-  const isStandalone=(x)=>x&&(x.kind==='change_order'||x.kind==='delivery');
+  const isStandalone=(x)=>x&&(x.kind==='change_order'||x.kind==='delivery'||x.kind==='discharge');
   const openQuote=(data)=>{const md=isStandalone(data)?data:migrateConds(data);const saved=archiveSave(md,'updated');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const newQuote=(type)=>{const proj=createProject(type);const saved=archiveSave(proj,'created');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const newQuoteInProject=(fromEntry)=>{const type=fromEntry.type||(fromEntry.data&&fromEntry.data.type)||'build';const proj=createProject(type);proj.project.name=fromEntry.projectName||(fromEntry.data&&fromEntry.data.project&&fromEntry.data.project.name)||'';const pc=(fromEntry.data&&fromEntry.data.client)||{};proj.client={...proj.client,name:pc.name||'',contact:pc.contact||'',email:pc.email||'',addr:pc.addr||'',zip:pc.zip||'',city:pc.city||''};proj.project.location=(fromEntry.data&&fromEntry.data.project&&fromEntry.data.project.location)||'';const saved=archiveSave(proj,'created');save(saved);setD(saved);setTab('project');setShowDash(false);};
@@ -3729,6 +4006,8 @@ function App(){
   const newDelivery=(parentEntry)=>{const lang=parentEntry?parentEntry.lang:((d&&d.lang)||'nl');const dvd=createDelivery(parentEntry,lang);const saved=archiveSave(dvd,'created');save(saved);setD(saved);setShowDash(false);};
   const newCOForProject=(name)=>{const co=createChangeOrder(null,(d&&d.lang)||'nl');if(name)co.project.name=name;const saved=archiveSave(co,'created');save(saved);setD(saved);setShowDash(false);};
   const newDeliveryForProject=(name)=>{const dvd=createDelivery(null,(d&&d.lang)||'nl');if(name)dvd.project.name=name;const saved=archiveSave(dvd,'created');save(saved);setD(saved);setShowDash(false);};
+  const newDischarge=(parentEntry)=>{const lang=parentEntry?parentEntry.lang:((d&&d.lang)||'nl');const dcd=createDischarge(parentEntry,lang);const saved=archiveSave(dcd,'created');save(saved);setD(saved);setShowDash(false);};
+  const newDischargeForProject=(name)=>{const dcd=createDischarge(null,(d&&d.lang)||'nl');if(name)dcd.project.name=name;const saved=archiveSave(dcd,'created');save(saved);setD(saved);setShowDash(false);};
   const newExternalProject=()=>{const name=window.prompt('Projectnaam (offerte buiten de tool):');if(name===null)return;const co=createChangeOrder(null,'nl');co.project.name=(name||'').trim();const saved=archiveSave(co,'created');save(saved);setD(saved);setShowDash(false);};
   const importDoc=(merged)=>{if(!merged)return;const saved=archiveSave(merged,'created');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const bumpVersion=(id)=>{const note=window.prompt('Wat is er anders in deze nieuwe versie? (kort)');if(note===null)return;const e=archiveBumpVersion(id,note);if(e&&d&&d._archiveId===id){setD(e.data);save(e.data);}};
@@ -3807,16 +4086,19 @@ function App(){
 
   const isCO=d&&d.kind==='change_order';
   const isDelivery=d&&d.kind==='delivery';
+  const isDischarge=d&&d.kind==='discharge';
+  const isChild=isCO||isDelivery||isDischarge;
   return <div className="app">
     <div className="topbar">
-      <Header data={showDash||isCO||isDelivery?null:d} onPdf={handlePdf} onExport={handleExport} setData={setDWithArchive} onBack={goToDash}/>
-      {!showDash&&d&&!isCO&&!isDelivery&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
-      {!showDash&&d&&!isCO&&!isDelivery&&<button className="btn btn-g btn-sm" style={{marginLeft:8,color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} title={d.lang==='nl'?'Alle secties op één doorlopende pagina (geen tabs)':'All sections on one continuous page (no tabs)'} onClick={()=>setTab(t=>t==='all'?'project':'all')}>{tab==='all'?(d.lang==='nl'?'Per tab':'By tab'):(d.lang==='nl'?'📄 Eén pagina':'📄 One page')}</button>}
+      <Header data={showDash||isChild?null:d} onPdf={handlePdf} onExport={handleExport} setData={setDWithArchive} onBack={goToDash}/>
+      {!showDash&&d&&!isChild&&<TabNav tabs={tabs} active={tab} onChange={setTab}/>}
+      {!showDash&&d&&!isChild&&<button className="btn btn-g btn-sm" style={{marginLeft:8,color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} title={d.lang==='nl'?'Alle secties op één doorlopende pagina (geen tabs)':'All sections on one continuous page (no tabs)'} onClick={()=>setTab(t=>t==='all'?'project':'all')}>{tab==='all'?(d.lang==='nl'?'Per tab':'By tab'):(d.lang==='nl'?'📄 Eén pagina':'📄 One page')}</button>}
     </div>
     <div className="main">
-      {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onNewFrom={newQuoteFrom} onNewInProject={newQuoteInProject} onNewExternalProject={newExternalProject} onImport={importDoc} onDuplicate={duplicateQuote} onDelete={deleteQuote} onNewCO={newCO} onNewDelivery={newDelivery} onNewCOForProject={newCOForProject} onNewDeliveryForProject={newDeliveryForProject} onBumpVersion={bumpVersion}/>:
+      {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onNewFrom={newQuoteFrom} onNewInProject={newQuoteInProject} onNewExternalProject={newExternalProject} onImport={importDoc} onDuplicate={duplicateQuote} onDelete={deleteQuote} onNewCO={newCO} onNewDelivery={newDelivery} onNewCOForProject={newCOForProject} onNewDeliveryForProject={newDeliveryForProject} onNewDischargeForProject={newDischargeForProject} onBumpVersion={bumpVersion}/>:
       isCO?<ChangeOrderFlow data={d} set={setDWithArchive} onBack={goToDash}/>:
       isDelivery?<DeliveryFlow data={d} set={setDWithArchive} onBack={goToDash}/>:
+      isDischarge?<DischargeFlow data={d} set={setDWithArchive} onBack={goToDash}/>:
       !d?<Start onSelect={type=>{if(type==='load'){const r=load();if(r)openQuote(r);}else newQuote(type);}}/>:<>
         <div className="between mb16">
           <div style={{display:'flex',alignItems:'center',gap:8}}>
