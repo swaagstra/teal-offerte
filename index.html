@@ -3036,9 +3036,9 @@ function buildDischargeDocDef(D, logoImg){
     c.push({stack:stStack,margin:[0,22*k,0,0],unbreakable:true});
   }
   // signatures — twee partijen
-  var partyGap=48*k, partyW=(CW-partyGap)/2, dateW=96*k, innerGap=24*k, sigW=partyW-dateW-innerGap;
+  var partyGap=48*k, partyW=(CW-partyGap)/2, dateW=118*k, innerGap=20*k, sigW=partyW-dateW-innerGap;
   function ruleCell(w,label,val,cursive,img){var top;
-    if(img){top={image:img,fit:[w-4,24*k],margin:[0,11*k,0,3*k]};}
+    if(img){top={image:img,fit:[w-4,40*k],margin:[0,4*k,0,3*k]};}
     else if(val){top={text:val,font:cursive?'Sig':'I5',fontSize:(cursive?24:12)*k,color:ink,margin:[0,cursive?26*k:30*k,0,2*k]};}
     else {top={text:' ',margin:[0,38*k,0,0]};}
     return {width:w,stack:[top,{canvas:[{type:'line',x1:0,y1:0,x2:w,y2:0,lineWidth:0.5,lineColor:ink}]},{text:String(label).toUpperCase(),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,5*k,0,0]}]};}
@@ -3991,9 +3991,9 @@ function DischargeDoc({T,L}){
           {parties.map(([lab,name],i)=>{const isClient=i===1;const cursiveSig=isClient&&T.signed?T.signed_name:'';const img=(!isClient&&T.teal_signature)?T.teal_signature:'';const sd=isClient?(T.signed?T.signed_date:''):(T.teal_signature?T.issued:'');const filled=cursiveSig||img;return <div key={i} style={{flex:1}}>
             <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted,marginBottom:6}}>{lab}</div>
             <div style={{fontSize:15,fontWeight:500,color:ink}}>{(cursiveSig)||name||'—'}</div>
-            <div style={{display:'flex',gap:24,marginTop:filled?26:52,alignItems:'flex-end'}}>
-              <div style={{flex:1}}><div style={{height:filled?34:16,display:'flex',alignItems:'flex-end',overflow:'hidden'}}>{img?<img src={img} style={{maxHeight:34,maxWidth:'100%',objectFit:'contain',objectPosition:'left bottom'}}/>:(cursiveSig?<span style={{fontFamily:cursive,fontStyle:'italic',fontSize:26,color:ink,lineHeight:1,whiteSpace:'nowrap'}}>{cursiveSig}</span>:null)}</div><div style={{borderTop:'1px solid '+ink,paddingTop:5,fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:muted}}>{NL?'Handtekening':'Signature'}</div></div>
-              <div style={{width:96}}><div style={{height:filled?34:16,display:'flex',alignItems:'flex-end'}}>{sd?<span style={{fontSize:12,color:ink,lineHeight:1,paddingBottom:2}}>{sd}</span>:null}</div><div style={{borderTop:'1px solid '+ink,paddingTop:5,fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:muted}}>{NL?'Datum':'Date'}</div></div>
+            <div style={{display:'flex',gap:24,marginTop:filled?20:52,alignItems:'flex-end'}}>
+              <div style={{flex:1}}><div style={{height:filled?56:16,display:'flex',alignItems:'flex-end',overflow:'hidden'}}>{img?<img src={img} style={{maxHeight:56,maxWidth:'100%',objectFit:'contain',objectPosition:'left bottom'}}/>:(cursiveSig?<span style={{fontFamily:cursive,fontStyle:'italic',fontSize:30,color:ink,lineHeight:1,whiteSpace:'nowrap'}}>{cursiveSig}</span>:null)}</div><div style={{borderTop:'1px solid '+ink,paddingTop:5,fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:muted}}>{NL?'Handtekening':'Signature'}</div></div>
+              <div style={{width:135,flexShrink:0}}><div style={{height:filled?56:16,display:'flex',alignItems:'flex-end'}}>{sd?<span style={{fontSize:12,color:ink,lineHeight:1,paddingBottom:3,whiteSpace:'nowrap'}}>{sd}</span>:null}</div><div style={{borderTop:'1px solid '+ink,paddingTop:5,fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:muted}}>{NL?'Datum':'Date'}</div></div>
             </div>
           </div>;})}
         </div>
