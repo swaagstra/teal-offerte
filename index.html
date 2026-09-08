@@ -699,6 +699,10 @@ const AK='teal.offerte.all'; // archive key
 const AV_KEY={nl:'teal.av.nl.b64',en:'teal.av.en.b64'};
 const getAVB64=(lng)=>{try{return localStorage.getItem(lng==='en'?AV_KEY.en:AV_KEY.nl)||null;}catch(e){return null;}};
 const setAVB64=(lng,b64)=>{try{const k=lng==='en'?AV_KEY.en:AV_KEY.nl;if(b64)localStorage.setItem(k,b64);else localStorage.removeItem(k);}catch(e){}};
+// TEAL-handtekening (afbeelding, data-URL) — geldt voor alle documenten, bewaard in deze browser.
+const SIG_KEY='teal.signature.png';
+const getSignature=()=>{try{return localStorage.getItem(SIG_KEY)||null;}catch(e){return null;}};
+const setSignature=(dataUrl)=>{try{if(dataUrl)localStorage.setItem(SIG_KEY,dataUrl);else localStorage.removeItem(SIG_KEY);}catch(e){}};
 const save=d=>{try{localStorage.setItem(SK,JSON.stringify(d))}catch(e){}};
 const load=()=>{try{const r=localStorage.getItem(SK);return r?JSON.parse(r):null}catch(e){return null}};
 const loadHash=()=>{try{const h=location.hash.slice(1);if(!h)return null;const p=new URLSearchParams(h);const dd=p.get('data');if(!dd)return null;const j=LZString.decompressFromEncodedURIComponent(dd);return j?JSON.parse(j):null}catch(e){return null}};
@@ -3032,16 +3036,20 @@ function buildDischargeDocDef(D, logoImg){
   }
   // signatures — twee partijen
   var partyGap=48*k, partyW=(CW-partyGap)/2, dateW=96*k, innerGap=24*k, sigW=partyW-dateW-innerGap;
-  function ruleCell(w,label,val,cursive){var top=val?{text:val,font:cursive?'Sig':'I5',fontSize:(cursive?24:12)*k,color:ink,margin:[0,cursive?26*k:30*k,0,2*k]}:{text:' ',margin:[0,38*k,0,0]};return {width:w,stack:[top,{canvas:[{type:'line',x1:0,y1:0,x2:w,y2:0,lineWidth:0.5,lineColor:ink}]},{text:String(label).toUpperCase(),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,5*k,0,0]}]};}
-  function party(label,name,sigName,sigDate){return {width:partyW,stack:[
+  function ruleCell(w,label,val,cursive,img){var top;
+    if(img){top={image:img,fit:[w-4,24*k],margin:[0,11*k,0,3*k]};}
+    else if(val){top={text:val,font:cursive?'Sig':'I5',fontSize:(cursive?24:12)*k,color:ink,margin:[0,cursive?26*k:30*k,0,2*k]};}
+    else {top={text:' ',margin:[0,38*k,0,0]};}
+    return {width:w,stack:[top,{canvas:[{type:'line',x1:0,y1:0,x2:w,y2:0,lineWidth:0.5,lineColor:ink}]},{text:String(label).toUpperCase(),font:'I6',fontSize:9*k,color:muted,characterSpacing:lsf(0.1,9*k),margin:[0,5*k,0,0]}]};}
+  function party(label,name,sigName,sigDate,sigImg){return {width:partyW,stack:[
     {text:String(label).toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),margin:[0,0,0,6*k]},
     {text:name||'',font:'I5',fontSize:15*k,color:ink},
-    {columns:[ruleCell(sigW,D.nl?'Handtekening':'Signature',sigName,true),ruleCell(dateW,D.nl?'Datum':'Date',sigDate,false)],columnGap:innerGap}
+    {columns:[ruleCell(sigW,D.nl?'Handtekening':'Signature',sigName,true,sigImg),ruleCell(dateW,D.nl?'Datum':'Date',sigDate,false)],columnGap:innerGap}
   ]};}
   c.push({stack:[
     {canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,0,0,18*k]},
     {text:(D.nl?'Ondertekend voor akkoord':'Signed for acceptance').toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.14,11*k),margin:[0,0,0,14*k]},
-    {columns:[party(D.nl?'Namens TEAL':'On behalf of TEAL',D.teal_signatory),party(D.nl?'Namens de opdrachtgever':'On behalf of the client',D.signed?D.signed_name:D.client_signatory,D.signed?D.signed_name:null,D.signed?D.signed_date:null)],columnGap:partyGap}
+    {columns:[party(D.nl?'Namens TEAL':'On behalf of TEAL',D.teal_signatory,null,D.teal_signature?D.issued:null,D.teal_signature||null),party(D.nl?'Namens de opdrachtgever':'On behalf of the client',D.signed?D.signed_name:D.client_signatory,D.signed?D.signed_name:null,D.signed?D.signed_date:null)],columnGap:partyGap}
   ],margin:[0,24*k,0,0],unbreakable:true});
 
   return {pageSize:'A4',pageMargins:[ML,MT,ML,MB],
@@ -3080,6 +3088,7 @@ function mapDischargeToTokens(d){
     transfer_clause:t(dc.transferClause,L)||'',
     teal_signatory:dc.tealSignatory||'Erik Swaagstra',
     client_signatory:dc.clientSignatory||S.client.name||d.client.name||'',
+    teal_signature:getSignature()||'',
     items:items, documents:docs, nl:NL,
     snags:(dc.snags||[]).filter(x=>x&&String(x.item||'').trim()).map((x,i)=>({no:String(i+1).padStart(2,'0'),item:x.item,owner:x.owner||'',due:x.due||''})),
     snagsEnabled:dc.snagsEnabled===true,
@@ -3644,6 +3653,22 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
           <span className="sm" style={{color:has?'var(--green)':'#999'}}>{has?'eigen versie actief':'standaard versie'}</span>
           {has&&<button className="btn btn-sm btn-g" onClick={()=>{setAVB64(lng,null);setAvRefresh(x=>x+1);}}>Verwijder</button>}
         </div>;})}
+        <div className="card-h" style={{marginTop:18}}>TEAL-handtekening</div>
+        <p className="sm muted" style={{margin:'0 0 10px'}}>Je eigen handtekening (PNG met transparante achtergrond oogt het strakst). Wordt automatisch in het “Namens TEAL”-vak van elke dechargeverklaring gezet — ook in de online-versie en de PDF.</p>
+        {(()=>{const sig=getSignature();return <div key={'sig'+avRefresh} className="flex g8" style={{alignItems:'center'}}>
+          {sig?<img src={sig} style={{height:40,maxWidth:200,objectFit:'contain',background:'#fff',border:'1px solid #eee',borderRadius:4,padding:'2px 6px'}}/>:null}
+          <label className="btn btn-sm btn-g" style={{cursor:'pointer',margin:0}}>{sig?'Vervang':'Upload'}
+            <input type="file" accept="image/*" style={{display:'none'}} onChange={e=>{const fl=e.target.files&&e.target.files[0];if(!fl)return;const r=new FileReader();r.onload=()=>{const raw=String(r.result||'');const img=new Image();img.onload=()=>{try{
+              // Maak de handtekening transparant: wit wordt weggesleuteld, lijnen worden zwart met zachte randen — werkt op elke paginakleur.
+              const cv=document.createElement('canvas');cv.width=img.naturalWidth;cv.height=img.naturalHeight;const cx=cv.getContext('2d');cx.drawImage(img,0,0);
+              const dt=cx.getImageData(0,0,cv.width,cv.height);const p=dt.data;
+              for(let i=0;i<p.length;i+=4){const oa=p[i+3];const lum=Math.min(p[i],p[i+1],p[i+2]);const a=oa===0?0:(255-lum);p[i]=0;p[i+1]=0;p[i+2]=0;p[i+3]=a<12?0:a;}
+              cx.putImageData(dt,0,0);setSignature(cv.toDataURL('image/png'));
+            }catch(err){setSignature(raw);}setAvRefresh(x=>x+1);};img.onerror=()=>{setSignature(raw);setAvRefresh(x=>x+1);};img.src=raw;};r.readAsDataURL(fl);e.target.value='';}}/>
+          </label>
+          <span className="sm" style={{color:sig?'var(--green)':'#999'}}>{sig?'handtekening actief':'nog geen handtekening'}</span>
+          {sig&&<button className="btn btn-sm btn-g" onClick={()=>{setSignature(null);setAvRefresh(x=>x+1);}}>Verwijder</button>}
+        </div>;})()}
       </div>}
     </div>
 
@@ -3962,12 +3987,12 @@ function DischargeDoc({T,L}){
       <div style={{marginTop:28,borderTop:'1px solid '+hair,paddingTop:30}}>
         <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:600,color:ink,marginBottom:22}}>{NL?'Ondertekend voor akkoord':'Signed for acceptance'}</div>
         <div style={{display:'flex',gap:48}}>
-          {parties.map(([lab,name],i)=>{const isClient=i===1;const sig=isClient&&T.signed?T.signed_name:'';const sd=isClient&&T.signed?T.signed_date:'';return <div key={i} style={{flex:1}}>
+          {parties.map(([lab,name],i)=>{const isClient=i===1;const cursiveSig=isClient&&T.signed?T.signed_name:'';const img=(!isClient&&T.teal_signature)?T.teal_signature:'';const sd=isClient?(T.signed?T.signed_date:''):(T.teal_signature?T.issued:'');const filled=cursiveSig||img;return <div key={i} style={{flex:1}}>
             <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted,marginBottom:6}}>{lab}</div>
-            <div style={{fontSize:15,fontWeight:500,color:ink}}>{(sig)||name||'—'}</div>
-            <div style={{display:'flex',gap:24,marginTop:sig?30:52,alignItems:'flex-end'}}>
-              <div style={{flex:1}}><div style={{height:sig?30:16,display:'flex',alignItems:'flex-end',overflow:'hidden'}}>{sig?<span style={{fontFamily:cursive,fontStyle:'italic',fontSize:26,color:ink,lineHeight:1,whiteSpace:'nowrap'}}>{sig}</span>:null}</div><div style={{borderTop:'1px solid '+ink,paddingTop:5,fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:muted}}>{NL?'Handtekening':'Signature'}</div></div>
-              <div style={{width:96}}><div style={{height:sig?30:16,display:'flex',alignItems:'flex-end'}}>{sd?<span style={{fontSize:12,color:ink,lineHeight:1,paddingBottom:2}}>{sd}</span>:null}</div><div style={{borderTop:'1px solid '+ink,paddingTop:5,fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:muted}}>{NL?'Datum':'Date'}</div></div>
+            <div style={{fontSize:15,fontWeight:500,color:ink}}>{(cursiveSig)||name||'—'}</div>
+            <div style={{display:'flex',gap:24,marginTop:filled?26:52,alignItems:'flex-end'}}>
+              <div style={{flex:1}}><div style={{height:filled?34:16,display:'flex',alignItems:'flex-end',overflow:'hidden'}}>{img?<img src={img} style={{maxHeight:34,maxWidth:'100%',objectFit:'contain',objectPosition:'left bottom'}}/>:(cursiveSig?<span style={{fontFamily:cursive,fontStyle:'italic',fontSize:26,color:ink,lineHeight:1,whiteSpace:'nowrap'}}>{cursiveSig}</span>:null)}</div><div style={{borderTop:'1px solid '+ink,paddingTop:5,fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:muted}}>{NL?'Handtekening':'Signature'}</div></div>
+              <div style={{width:96}}><div style={{height:filled?34:16,display:'flex',alignItems:'flex-end'}}>{sd?<span style={{fontSize:12,color:ink,lineHeight:1,paddingBottom:2}}>{sd}</span>:null}</div><div style={{borderTop:'1px solid '+ink,paddingTop:5,fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:muted}}>{NL?'Datum':'Date'}</div></div>
             </div>
           </div>;})}
         </div>
@@ -3992,6 +4017,10 @@ function DischargeTab({data:d,set}){
   const snags=dc.snags&&dc.snags.length?dc.snags:[{item:'',owner:'',due:''}];
   const setSnags=(arr)=>up({snags:arr});
   const hasContent=items.some(x=>String(x.item||'').trim());
+  const _arch=(()=>{try{return loadArchiveLive().find(e=>e.id===d._archiveId)||{};}catch(e){return {};}})();
+  const _signed=_arch.status==='geaccepteerd';
+  const _signedAt=(_signed&&_arch.statusAt)?new Date(_arch.statusAt).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
+  const _signedBy=_signed?String((((_arch.changelog||[]).slice().reverse().find(c=>/geaccepteerd door/i.test(c.action||''))||{}).action||'')).replace(/^.*geaccepteerd door\s*/i,''):'';
   return <div>
     <div className="card">
       <div className="between" style={{alignItems:'center',flexWrap:'wrap',gap:8}}>
@@ -4002,6 +4031,7 @@ function DischargeTab({data:d,set}){
         </div>
       </div>
       <p className="sm muted" style={{margin:'6px 0 0'}}>{NL?'Het document dat bij oplevering wordt getekend: wat is opgeleverd, welke documenten zijn overgedragen, en de decharge van TEAL. Aparte A4-PDF met handtekeningvelden voor beide partijen.':'The document signed at handover: what was delivered, which documents transferred, and TEAL’s discharge. A separate A4 PDF with signature fields for both parties.'}</p>
+      {_signed&&<div style={{marginTop:8,color:'#0a6b57',fontSize:13,fontWeight:600}}>✓ {NL?'Online ondertekend':'Signed online'}{_signedBy?(NL?' door ':' by ')+_signedBy:''}{_signedAt?' · '+_signedAt:''}</div>}
     </div>
 
     <div className="card">
@@ -4020,6 +4050,7 @@ function DischargeTab({data:d,set}){
         <div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Opgeleverde werkzaamheden':'Works delivered'}</div>
         <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#555',cursor:'pointer',margin:0}}><input type="checkbox" checked={dc.worksEnabled!==false} onChange={e=>up({worksEnabled:e.target.checked})}/>{NL?'opnemen':'include'}</label>
       </div>
+      <div className="fg" style={{marginBottom:10}}><div className="between" style={{alignItems:'center'}}><label style={{margin:0}}>{NL?'Inleiding':'Intro'}</label><button className="btn btn-sm btn-g" style={{padding:'2px 8px',fontSize:11}} onClick={()=>up({worksIntro:defaultDischarge().worksIntro})}>{NL?'standaardtekst':'default text'}</button></div><textarea rows={2} value={t(dc.worksIntro,d.lang)} onChange={e=>upBil('worksIntro',e.target.value)}/></div>
       {items.map((it,i)=><div key={i} className="row" style={{alignItems:'center'}}>
         <div className="fg" style={{flex:3}}><input placeholder={NL?'Omschrijving werkzaamheid':'Work item'} value={it.item||''} onChange={e=>{const a=items.slice();a[i]={...a[i],item:e.target.value};setItems(a);}}/></div>
         <div className="fg" style={{flex:1}}><input placeholder={NL?'Status (bv. Geïnstalleerd)':'Status (e.g. Installed)'} value={it.status||''} onChange={e=>{const a=items.slice();a[i]={...a[i],status:e.target.value};setItems(a);}}/></div>
@@ -4045,7 +4076,8 @@ function DischargeTab({data:d,set}){
         <div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Restpunten':'Outstanding items'}</div>
         <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#555',cursor:'pointer',margin:0}}><input type="checkbox" checked={dc.snagsEnabled===true} onChange={e=>up({snagsEnabled:e.target.checked})}/>{NL?'opnemen (onder voorbehoud)':'include (with reservations)'}</label>
       </div>
-      <p className="sm muted" style={{margin:'0 0 10px'}}>{NL?'Alleen invullen als er nog punten openstaan; pas dan ook de dechargetekst aan (‘zonder voorbehoud’).':'Only when items remain open; adjust the discharge statement accordingly.'}</p>
+      <p className="sm muted" style={{margin:'0 0 10px'}}>{NL?'Alleen invullen als er nog punten openstaan.':'Only when items remain open.'}</p>
+      {dc.snagsEnabled&&<button className="btn btn-sm btn-g" style={{marginBottom:10}} onClick={()=>up({dischargeStatement:{nl:'De werkzaamheden zijn opgeleverd conform de overeenkomst en het goedgekeurde technisch ontwerp. De opdrachtgever aanvaardt de werkzaamheden en neemt deze in gebruik, met uitzondering van de hierboven genoemde restpunten. TEAL rondt die restpunten af binnen de aangegeven termijn; de overige verplichtingen zijn daarmee voldaan, met uitzondering van de garantie.',en:'The works have been delivered in accordance with the contract and the approved technical design. The client accepts the works and takes them into use, save for the outstanding items listed above. TEAL will complete those items within the stated period; all other obligations are thereby fulfilled, except the warranty.'}})}>{NL?'Zet verklaring op “onder voorbehoud”':'Set statement to “with reservations”'}</button>}
       {snags.map((s,i)=><div key={i} className="row" style={{alignItems:'center'}}>
         <div className="fg" style={{flex:3}}><input placeholder={NL?'Omschrijving restpunt':'Item'} value={s.item||''} onChange={e=>{const a=snags.slice();a[i]={...a[i],item:e.target.value};setSnags(a);}}/></div>
         <div className="fg" style={{flex:1}}><input placeholder={NL?'Wie':'Owner'} value={s.owner||''} onChange={e=>{const a=snags.slice();a[i]={...a[i],owner:e.target.value};setSnags(a);}}/></div>
@@ -4065,7 +4097,7 @@ function DischargeTab({data:d,set}){
 
     <div className="card">
       <div className="card-h">{NL?'Juridische teksten':'Legal copy'}</div>
-      {[['worksIntro',NL?'Inleiding werkzaamheden':'Works intro',null],['dischargeStatement',NL?'Dechargeverklaring':'Discharge statement','statementEnabled'],['transferClause',NL?'Risico-overgang, garantie & eindfactuur':'Risk transfer, warranty & final invoice','transferEnabled']].map(([f,lab,flag])=><div key={f} style={{marginBottom:10}}>
+      {[['dischargeStatement',NL?'Dechargeverklaring':'Discharge statement','statementEnabled'],['transferClause',NL?'Risico-overgang, garantie & eindfactuur':'Risk transfer, warranty & final invoice','transferEnabled']].map(([f,lab,flag])=><div key={f} style={{marginBottom:10}}>
         <div className="between" style={{alignItems:'center'}}>
           <label style={{margin:0,display:'flex',alignItems:'center',gap:8}}>{flag&&<input type="checkbox" checked={dc[flag]!==false} onChange={e=>up({[flag]:e.target.checked})}/>}<span>{lab}{flag&&dc[flag]===false?(NL?' — uit':' — off'):''}</span></label>
           <button className="btn btn-sm btn-g" style={{padding:'2px 8px',fontSize:11}} onClick={()=>up({[f]:defaultDischarge()[f]})}>{NL?'standaardtekst':'default text'}</button>
@@ -4367,20 +4399,29 @@ function PublicView({id}){
     }catch(e){alert('Error: '+e);}
     setBusy(false);
   };
-  const canAccept=name.trim()&&validEmail(email)&&agree;
+  const doDownload=async()=>{
+    try{
+      const signDate=state.data.acceptedAt?new Date(state.data.acceptedAt).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
+      const tokens=Object.assign({},snap,{accepted_by:accepted?(state.data.acceptedBy||snap.accepted_by):snap.accepted_by,signed:!!accepted,signed_name:accepted?(state.data.acceptedBy||''):'',signed_date:accepted?signDate:''});
+      const b64=isDC?await buildDischargeSignedPdfB64(tokens):await buildSignedPdfB64(tokens,state.data.avUrl||null);
+      const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
+      const blob=new Blob([bytes],{type:'application/pdf'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=(isDC?(NL?'Dechargeverklaring':'Discharge certificate'):(NL?'Offerte':'Quotation'))+' '+((snap&&snap.certNo)||(snap&&snap.number)||'')+' - TEAL.pdf';a.click();URL.revokeObjectURL(url);
+    }catch(e){alert((NL?'Download mislukt: ':'Download failed: ')+e);}
+  };
+  const canAccept=name.trim()&&agree&&(!email.trim()||validEmail(email));
   return <div style={{minHeight:'100vh',background:'#d8d6cf',paddingBottom:accepted||expired?96:170}}>
     <div style={{zoom:scale}}>{isDC?<DischargeDoc T={T} L={L}/>:<QuoteDoc T={T} L={L} editable={false} onMove={()=>{}}/>}</div>
     <div style={{position:'fixed',left:0,right:0,bottom:0,background:'#05100e',color:'#fff',padding:'16px 20px',boxShadow:'0 -4px 24px rgba(0,0,0,.28)'}}>
       <div style={{maxWidth:794,margin:'0 auto'}}>
         {accepted
-          ? <div style={{fontSize:15,display:'flex',alignItems:'center',gap:10}}><span style={{color:'#7ee0c0',fontSize:20}}>✓</span><span>{(isDC?(NL?'Ondertekend door ':'Signed by '):(NL?'Akkoord gegeven door ':'Accepted by '))}<strong>{state.data.acceptedBy}</strong>{signDateLong?' · '+signDateLong:''}{state.data.emailed?(NL?' · kopie gemaild':' · copy emailed'):''}</span></div>
+          ? <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}><span style={{fontSize:15,display:'flex',alignItems:'center',gap:10}}><span style={{color:'#7ee0c0',fontSize:20}}>✓</span><span>{(isDC?(NL?'Ondertekend door ':'Signed by '):(NL?'Akkoord gegeven door ':'Accepted by '))}<strong>{state.data.acceptedBy}</strong>{signDateLong?' · '+signDateLong:''}{state.data.emailed?(NL?' · kopie gemaild':' · copy emailed'):''}</span></span><div style={{flex:1,minWidth:8}}/><button onClick={doDownload} style={{padding:'8px 16px',borderRadius:6,border:0,background:'#d4ece6',color:'#05100e',fontWeight:600,fontSize:13,cursor:'pointer'}}>{NL?'Download PDF':'Download PDF'}</button></div>
           : expired
           ? <div style={{fontSize:14,color:'#f3c9c9',display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:18}}>⏳</span><span>{NL?('Deze offerte is verlopen'+(expDate?' op '+expDate:'')+'. Neem contact op voor een bijgewerkte offerte.'):('This quotation has expired'+(expDate?' on '+expDate:'')+'. Please contact us for an updated one.')}</span></div>
           : <div style={{display:'flex',flexDirection:'column',gap:10}}>
               <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
                 <span style={{fontSize:13,color:'#c9d3d0',flexShrink:0}}>{isDC?(NL?'Onderteken deze verklaring?':'Sign this certificate?'):(NL?'Akkoord met deze offerte?':'Accept this quotation?')}</span>
                 <input value={name} onChange={e=>setName(e.target.value)} placeholder={NL?'Uw naam':'Your name'} style={{padding:'10px 12px',borderRadius:6,border:0,fontSize:14,flex:'1 1 170px',minWidth:130}}/>
-                <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder={NL?'Uw e-mail (voor een kopie)':'Your email (for a copy)'} style={{padding:'10px 12px',borderRadius:6,border:0,fontSize:14,flex:'1 1 210px',minWidth:170}}/>
+                <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder={NL?'Uw e-mail (optioneel, voor een kopie)':'Your email (optional, for a copy)'} style={{padding:'10px 12px',borderRadius:6,border:0,fontSize:14,flex:'1 1 210px',minWidth:170}}/>
               </div>
               <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
                 {name.trim()?<span style={{fontSize:12,color:'#8fa39d',display:'flex',alignItems:'baseline',gap:6}}>{NL?'Handtekening:':'Signature:'}<span style={{fontFamily:"'Snell Roundhand','Segoe Script','Bradley Hand','Brush Script MT',cursive",fontStyle:'italic',fontSize:23,color:'#eafff8',lineHeight:1}}>{name.trim()}</span></span>:null}
