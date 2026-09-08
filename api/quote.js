@@ -122,23 +122,28 @@ async function sendCopies(rec, pdfB64, filename) {
     const from = process.env.NOTIFY_FROM || process.env.NOTIFY_EMAIL;
     if (!from) return false;
     const NL = (rec.lang || 'nl') !== 'en';
-    const proj = rec.projectName || (NL ? 'onze offerte' : 'our quotation');
+    const isDC = rec.docType === 'discharge';
+    const proj = rec.projectName || (NL ? (isDC ? 'onze dechargeverklaring' : 'onze offerte') : (isDC ? 'our discharge certificate' : 'our quotation'));
+    const docNL = isDC ? 'dechargeverklaring' : 'offerte';
+    const docEN = isDC ? 'discharge certificate' : 'quotation';
+    const actNL = isDC ? 'ondertekening van de dechargeverklaring' : 'akkoord op de offerte';
+    const actEN = isDC ? 'signing the discharge certificate' : 'accepting the quotation';
     if (rec.acceptedEmail) {
-      const subj = (NL ? 'Je getekende offerte: ' : 'Your signed quotation: ') + proj;
+      const subj = (NL ? ('Je getekende ' + docNL + ': ') : ('Your signed ' + docEN + ': ')) + proj;
       const body = NL
-        ? 'Beste ' + rec.acceptedBy + ',\n\nBedankt voor je akkoord op de offerte voor ' + proj + '. ' +
-          (pdfB64 ? 'In de bijlage vind je een kopie van de getekende offerte.' : 'Je kunt de getekende offerte online bekijken.') +
+        ? 'Beste ' + rec.acceptedBy + ',\n\nBedankt voor je ' + actNL + ' voor ' + proj + '. ' +
+          (pdfB64 ? ('In de bijlage vind je een kopie van de getekende ' + docNL + '.') : ('Je kunt de getekende ' + docNL + ' online bekijken.')) +
           '\n\nMet vriendelijke groet,\nTEAL\nteamteal.nl'
-        : 'Dear ' + rec.acceptedBy + ',\n\nThank you for accepting the quotation for ' + proj + '. ' +
-          (pdfB64 ? 'Attached you will find a copy of the signed quotation.' : 'You can view the signed quotation online.') +
+        : 'Dear ' + rec.acceptedBy + ',\n\nThank you for ' + actEN + ' for ' + proj + '. ' +
+          (pdfB64 ? ('Attached you will find a copy of the signed ' + docEN + '.') : ('You can view the signed ' + docEN + ' online.')) +
           '\n\nKind regards,\nTEAL\nteamteal.nl';
       await sendGmail(token, from, rec.acceptedEmail, subj, body, pdfB64, filename);
       sentToClient = true;
     }
     if (process.env.NOTIFY_EMAIL) {
-      const subj = '✅ Offerte getekend: ' + proj + ' — ' + rec.acceptedBy;
+      const subj = '✅ ' + (isDC ? 'Dechargeverklaring' : 'Offerte') + ' getekend: ' + proj + ' — ' + rec.acceptedBy;
       const body = rec.acceptedBy + ' (' + (rec.acceptedEmail || 'geen e-mail') + ') heeft "' + proj +
-        '" online geaccepteerd op ' + rec.acceptedAt + '.' + (rec.note ? ('\n\nOpmerking van de klant:\n' + rec.note) : '');
+        '" online ' + (isDC ? 'ondertekend' : 'geaccepteerd') + ' op ' + rec.acceptedAt + '.' + (rec.note ? ('\n\nOpmerking van de klant:\n' + rec.note) : '');
       await sendGmail(token, from, process.env.NOTIFY_EMAIL, subj, body, pdfB64, filename);
     }
   } catch (e) { /* mail mag nooit het akkoord blokkeren */ }
@@ -164,6 +169,7 @@ module.exports = async (req, res) => {
       const avUrl = (body.av && typeof body.av === 'string') ? await offloadAV(body.av) : null;
       const rec = {
         ws, archiveId: body.archiveId || null, snapshot: body.snapshot,
+        docType: body.docType === 'discharge' ? 'discharge' : 'quote',
         lang: body.lang === 'en' ? 'en' : 'nl', projectName: body.projectName || '',
         status: 'open', createdAt: nowIso(), views: 0, lastView: null, lastViewDay: null,
         validityDays: vd, expiresAt: new Date(Date.now() + vd * 86400000).toISOString(),
@@ -195,6 +201,7 @@ module.exports = async (req, res) => {
       const isExpired = rec.status !== 'accepted' && rec.expiresAt && Date.now() > new Date(rec.expiresAt).getTime();
       return res.status(200).json({
         snapshot: rec.snapshot, lang: rec.lang, projectName: rec.projectName,
+        docType: rec.docType || 'quote',
         status: rec.status, acceptedBy: rec.acceptedBy, acceptedAt: rec.acceptedAt,
         emailed: !!rec.emailedCopy, avUrl: rec.avUrl || null,
         expiresAt: rec.expiresAt || null, expired: !!isExpired,
