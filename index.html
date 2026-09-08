@@ -3059,7 +3059,7 @@ function mapDischargeToTokens(d){
     title:S.projectName||d.project.name||(NL?'Project':'Project'),
     subtitle:S.phase||d.project.subtitle||'',
     client_name:S.client.name||d.client.name||'',client_contact:S.client.contact||d.client.contact||'',client_email:S.client.email||d.client.email||'',
-    location:S.location||d.project.location||'',
+    location:(d.project.location&&String(d.project.location).trim())||S.location||'',
     completed:dc.completionDate?fmtLong(dc.completionDate):'-',
     inspected:dc.inspectionDate?fmtLong(dc.inspectionDate):'-',
     warranty:t(dc.warranty,L)||'-',
@@ -3959,6 +3959,7 @@ function DischargeTab({data:d,set}){
   const NL=d.lang==='nl';
   const dc=d.discharge||defaultDischarge();
   const up=(patch)=>set({...d,discharge:{...dc,...patch}});
+  const upProj=(patch)=>set({...d,project:{...d.project,...patch}});
   const upBil=(field,val)=>{const o=dc[field];const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[d.lang]=val;up({[field]:nn});};
   const items=dc.items&&dc.items.length?dc.items:[{item:'',status:''}];
   const setItems=(arr)=>up({items:arr});
@@ -3978,7 +3979,8 @@ function DischargeTab({data:d,set}){
     </div>
 
     <div className="card">
-      <div className="card-h">{NL?'Datums & garantie':'Dates & warranty'}</div>
+      <div className="card-h">{NL?'Opleverdetails':'Handover details'}</div>
+      <div className="fg"><label>{NL?'Locatie':'Location'}</label><input value={d.project.location||''} placeholder={NL?'bv. locatie van oplevering':'e.g. handover location'} onChange={e=>upProj({location:e.target.value})}/></div>
       <div className="row3">
         <div className="fg"><label>{NL?'Afgiftedatum':'Issue date'}</label><input type="date" value={dc.issuedDate||''} onChange={e=>up({issuedDate:e.target.value})}/></div>
         <div className="fg"><label>{NL?'Opleverdatum':'Completion date'}</label><input type="date" value={dc.completionDate||''} onChange={e=>up({completionDate:e.target.value})}/></div>
@@ -4068,8 +4070,8 @@ function DischargeFlow({data:dv,set,onBack}){
             <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Project':'Project'}</span>{S.projectName||'-'}{S.phase?' · '+S.phase:''}</div>
             <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Klant':'Client'}</span>{[S.client.name,S.client.contact,S.client.email].filter(Boolean).join(' · ')||'-'}</div>
             <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Gekoppelde offerte':'Linked quotation'}</span>{S.linkedRef||'-'}</div>
-            {S.location&&<div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Locatie':'Location'}</span>{S.location}</div>}
           </div>
+          <p className="sm muted" style={{marginTop:8,marginBottom:0}}>{NL?'De opleverlocatie beheer je hieronder bij Opleverdetails.':'Set the handover location below under Handover details.'}</p>
         </div>}
     <DischargeTab data={dv} set={set}/>
     {showPrev&&<div style={{marginTop:24}}>
