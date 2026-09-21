@@ -828,7 +828,10 @@ function archiveLogExport(d){archiveLogAction(d,'pdf_exported');bumpSent(d&&d._a
 const STATUS_ORDER=['concept','verstuurd','geaccepteerd','afgewezen'];
 function quoteExpiry(data){try{const base=(data&&data.project&&data.project.date)||(data&&data.date);const days=parseInt((data&&data.conditions&&data.conditions.validity)||(data&&data.validity))||0;if(!base||!days)return null;const dt=new Date(base);dt.setDate(dt.getDate()+days);return dt;}catch(e){return null;}}
 function entryTotal(e){try{const dt=e.data||{};if((e.kind==='delivery')||dt.kind==='delivery'||(e.kind==='discharge')||dt.kind==='discharge')return 0;if((e.kind==='change_order')||dt.kind==='change_order'){return (dt.costItems||[]).reduce((s,it)=>s+(+it.amount||0),0);}return calcTotals(primaryBundle(dt)).grandClient;}catch(_e){return 0;}}
-function effectiveStatus(entry){const s=(entry&&entry.status)||'concept';if(s==='verstuurd'){const ex=quoteExpiry(entry.data);if(ex&&ex<new Date())return 'verlopen';}return s;}
+// Verloopdatum voor status/opvolgen: telt vanaf het LAATSTE verzendmoment (statusAt), zodat een
+// opnieuw verstuurde nieuwe versie de geldigheidstermijn herstart; valt terug op de documentdatum.
+function statusExpiry(entry){try{const data=entry&&entry.data;const days=parseInt((data&&data.conditions&&data.conditions.validity)||(data&&data.validity))||0;if(!days)return null;const base=(entry&&entry.statusAt)||(data&&data.project&&data.project.date)||(data&&data.date);if(!base)return null;const dt=new Date(base);dt.setDate(dt.getDate()+days);return dt;}catch(e){return null;}}
+function effectiveStatus(entry){const s=(entry&&entry.status)||'concept';if(s==='verstuurd'){const ex=statusExpiry(entry);if(ex&&ex<new Date())return 'verlopen';}return s;}
 function archiveSetStatus(id,status){if(!id)return;const all=loadArchive();const idx=all.findIndex(x=>x.id===id);if(idx>=0){const now=new Date().toISOString();all[idx].status=status;all[idx].statusAt=now;all[idx].updatedAt=now;all[idx].changelog.push({action:'status_'+status,date:now});saveArchive(all);}}
 function bumpSent(id){if(!id)return;const all=loadArchive();const i=all.findIndex(x=>x.id===id);if(i>=0&&((all[i].status||'concept')==='concept'))archiveSetStatus(id,'verstuurd');}
 function currentVersion(ref){const parts=String(ref||'').split('-');const v=parseInt(parts[parts.length-1]);return isNaN(v)?1:v;}
@@ -837,12 +840,15 @@ function archiveBumpVersion(id,note){const all=loadArchive();const idx=all.findI
   // Snapshot the version we're closing so we can show a diff later.
   const snap={version:closedV,ref:oldRef,date:now,note:note||'',total:entryTotal(e),items:entryItemCount(e)};
   e.versions=[...(e.versions||[]),snap];
+  // Een nieuwe versie is een verse revisie: als de vorige was verstuurd (of verlopen), zet 'm terug
+  // naar concept zodat hij niet meer als verlopen/op te volgen telt tot je hem opnieuw verstuurt.
+  if((e.status||'concept')==='verstuurd'){e.status='concept';e.statusAt=now;e.changelog.push({action:'status_concept',date:now});}
   e.ref=newRef;e.data={...e.data,ref:newRef};e.updatedAt=now;e.changelog.push({action:'version',version:v,note:note||'',date:now});all[idx]=e;saveArchive(all);return e;}
 
 // ── Dashboard display helpers ──
 function clientLabel(e){const c=(e&&e.data&&e.data.client)||{};return (c.name||c.company||c.contact||'').trim();}
 function lastExportOf(e){try{const cl=(e&&e.changelog)||[];for(let i=cl.length-1;i>=0;i--){if(cl[i].action==='pdf_exported')return cl[i].date;}return null;}catch(_e){return null;}}
-function daysUntilExpiry(e){try{const ex=quoteExpiry(e&&e.data);if(!ex)return null;return Math.ceil((ex-new Date())/86400000);}catch(_e){return null;}}
+function daysUntilExpiry(e){try{const ex=statusExpiry(e);if(!ex)return null;return Math.ceil((ex-new Date())/86400000);}catch(_e){return null;}}
 // Follow-up: a verstuurd/verlopen quote worth chasing — 7+ days silent, or within 5 days of expiry (incl. expired).
 const FOLLOWUP_SENT_DAYS=7, FOLLOWUP_EXPIRY_DAYS=5;
 function needsFollowUp(e){
