@@ -796,6 +796,9 @@ function archiveSave(d,action='updated'){
     statusAt:prior?(prior.statusAt||null):null,
     createdAt:prior?prior.createdAt:now,
     updatedAt:now,
+    // Versiegeschiedenis leeft op de entry (niet in data) — behoud 'm bij elke bewerking,
+    // anders wist een 'updated' de net door archiveBumpVersion gemaakte snapshots meteen.
+    versions:prior&&prior.versions?prior.versions:[],
     changelog:prior?[...prior.changelog,{action,date:now}]:[{action:'created',date:now}],
     data:{...d,_archiveId:id}
   };
