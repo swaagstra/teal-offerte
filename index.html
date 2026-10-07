@@ -841,12 +841,85 @@ function currentVersion(ref){const parts=String(ref||'').split('-');const v=pars
 function entryItemCount(e){try{const d=(e&&e.data)||{};if(d.kind==='change_order')return (d.costItems||[]).length;if(d.kind==='delivery')return (d.deliverables||[]).length;if(d.kind==='discharge')return ((d.discharge&&d.discharge.items)||[]).filter(x=>x&&String(x.item||'').trim()).length;let n=0;(d.phases||[]).forEach(p=>{if(p.enabled!==false)n+=(p.items||[]).length;});n+=(d.procOTS||[]).length+(d.procCustom||[]).length+(d.subs||[]).length;return n;}catch(_e){return 0;}}
 function archiveBumpVersion(id,note){const all=loadArchive();const idx=all.findIndex(x=>x.id===id);if(idx<0)return null;const e=all[idx];const parts=String(e.ref||(e.data&&e.data.ref)||'').split('-');let v=parseInt(parts[parts.length-1]);if(isNaN(v)){parts.push('2');v=2;}else{v=v+1;parts[parts.length-1]=String(v);}const oldRef=e.ref||(e.data&&e.data.ref)||'';const closedV=isNaN(parseInt(parts[parts.length-1]))?1:v-1;const newRef=parts.join('-');const now=new Date().toISOString();
   // Snapshot the version we're closing so we can show a diff later.
-  const snap={version:closedV,ref:oldRef,date:now,note:note||'',total:entryTotal(e),items:entryItemCount(e)};
+  // Volledige momentopname van de afgesloten versie, zodat we later per post kunnen tonen WAT er
+  // veranderde (toegevoegd/verwijderd/prijs gewijzigd), niet alleen het totaal.
+  let dataSnap=null;try{dataSnap=JSON.parse(JSON.stringify(e.data));}catch(_e){dataSnap=null;}
+  const snap={version:closedV,ref:oldRef,date:now,note:note||'',total:entryTotal(e),items:entryItemCount(e),data:dataSnap};
   e.versions=[...(e.versions||[]),snap];
   // Een nieuwe versie is een verse revisie: als de vorige was verstuurd (of verlopen), zet 'm terug
   // naar concept zodat hij niet meer als verlopen/op te volgen telt tot je hem opnieuw verstuurt.
   if((e.status||'concept')==='verstuurd'){e.status='concept';e.statusAt=now;e.changelog.push({action:'status_concept',date:now});}
   e.ref=newRef;e.data={...e.data,ref:newRef};e.updatedAt=now;e.changelog.push({action:'version',version:v,note:note||'',date:now});all[idx]=e;saveArchive(all);return e;}
+
+// ── Versievergelijking: welke posten zijn toegevoegd / verwijderd / in prijs gewijzigd ──
+// Vlakke lijst van kostenregels (client-bedrag excl. btw) met een stabiele sleutel per post,
+// zodat twee versies op id/sleutel te matchen zijn. De som sluit aan op het offertetotaal.
+function versionCostLines(data){
+  if(!data) return [];
+  const L=(data.lang==='en')?'en':'nl';
+  const tx=o=>{ if(o==null)return ''; if(typeof o==='string')return o.trim(); return String(o[L]||o.nl||o.en||'').trim(); };
+  const out=[];
+  (data.phases||[]).forEach((p,pi)=>{
+    if(p.enabled===false)return;
+    const pname=tx(p.customName)||tx(p.name)||('Fase '+(pi+1));
+    const client=(p.items||[]).reduce((s,it)=>s+(+it.qty||0)*(+it.extRate||0),0);
+    (p.items||[]).forEach(it=>{ out.push({key:'ph:'+(it.id||(pi+':'+(tx(it.desc)||it.role))), group:'Werk · '+pname, label:(tx(it.desc)||it.role||'post'), amount:(+it.qty||0)*(+it.extRate||0)}); });
+    const tv=p.travel||{}; const trav=Math.max(0,((+tv.trips||0)*(+tv.km||0)*(+tv.rate||0))+((+tv.hours||0)*(+tv.hourRate||0)));
+    if(trav>0.5) out.push({key:'tr:'+(p.id||pi), group:'Werk · '+pname, label:'Reiskosten', amount:trav});
+    const cont=client*(+p.contingency||0);
+    if(cont>0.5) out.push({key:'ct:'+(p.id||pi), group:'Werk · '+pname, label:'Onvoorzien ('+Math.round((+p.contingency||0)*100)+'%)', amount:cont});
+  });
+  (data.procOTS||[]).forEach((it,i)=>{const v=+it.amount||0;const amt=v+v*(it.handlingPct!=null?it.handlingPct:getHandlingPct(v));out.push({key:'ots:'+(it.id||i),group:'Inkoop (standaard)',label:(it.desc||it.supplier||'inkoop'),amount:amt});});
+  (data.procCustom||[]).forEach((it,i)=>{const v=+it.amount||0;const amt=v+v*(it.handlingPct!=null?it.handlingPct:getHandlingPct(v))+v*(+it.riskPct||0);out.push({key:'cus:'+(it.id||i),group:'Inkoop (custom)',label:(it.desc||it.supplier||'inkoop'),amount:amt});});
+  (data.subs||[]).forEach((it,i)=>{const v=+it.amount||0;const amt=v+v*(it.coordPct!=null?it.coordPct:COORD_MARGIN);out.push({key:'sub:'+(it.id||i),group:'Onderaannemer',label:(it.desc||it.supplier||it.name||'onderaannemer'),amount:amt});});
+  try{const inst=calcInstall(data); if(inst&&inst.client>0.5) out.push({key:'install',group:'Installatie',label:'Installatie op locatie',amount:inst.client});}catch(_e){}
+  return out;
+}
+function diffVersions(oldData,newData){
+  const A=versionCostLines(oldData), B=versionCostLines(newData);
+  const mapA={},mapB={}; A.forEach(l=>{mapA[l.key]=l;}); B.forEach(l=>{mapB[l.key]=l;});
+  const added=[],removed=[],changed=[];
+  B.forEach(l=>{ const o=mapA[l.key]; if(!o) added.push(l); else if(Math.abs((o.amount||0)-(l.amount||0))>=0.5) changed.push({group:l.group,label:l.label,from:o.amount||0,to:l.amount||0}); });
+  A.forEach(l=>{ if(!mapB[l.key]) removed.push(l); });
+  const totA=A.reduce((s,l)=>s+(l.amount||0),0), totB=B.reduce((s,l)=>s+(l.amount||0),0);
+  return {added,removed,changed, totFrom:totA, totTo:totB, dTot:totB-totA};
+}
+function VersionHistory({item}){
+  const [open,setOpen]=useState(null);
+  const hist=item.versions||[];
+  if(!hist.length) return null;
+  const curTot=entryTotal(item), curItems=entryItemCount(item), curData=item.data;
+  const rows=hist.map((sv,i)=>{
+    const next=i<hist.length-1?hist[i+1]:{total:curTot,items:curItems,version:currentVersion(item.ref),ref:item.ref,data:curData};
+    return {from:sv,to:next,dT:(next.total||0)-(sv.total||0),dI:(next.items||0)-(sv.items||0)};
+  });
+  return <div style={{marginBottom:12}}>
+    <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:6}}>Versiegeschiedenis</div>
+    {rows.map((r,i)=>{
+      const canDiff=!!(r.from.data&&r.to.data);
+      const isOpen=open===i;
+      return <div key={i} style={{borderTop:i?'1px solid #efeee9':'none',padding:'3px 0'}}>
+        <div style={{fontSize:12,color:'#6b706e',display:'flex',gap:8,alignItems:'baseline',flexWrap:'wrap'}}>
+          <span style={{fontWeight:600,color:'#071412'}}>v{r.from.version}→v{r.to.version}</span>
+          <span style={{color:Math.abs(r.dT)<0.5?'#a8adaa':(r.dT>0?'#2D8659':'#b3261e'),fontWeight:600}}>{Math.abs(r.dT)<0.5?'geen bedragswijziging':(r.dT>0?'+':'−')+fmtE(Math.abs(r.dT))}</span>
+          {r.dI!==0&&<span style={{color:'#9a9f9d'}}>{r.dI>0?'+':''}{r.dI} post(en)</span>}
+          {r.from.note&&<span style={{color:'#a8adaa',fontStyle:'italic'}}>· {r.from.note}</span>}
+          <span style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'baseline'}}>
+            {canDiff?<button className="btn btn-sm btn-g" style={{padding:'1px 8px',fontSize:11}} onClick={()=>setOpen(isOpen?null:i)}>{isOpen?'verberg':'wat veranderde'}</button>:<span title="Detailvergelijking niet beschikbaar voor deze oudere versie (geen momentopname bewaard)" style={{color:'#c8ccc9',fontSize:11}}>geen detail</span>}
+            <span style={{color:'#c0c4c2'}}>{fmtDate(r.from.date)}</span>
+          </span>
+        </div>
+        {isOpen&&canDiff&&(()=>{const df=diffVersions(r.from.data,r.to.data);const none=!df.added.length&&!df.removed.length&&!df.changed.length;return <div style={{margin:'6px 0 8px',padding:'8px 10px',background:'#fff',border:'1px solid #efeee9',borderRadius:4,fontSize:12,lineHeight:1.5}}>
+          {none&&<div style={{color:'#9a9f9d'}}>Geen wijziging in posten of bedragen (alleen tekst, voorwaarden of indeling).</div>}
+          {df.added.map((l,j)=><div key={'a'+j} style={{display:'flex',gap:8,alignItems:'baseline'}}><span style={{color:'#2D8659',fontWeight:600,width:74,flexShrink:0}}>+ nieuw</span><span style={{flex:1,minWidth:0}}>{l.group} · {l.label}</span><span style={{color:'#2D8659',fontWeight:600,whiteSpace:'nowrap'}}>+{fmtE(l.amount)}</span></div>)}
+          {df.removed.map((l,j)=><div key={'r'+j} style={{display:'flex',gap:8,alignItems:'baseline'}}><span style={{color:'#b3261e',fontWeight:600,width:74,flexShrink:0}}>− eruit</span><span style={{flex:1,minWidth:0}}>{l.group} · {l.label}</span><span style={{color:'#b3261e',fontWeight:600,whiteSpace:'nowrap'}}>−{fmtE(l.amount)}</span></div>)}
+          {df.changed.map((l,j)=><div key={'c'+j} style={{display:'flex',gap:8,alignItems:'baseline'}}><span style={{color:'#8a6d00',fontWeight:600,width:74,flexShrink:0}}>gewijzigd</span><span style={{flex:1,minWidth:0}}>{l.group} · {l.label}</span><span style={{whiteSpace:'nowrap',color:(l.to-l.from)>0?'#2D8659':'#b3261e'}}>{fmtE(l.from)} → {fmtE(l.to)}</span></div>)}
+          {!none&&<div style={{marginTop:6,paddingTop:6,borderTop:'1px solid #f1f0ec',display:'flex',justifyContent:'space-between',color:'#071412',fontWeight:600}}><span>Totaal (excl. btw)</span><span>{fmtE(df.totFrom)} → {fmtE(df.totTo)}</span></div>}
+        </div>;})()}
+      </div>;
+    })}
+  </div>;
+}
 
 // ── Dashboard display helpers ──
 function clientLabel(e){const c=(e&&e.data&&e.data.client)||{};return (c.name||c.company||c.contact||'').trim();}
@@ -3442,16 +3515,7 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
             {STATUS_ORDER.map(st=>{const on=(item.status||'concept')===st;const m=statusMeta[st];return <button key={st} className="btn btn-sm" onClick={()=>{archiveSetStatus(item.id,st);refresh();if(st==='geaccepteerd'&&!isCO&&!isDel){const ms=(item.data&&item.data.payment&&item.data.payment.milestones)||[];if(ms.length>1&&confirm('Offerte geaccepteerd — facturatieschema ('+ms.length+' termijnen) als concept-facturen in TEAL Odoo aanmaken?')){pushToOdoo(item,{skipConfirm:true}).then(refresh);}}}} style={{border:'1px solid '+(on?m.color:'#d0d0ce'),background:on?m.bg:'#fff',color:on?m.color:'#555',fontWeight:on?700:600}}>{m.label}</button>;})}
           </div>
         </div>
-        {(item.versions&&item.versions.length>0)&&<div style={{marginBottom:12}}>
-          <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#999',marginBottom:6}}>Versiegeschiedenis</div>
-          {(()=>{const hist=item.versions;const curTot=entryTotal(item),curItems=entryItemCount(item);const rows=hist.map((sv,i)=>{const next=i<hist.length-1?hist[i+1]:{total:curTot,items:curItems,version:currentVersion(item.ref),ref:item.ref};const dT=next.total-sv.total;const dI=next.items-sv.items;return {from:sv,to:next,dT,dI};});return rows.map((r,i)=><div key={i} style={{fontSize:12,color:'#6b706e',display:'flex',gap:8,alignItems:'baseline',padding:'3px 0',borderTop:i?'1px solid #efeee9':'none'}}>
-            <span style={{fontWeight:600,color:'#071412'}}>v{r.from.version}→v{r.to.version}</span>
-            <span style={{color:Math.abs(r.dT)<0.5?'#a8adaa':(r.dT>0?'#2D8659':'#b3261e'),fontWeight:600}}>{Math.abs(r.dT)<0.5?'geen bedragswijziging':(r.dT>0?'+':'−')+fmtE(Math.abs(r.dT))}</span>
-            {r.dI!==0&&<span style={{color:'#9a9f9d'}}>{r.dI>0?'+':''}{r.dI} post(en)</span>}
-            {r.from.note&&<span style={{color:'#a8adaa',fontStyle:'italic'}}>· {r.from.note}</span>}
-            <span style={{marginLeft:'auto',color:'#c0c4c2'}}>{fmtDate(r.from.date)}</span>
-          </div>);})()}
-        </div>}
+        <VersionHistory item={item}/>
         {lastExp&&<div style={{fontSize:11,color:'#a8adaa',marginBottom:10}}>Laatst als PDF geëxporteerd op {fmtDate(lastExp)}</div>}
         <div className="flex g8" style={{flexWrap:'wrap',alignItems:'center'}}>
           <button className="btn btn-sm btn-p" onClick={()=>onOpen(item.data)}>Openen</button>
