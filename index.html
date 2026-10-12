@@ -3694,8 +3694,8 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
         <div className="flex g8" style={{flexWrap:'wrap',alignItems:'center'}}>
           <button className="btn btn-sm btn-p" onClick={()=>onOpen(item.data)}>Openen</button>
           <button className="btn btn-sm btn-g" onClick={()=>setDupFor(item)}>Dupliceren ▾</button>
-          {!isCO&&!isDel&&<button className="btn btn-sm btn-g" onClick={()=>{onBumpVersion(item.id);refresh();}}>Nieuwe versie</button>}
-          {!isDel&&<button className="btn btn-sm btn-g" title={((item.data&&item.data.payment&&item.data.payment.milestones||[]).length>1)?'Concept-facturen per termijn in TEAL Odoo':'Concept-factuur in TEAL Odoo'} onClick={()=>{pushToOdoo(item).then(refresh);}}>Naar Odoo</button>}
+          {!isCO&&!isDel&&!isDmg&&!isMnt&&<button className="btn btn-sm btn-g" onClick={()=>{onBumpVersion(item.id);refresh();}}>Nieuwe versie</button>}
+          {!isDel&&!isDmg&&!isMnt&&<button className="btn btn-sm btn-g" title={((item.data&&item.data.payment&&item.data.payment.milestones||[]).length>1)?'Concept-facturen per termijn in TEAL Odoo':'Concept-factuur in TEAL Odoo'} onClick={()=>{pushToOdoo(item).then(refresh);}}>Naar Odoo</button>}
           {!isCO&&!isDel&&(eStat==='verstuurd'||eStat==='verlopen')&&<button className="btn btn-sm btn-g" style={followUp?{color:'#b45309',borderColor:'#f0d9b5'}:null} title="Stel een follow-up e-mail op voor de klant" onClick={()=>emailQuote(item.data,true)}>Follow-up mail</button>}
           <div style={{flex:1,minWidth:12}}/>
           <button className="btn btn-sm btn-g" style={{color:'var(--red)',borderColor:'#e8cfcd'}} onClick={()=>{if(confirm('"'+title+'" verwijderen?')){onDelete(item.id);refresh();}}}>Verwijderen</button>
