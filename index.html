@@ -712,6 +712,7 @@ const loadHash=()=>{try{const h=location.hash.slice(1);if(!h)return null;const p
 // Merges onto a fresh createProject() so external/partial JSON (e.g. from the intake skill) is always safe to open.
 function importOfferte(obj){
   if(!obj||typeof obj!=='object')return null;
+  if(isReportKind(obj.kind))return obj;
   if(obj.kind==='change_order'||obj.kind==='delivery'||obj.kind==='discharge')return migrateConds(obj);
   const type=(obj.type==='assemble')?'assemble':'build';
   const base=createProject(type);
@@ -830,7 +831,10 @@ function archiveLogExport(d){archiveLogAction(d,'pdf_exported');bumpSent(d&&d._a
 // ── Status lifecycle ──
 const STATUS_ORDER=['concept','verstuurd','geaccepteerd','afgewezen'];
 function quoteExpiry(data){try{const base=(data&&data.project&&data.project.date)||(data&&data.date);const days=parseInt((data&&data.conditions&&data.conditions.validity)||(data&&data.validity))||0;if(!base||!days)return null;const dt=new Date(base);dt.setDate(dt.getDate()+days);return dt;}catch(e){return null;}}
-function entryTotal(e){try{const dt=e.data||{};if((e.kind==='delivery')||dt.kind==='delivery'||(e.kind==='discharge')||dt.kind==='discharge')return 0;if((e.kind==='change_order')||dt.kind==='change_order'){return (dt.costItems||[]).reduce((s,it)=>s+(+it.amount||0),0);}return calcTotals(primaryBundle(dt)).grandClient;}catch(_e){return 0;}}
+// Child-/standalone documenttypes die onder een offerte/project hangen (geen eigen pijplijn-waarde).
+function isChildKind(k){return k==='change_order'||k==='delivery'||k==='discharge'||k==='damage'||k==='maintenance';}
+function isReportKind(k){return k==='damage'||k==='maintenance';}
+function entryTotal(e){try{const dt=e.data||{};if(isReportKind(e.kind)||isReportKind(dt.kind))return 0;if((e.kind==='delivery')||dt.kind==='delivery'||(e.kind==='discharge')||dt.kind==='discharge')return 0;if((e.kind==='change_order')||dt.kind==='change_order'){return (dt.costItems||[]).reduce((s,it)=>s+(+it.amount||0),0);}return calcTotals(primaryBundle(dt)).grandClient;}catch(_e){return 0;}}
 // Verloopdatum voor status/opvolgen: telt vanaf het LAATSTE verzendmoment (statusAt), zodat een
 // opnieuw verstuurde nieuwe versie de geldigheidstermijn herstart; valt terug op de documentdatum.
 function statusExpiry(entry){try{const data=entry&&entry.data;const days=parseInt((data&&data.conditions&&data.conditions.validity)||(data&&data.validity))||0;if(!days)return null;const base=(entry&&entry.statusAt)||(data&&data.project&&data.project.date)||(data&&data.date);if(!base)return null;const dt=new Date(base);dt.setDate(dt.getDate()+days);return dt;}catch(e){return null;}}
@@ -838,7 +842,7 @@ function effectiveStatus(entry){const s=(entry&&entry.status)||'concept';if(s===
 function archiveSetStatus(id,status){if(!id)return;const all=loadArchive();const idx=all.findIndex(x=>x.id===id);if(idx>=0){const now=new Date().toISOString();all[idx].status=status;all[idx].statusAt=now;all[idx].updatedAt=now;all[idx].changelog.push({action:'status_'+status,date:now});saveArchive(all);}}
 function bumpSent(id){if(!id)return;const all=loadArchive();const i=all.findIndex(x=>x.id===id);if(i>=0&&((all[i].status||'concept')==='concept'))archiveSetStatus(id,'verstuurd');}
 function currentVersion(ref){const parts=String(ref||'').split('-');const v=parseInt(parts[parts.length-1]);return isNaN(v)?1:v;}
-function entryItemCount(e){try{const d=(e&&e.data)||{};if(d.kind==='change_order')return (d.costItems||[]).length;if(d.kind==='delivery')return (d.deliverables||[]).length;if(d.kind==='discharge')return ((d.discharge&&d.discharge.items)||[]).filter(x=>x&&String(x.item||'').trim()).length;let n=0;(d.phases||[]).forEach(p=>{if(p.enabled!==false)n+=(p.items||[]).length;});n+=(d.procOTS||[]).length+(d.procCustom||[]).length+(d.subs||[]).length;return n;}catch(_e){return 0;}}
+function entryItemCount(e){try{const d=(e&&e.data)||{};if(isReportKind(d.kind)){const rp=d.report||{};return ((rp.entries||[]).filter(x=>x&&String(x.item||'').trim()).length)+((rp.photos||[]).filter(p=>p&&p.src).length);}if(d.kind==='change_order')return (d.costItems||[]).length;if(d.kind==='delivery')return (d.deliverables||[]).length;if(d.kind==='discharge')return ((d.discharge&&d.discharge.items)||[]).filter(x=>x&&String(x.item||'').trim()).length;let n=0;(d.phases||[]).forEach(p=>{if(p.enabled!==false)n+=(p.items||[]).length;});n+=(d.procOTS||[]).length+(d.procCustom||[]).length+(d.subs||[]).length;return n;}catch(_e){return 0;}}
 function archiveBumpVersion(id,note){const all=loadArchive();const idx=all.findIndex(x=>x.id===id);if(idx<0)return null;const e=all[idx];const parts=String(e.ref||(e.data&&e.data.ref)||'').split('-');let v=parseInt(parts[parts.length-1]);if(isNaN(v)){parts.push('2');v=2;}else{v=v+1;parts[parts.length-1]=String(v);}const oldRef=e.ref||(e.data&&e.data.ref)||'';const closedV=isNaN(parseInt(parts[parts.length-1]))?1:v-1;const newRef=parts.join('-');const now=new Date().toISOString();
   // Snapshot the version we're closing so we can show a diff later.
   // Volledige momentopname van de afgesloten versie, zodat we later per post kunnen tonen WAT er
@@ -932,7 +936,7 @@ function needsFollowUp(e){
     const st=effectiveStatus(e);
     if(st!=='verstuurd'&&st!=='verlopen')return false;
     const kind=(e&&(e.kind||(e.data&&e.data.kind)))||'quote';
-    if(kind==='delivery'||kind==='discharge')return false;
+    if(kind==='delivery'||kind==='discharge'||isReportKind(kind))return false;
     const sentAt=e.statusAt||e.updatedAt;
     const daysSince=sentAt?Math.floor((new Date()-new Date(sentAt))/86400000):0;
     const du=daysUntilExpiry(e);
@@ -3223,6 +3227,176 @@ function createDischarge(parent,lang){
   };
 }
 
+// ── Rapporten: Schaderapport (damage) & Onderhoudsrapport (maintenance) ──
+// Foto-voorop PDF-documenten die onder een project hangen (geen ondertekenflow).
+function defaultReport(kind){
+  const isDmg=kind==='damage';
+  return {
+    reportDate:new Date().toISOString().slice(0,10),
+    performedBy:'Erik Swaagstra',
+    summary:isDmg
+      ?{nl:'Tijdens een bezoek aan de installatie is onderstaande schade geconstateerd. Dit rapport legt de schade, de vermoedelijke oorzaak en de aanbevolen vervolgstappen vast, met fotodocumentatie.',en:'During a visit to the installation the damage described below was identified. This report records the damage, its likely cause and the recommended next steps, with photo documentation.'}
+      :{nl:'Onderstaand onderhoudsbezoek is door TEAL uitgevoerd. Dit rapport legt de uitgevoerde controles en werkzaamheden vast, met fotodocumentatie.',en:'The maintenance visit below was carried out by TEAL. This report records the checks and work performed, with photo documentation.'},
+    entries:[{item:'',detail:'',tag:''}],
+    photos:[],
+    recommendations:{nl:'',en:''},
+    // damage-specifiek
+    cause:{nl:'',en:''}, repairAction:{nl:'',en:''}, changeOrderRef:'',
+    // maintenance-specifiek
+    visitType:'', nextService:'',
+    entriesEnabled:true, photosEnabled:true, recommendationsEnabled:true
+  };
+}
+function createReport(kind,parent,lang){
+  const L=lang||(parent&&parent.lang)||'nl';
+  const parentRef=parent?(parent.ref||''):'';
+  const pre=kind==='damage'?'DR':'MR';
+  let n=1;
+  try{if(parentRef)n=loadArchiveLive().filter(e=>e.kind===kind&&e.parentRef===parentRef).length+1;}catch(e){}
+  const ref=parentRef?(pre+n+'-'+parentRef):(pre+'-'+new Date().toISOString().slice(2,10).replace(/-/g,'')+'-1');
+  const pp=(parent&&parent.data&&parent.data.project)||{};
+  const pc=(parent&&parent.data&&parent.data.client)||{};
+  return {
+    kind:kind,v:1,lang:L,ref:ref,
+    parentId:parent?parent.id:null,parentRef:parentRef,
+    project:{name:parent?(parent.projectName||pp.name||''):'',preparedBy:'Erik Swaagstra',location:pp.location||'',phaseLabel:pp.phaseLabel||''},
+    client:{name:pc.name||'',contact:pc.contact||'',email:pc.email||''},
+    report:defaultReport(kind),
+  };
+}
+function mapReportToTokens(d){
+  const L=d.lang,NL=L==='nl';
+  const isDmg=d.kind==='damage';
+  const fmtLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'-';
+  const r=d.report||defaultReport(d.kind);
+  const S=resolveSharedInfo(d);
+  const entries=(r.entries||[]).filter(x=>x&&String(x.item||'').trim()).map((x,i)=>({no:String(i+1).padStart(2,'0'),item:x.item,detail:x.detail||'',tag:x.tag||''}));
+  const photos=(r.photos||[]).filter(p=>p&&p.src).map(p=>({src:p.src,caption:t(p.caption,L)||(typeof p.caption==='string'?p.caption:'')}));
+  return {
+    kind:d.kind, nl:NL,
+    prepared_by:d.project.preparedBy||'Erik Swaagstra',
+    address:TEAL.addr+', '+TEAL.zip,
+    registration:'KvK '+TEAL.kvk+' · BTW '+TEAL.btw,
+    certNo:d.ref||'-',
+    issued:fmtLong(r.reportDate||new Date().toISOString().slice(0,10)),
+    quoteRef:S.linkedRef||d.parentRef||'-',
+    title:S.projectName||d.project.name||'Project',
+    subtitle:S.phase||d.project.subtitle||'',
+    client_name:S.client.name||d.client.name||'',client_contact:S.client.contact||d.client.contact||'',client_email:S.client.email||d.client.email||'',
+    location:(d.project.location&&String(d.project.location).trim())||S.location||'',
+    report_date:fmtLong(r.reportDate),
+    performed_by:r.performedBy||'Erik Swaagstra',
+    visit_type:r.visitType||'',
+    next_service:r.nextService||'',
+    summary:t(r.summary,L)||'',
+    entries:entries, photos:photos,
+    cause:t(r.cause,L)||'', repair_action:t(r.repairAction,L)||'', change_order_ref:r.changeOrderRef||'',
+    recommendations:t(r.recommendations,L)||'',
+    entriesEnabled:r.entriesEnabled!==false, photosEnabled:r.photosEnabled!==false, recommendationsEnabled:r.recommendationsEnabled!==false
+  };
+}
+function buildReportDocDef(D, logoImg){
+  var ink='#05100e',paper='#f6f5f1',body='#2b302f',sec='#4a4f4e',muted='#7a807e',faint='#9aa09e',hair='#e5e4e0';
+  var PW=595.28,k=0.75,ML=42.5,MT=48.2,MB=48.2,CW=PW-2*ML;
+  var lsf=function(em,fs){return em*fs;};
+  var isDmg=D.kind==='damage';
+  var docTitle=D.nl?(isDmg?'Schaderapport':'Onderhoudsrapport'):(isDmg?'Damage report':'Maintenance report');
+  function secHead(no,title){return {columns:[{width:'auto',text:no,font:'M4',fontSize:13*k,color:muted,margin:[0,0,9,0]},{width:'*',text:String(title).toUpperCase(),font:'I6',fontSize:13*k,color:ink,characterSpacing:lsf(0.12,13*k)}],margin:[0,0,0,14*k]};}
+  var _n=2; function sn(){_n+=1;return String(_n).padStart(2,'0');}
+
+  var det=[];
+  det.push({text:[{text:(D.nl?'Locatie':'Location')+'  ',color:muted},{text:D.location||'-',color:body}],fontSize:13*k,lineHeight:1.7});
+  det.push({text:[{text:(D.nl?(isDmg?'Schadedatum':'Onderhoudsdatum'):(isDmg?'Date of damage':'Maintenance date'))+'  ',color:muted},{text:D.report_date,color:body}],fontSize:13*k,lineHeight:1.7});
+  det.push({text:[{text:(D.nl?(isDmg?'Geconstateerd door':'Uitgevoerd door'):(isDmg?'Identified by':'Performed by'))+'  ',color:muted},{text:D.performed_by,color:body}],fontSize:13*k,lineHeight:1.7});
+  if(!isDmg&&D.visit_type)det.push({text:[{text:(D.nl?'Type':'Type')+'  ',color:muted},{text:D.visit_type,color:body}],fontSize:13*k,lineHeight:1.7});
+  if(!isDmg&&D.next_service)det.push({text:[{text:(D.nl?'Volgende service':'Next service')+'  ',color:muted},{text:D.next_service,color:body}],fontSize:13*k,lineHeight:1.7});
+
+  var c=[];
+  c.push({columns:[{width:'auto',image:logoImg,fit:[240,34*k]},{width:'*',text:docTitle.toUpperCase(),font:'I5d',fontSize:19*k,color:'#000',characterSpacing:lsf(0.04,19*k),alignment:'right',margin:[0,6*k,0,0]}]});
+  c.push({columns:[
+    {width:'*',text:[{text:(D.nl?'Afgegeven door ':'Issued by ')+D.prepared_by+'\n'},{text:D.address+'\n'},{text:D.registration}],fontSize:12*k,color:sec,lineHeight:1.7},
+    {width:'auto',stack:[
+      {text:[{text:'No. ',color:faint},{text:D.certNo}],fontSize:12*k,color:sec,alignment:'right',lineHeight:1.7},
+      {text:[{text:(D.nl?'Datum ':'Date '),color:faint},{text:D.issued}],fontSize:12*k,color:sec,alignment:'right',lineHeight:1.7},
+      {text:[{text:(D.nl?'Offerteref. ':'Quotation ref. '),color:faint},{text:D.quoteRef}],fontSize:12*k,color:sec,alignment:'right',lineHeight:1.7}
+    ]}
+  ],margin:[0,11,0,0]});
+  c.push({canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,15*k,0,15*k]});
+  c.push({text:(D.nl?'Project':'Project').toUpperCase(),font:'I6',fontSize:11*k,color:ink,characterSpacing:lsf(0.14,11*k)});
+  c.push({text:D.title,font:'I5d',fontSize:36*k,color:ink,characterSpacing:lsf(-0.02,36*k),margin:[0,10*k,0,0]});
+  if(D.subtitle)c.push({text:D.subtitle,font:'I4d',fontSize:18*k,color:sec,margin:[0,8*k,0,0]});
+  c.push({columns:[
+    {width:'*',stack:[secHead('01',D.nl?'Opdrachtgever':'Client'),{text:[D.client_name,D.client_contact,D.client_email].filter(Boolean).join('\n'),fontSize:13*k,color:body,lineHeight:1.6}]},
+    {width:'*',stack:[secHead('02',D.nl?(isDmg?'Schadedetails':'Onderhoudsdetails'):(isDmg?'Damage details':'Maintenance details')),{stack:det}]}
+  ],columnGap:48*k,margin:[0,30*k,0,0]});
+  if(D.summary)c.push({stack:[secHead(sn(),D.nl?'Samenvatting':'Summary'),{text:D.summary,fontSize:14*k,color:body,lineHeight:1.65}],margin:[0,22*k,0,0]});
+  // Entries
+  if(D.entriesEnabled!==false&&(D.entries||[]).length){
+    var entTitle=D.nl?(isDmg?'Geconstateerde schade':'Uitgevoerde werkzaamheden'):(isDmg?'Damage identified':'Work performed');
+    var tagHead=D.nl?(isDmg?'Ernst':'Status'):(isDmg?'Severity':'Status');
+    var entRows=[secHead(sn(),entTitle),
+      {columns:[{width:24*k,text:''},{width:'*',text:(D.nl?'Omschrijving':'Description').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k)},{width:110*k,text:String(tagHead).toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right'}],columnGap:16*k,margin:[0,18*k,0,7*k]},
+      {canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:ink}]}];
+    (D.entries||[]).forEach(function(it){entRows.push({stack:[
+      {columns:[{width:24*k,text:it.no,font:'M4',fontSize:11*k,color:faint},{width:'*',stack:[{text:it.item,fontSize:13*k,color:ink}].concat(it.detail?[{text:it.detail,fontSize:12*k,color:sec,lineHeight:1.5,margin:[0,2*k,0,0]}]:[])},{width:110*k,text:it.tag||'',fontSize:12*k,color:sec,alignment:'right'}],columnGap:16*k,margin:[0,10*k,0,10*k]},
+      {canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}]}],unbreakable:true});});
+    c.push({stack:entRows,margin:[0,22*k,0,0]});
+  }
+  // Foto's — twee kolommen, bijschrift onder elke foto
+  if(D.photosEnabled!==false&&(D.photos||[]).length){
+    var colW=(CW-24*k)/2;
+    var photoRows=[secHead(sn(),D.nl?'Fotodocumentatie':'Photo documentation')];
+    var ph=D.photos||[];
+    function pcell(p){return p?{width:colW,stack:[{image:p.src,fit:[colW,colW*0.72],margin:[0,0,0,5*k]}].concat(p.caption?[{text:p.caption,fontSize:11*k,color:sec,lineHeight:1.4}]:[])}:{width:colW,text:''};}
+    for(var pi=0;pi<ph.length;pi+=2){
+      photoRows.push({columns:[pcell(ph[pi]),pcell(ph[pi+1])],columnGap:24*k,margin:[0,pi?16*k:16*k,0,0],unbreakable:true});
+    }
+    c.push({stack:photoRows,margin:[0,22*k,0,0]});
+  }
+  // Damage: oorzaak + herstel ; Maintenance: aanbevelingen
+  if(isDmg){
+    if(D.cause)c.push({stack:[secHead(sn(),D.nl?'Oorzaak & verantwoordelijkheid':'Cause & responsibility'),{text:D.cause,fontSize:14*k,color:body,lineHeight:1.65}],margin:[0,22*k,0,0],unbreakable:true});
+    if(D.repair_action||D.change_order_ref){
+      var repStack=[secHead(sn(),D.nl?'Aanbevolen herstel':'Recommended repair')];
+      if(D.repair_action)repStack.push({text:D.repair_action,fontSize:14*k,color:body,lineHeight:1.65});
+      if(D.change_order_ref)repStack.push({text:[{text:(D.nl?'Doorbelasting via change order ':'Charged via change order '),color:muted},{text:D.change_order_ref,color:ink,font:'I5'}],fontSize:13*k,margin:[0,10*k,0,0]});
+      c.push({stack:repStack,margin:[0,22*k,0,0],unbreakable:true});
+    }
+  } else if(D.recommendationsEnabled!==false&&D.recommendations){
+    c.push({stack:[secHead(sn(),D.nl?'Aanbevelingen':'Recommendations'),{text:D.recommendations,fontSize:14*k,color:body,lineHeight:1.65}],margin:[0,22*k,0,0],unbreakable:true});
+  }
+  // Opgesteld door (geen handtekeningveld)
+  c.push({stack:[
+    {canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}],margin:[0,0,0,14*k]},
+    {text:(D.nl?'Opgesteld door':'Prepared by').toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),margin:[0,0,0,6*k]},
+    {text:D.prepared_by,font:'I5',fontSize:15*k,color:ink},
+    {text:'TEAL · '+D.issued,fontSize:12*k,color:sec,margin:[0,3*k,0,0]}
+  ],margin:[0,24*k,0,0],unbreakable:true});
+
+  return {pageSize:'A4',pageMargins:[ML,MT,ML,MB],
+    background:function(cp,ps){return {canvas:[{type:'rect',x:0,y:0,w:ps.width,h:ps.height,color:paper}]};},
+    header:function(cp){if(cp===1)return null;return {margin:[ML,20*k,ML,0],columns:[{width:'auto',image:logoImg,fit:[150,12]},{width:'*',text:D.title+' · '+docTitle,font:'I4',fontSize:10*k,color:sec,alignment:'right',margin:[0,1,0,0]}]};},
+    footer:function(cp,pc){return {margin:[ML,10*k,ML,0],stack:[
+      {canvas:[{type:'line',x1:0,y1:0,x2:CW,y2:0,lineWidth:0.5,lineColor:hair}]},
+      {text:docTitle+' '+D.certNo+' · '+cp+' / '+pc,font:'M4',fontSize:10*k,color:muted,characterSpacing:lsf(0.03,10*k),alignment:'right',margin:[0,10*k,0,0]}
+    ]};},
+    content:c, defaultStyle:{font:'I4',color:body}};
+}
+function exportReportPDF(d){
+  const isDmg=d.kind==='damage';
+  const base=d.lang==='en'?(isDmg?'Damage report':'Maintenance report'):(isDmg?'Schaderapport':'Onderhoudsrapport');
+  const pdfFilename=`${base} ${d.ref||'Draft'} - TEAL.pdf`;
+  if(window.pdfMake){
+    pdfMake.vfs=Object.assign({},pdfMake.vfs||{},window._PDF_VFS||{});
+    pdfMake.fonts={I4:{normal:'I4.ttf',bold:'I7.ttf'},I5:{normal:'I5.ttf',bold:'I7.ttf'},I6:{normal:'I6.ttf',bold:'I7.ttf'},I7:{normal:'I7.ttf',bold:'I7.ttf'},M4:{normal:'M4.ttf',bold:'M5.ttf'},I5d:{normal:'I5d.ttf',bold:'I7d.ttf'},I7d:{normal:'I7d.ttf',bold:'I7d.ttf'},I4d:{normal:'I4d.ttf',bold:'I7d.ttf'},Sig:{normal:'Caveat.ttf',bold:'Caveat.ttf'}};
+  }
+  resolveRemoteImages(d).then(function(dd){
+    const D=mapReportToTokens(dd);
+    const docDef=buildReportDocDef(D,window._TEAL_LOGO_PNG);
+    pdfMake.createPdf(docDef).getBuffer(function(buf){const blob=new Blob([buf],{type:'application/pdf'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=pdfFilename;a.click();URL.revokeObjectURL(url);});
+  });
+}
+
 // ── Change order: factory, tokens, PDF ──
 function createChangeOrder(parent,lang){
   const L=lang||(parent&&parent.lang)||'nl';
@@ -3393,7 +3567,7 @@ async function pushToOdoo(entry,opts={}){
 }
 
 // ── Dashboard ──
-function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,onImport,onDuplicate,onDelete,onNewCO,onNewDelivery,onNewCOForProject,onNewDeliveryForProject,onNewDischargeForProject,onBumpVersion}){
+function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,onImport,onDuplicate,onDelete,onNewCO,onNewDelivery,onNewCOForProject,onNewDeliveryForProject,onNewDischargeForProject,onNewDamageForProject,onNewMaintenanceForProject,onBumpVersion}){
   const[archive,setArchive]=useState(loadArchiveLive());
   const[baseOpen,setBaseOpen]=useState(false);
   const[expandedId,setExpandedId]=useState(null);
@@ -3435,7 +3609,7 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
   };
   // Classify: quotations (parents) vs standalone children (change orders + deliveries)
   const kindOf=e=>e.kind||(e.data&&e.data.kind)||'quote';
-  const isChild=e=>{const k=kindOf(e);return k==='change_order'||k==='delivery'||k==='discharge';};
+  const isChild=e=>isChildKind(kindOf(e));
   const parents=archive.filter(e=>!isChild(e)).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
   const childrenByParent={};const orphanChildren=[];
   archive.filter(isChild).forEach(c=>{const pid=c.parentId||(c.data&&c.data.parentId);const pref=c.parentRef||(c.data&&c.data.parentRef);const parent=parents.find(p=>p.ref===pref)||parents.find(p=>p.id===pid);if(parent){(childrenByParent[parent.id]=childrenByParent[parent.id]||[]).push(c);}else{orphanChildren.push(c);}});
@@ -3447,7 +3621,7 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
   orphanChildren.forEach(c=>{const nm=(c.projectName||(c.data&&c.data.project&&c.data.project.name)||'').trim();if(!nm){namelessOrphans.push(c);return;}if(!projMap[nm]){projMap[nm]={key:nm,name:nm,first:null,offertes:[],loose:[]};projOrder.push(nm);}projMap[nm].loose.push(c);});
   Object.keys(projMap).forEach(k=>(projMap[k].loose||[]).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt)));
   // Filters (doc-type + status)
-  const matchType=e=>{if(typeFilter==='alle')return true;const k=kindOf(e);if(typeFilter==='offertes')return k!=='change_order'&&k!=='delivery'&&k!=='discharge';if(typeFilter==='change_orders')return k==='change_order';if(typeFilter==='deliveries')return k==='delivery';if(typeFilter==='discharges')return k==='discharge';return true;};
+  const matchType=e=>{if(typeFilter==='alle')return true;const k=kindOf(e);if(typeFilter==='offertes')return !isChildKind(k);if(typeFilter==='change_orders')return k==='change_order';if(typeFilter==='deliveries')return k==='delivery';if(typeFilter==='discharges')return k==='discharge';if(typeFilter==='reports')return isReportKind(k);return true;};
   const matchStatus=e=>filter==='alle'?true:filter==='opvolgen'?needsFollowUp(e):effectiveStatus(e)===filter;
   const qn=q.trim().toLowerCase();
   const matchQ=e=>{if(!qn)return true;const hay=[(e.projectName||''),clientLabel(e),(e.ref||''),(e.data&&e.data.project&&(e.data.project.subtitle||e.data.project.phaseLabel))||''].join(' ').toLowerCase();return hay.includes(qn);};
@@ -3455,14 +3629,14 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
   // KPI's (deliveries carry no money)
   const _now=new Date();const _q0=new Date(_now.getFullYear(),Math.floor(_now.getMonth()/3)*3,1);
   let openVal=0,wonQ=0,acc=0,rej=0;
-  archive.forEach(e=>{if(kindOf(e)==='delivery'||kindOf(e)==='discharge')return;const st=effectiveStatus(e);const tot=entryTotal(e);
+  archive.forEach(e=>{if(kindOf(e)==='delivery'||kindOf(e)==='discharge'||isReportKind(kindOf(e)))return;const st=effectiveStatus(e);const tot=entryTotal(e);
     if(st==='concept'||st==='verstuurd')openVal+=tot;
     if(st==='geaccepteerd'){acc++;const at=new Date(e.statusAt||e.updatedAt);if(at>=_q0)wonQ+=tot;}
     if(st==='afgewezen')rej++;});
   const winRate=(acc+rej)>0?Math.round(acc/(acc+rej)*100):null;
   const counts={alle:archive.length};STATUS_ORDER.concat('verlopen').forEach(s=>{counts[s]=archive.filter(e=>effectiveStatus(e)===s).length;});
   counts.opvolgen=archive.filter(needsFollowUp).length;
-  const typeCounts={alle:archive.length,offertes:archive.filter(e=>kindOf(e)!=='change_order'&&kindOf(e)!=='delivery'&&kindOf(e)!=='discharge').length,change_orders:archive.filter(e=>kindOf(e)==='change_order').length,deliveries:archive.filter(e=>kindOf(e)==='delivery').length,discharges:archive.filter(e=>kindOf(e)==='discharge').length};
+  const typeCounts={alle:archive.length,offertes:archive.filter(e=>!isChildKind(kindOf(e))).length,change_orders:archive.filter(e=>kindOf(e)==='change_order').length,deliveries:archive.filter(e=>kindOf(e)==='delivery').length,discharges:archive.filter(e=>kindOf(e)==='discharge').length,reports:archive.filter(e=>isReportKind(kindOf(e))).length};
   // Build visible project groups (an offerte shows if it or any of its children matches the filters)
   const groups=projOrder.map(key=>{const g=projMap[key];const rows=[];g.offertes.forEach(off=>{const kids=childrenByParent[off.id]||[];const visKids=kids.filter(docVisible);if(docVisible(off)||visKids.length){rows.push({e:off,child:false});visKids.forEach(c=>rows.push({e:c,child:true}));}});(g.loose||[]).filter(docVisible).forEach(c=>rows.push({e:c,child:false}));const src=g.first||{projectName:g.name,type:'build',data:{client:((g.loose&&g.loose[0]&&g.loose[0].data&&g.loose[0].data.client)||{})}};return {key,name:g.name,src,external:!g.first,rows};}).filter(g=>g.rows.length);
   // Sort project groups by chosen key
@@ -3480,8 +3654,8 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
   const anyVisible=groups.length>0||orphanRows.length>0;
   const renderRow=(item,indent)=>{
     const isExpanded=expandedId===item.id;
-    const k=kindOf(item);const isCO=k==='change_order';const isDel=k==='delivery';const isDC=k==='discharge';
-    const badge=isCO?{t:'CO',c:'#6b4ea0',label:'Change order'}:isDel?{t:'OPL',c:'#0f766e',label:'Oplevering'}:isDC?{t:'DC',c:'#0f766e',label:'Dechargeverklaring'}:{t:(item.type==='build'?'B':'A'),c:item.type==='build'?'#071412':'#2D8659',label:(item.type==='build'?'Build offerte':'Assemble offerte')};
+    const k=kindOf(item);const isCO=k==='change_order';const isDel=k==='delivery';const isDC=k==='discharge';const isDmg=k==='damage';const isMnt=k==='maintenance';
+    const badge=isCO?{t:'CO',c:'#6b4ea0',label:'Change order'}:isDel?{t:'OPL',c:'#0f766e',label:'Oplevering'}:isDC?{t:'DC',c:'#0f766e',label:'Dechargeverklaring'}:isDmg?{t:'SCH',c:'#b3261e',label:'Schaderapport'}:isMnt?{t:'OND',c:'#b45309',label:'Onderhoudsrapport'}:{t:(item.type==='build'?'B':'A'),c:item.type==='build'?'#071412':'#2D8659',label:(item.type==='build'?'Build offerte':'Assemble offerte')};
     const meta=statusMeta[effectiveStatus(item)]||statusMeta.concept;
     const phase=item.data&&item.data.project&&(item.data.project.subtitle||item.data.project.phaseLabel);
     const title=(!indent&&phase)?phase:(item.projectName||badge.label);
@@ -3619,7 +3793,7 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
       const bt=byType('build'),at=byType('assemble');
       const cycles=parentsA.map(e=>{const acD=statusChangeDate(e,'geaccepteerd');if(!acD)return null;const start=statusChangeDate(e,'verstuurd')||e.createdAt;return daysBetween(start,acD);}).filter(v=>v!=null&&v>=0);
       const avgCycle=cycles.length?Math.round(cycles.reduce((s,v)=>s+v,0)/cycles.length):null;
-      const qMap={};archive.forEach(e=>{if(kindOf(e)==='delivery'||kindOf(e)==='discharge')return;if(effectiveStatus(e)!=='geaccepteerd')return;const at2=e.statusAt||statusChangeDate(e,'geaccepteerd')||e.updatedAt;if(!at2)return;const dt=new Date(at2);const key=dt.getFullYear()+'-Q'+(Math.floor(dt.getMonth()/3)+1);qMap[key]=(qMap[key]||0)+entryTotal(e);});
+      const qMap={};archive.forEach(e=>{if(kindOf(e)==='delivery'||kindOf(e)==='discharge'||isReportKind(kindOf(e)))return;if(effectiveStatus(e)!=='geaccepteerd')return;const at2=e.statusAt||statusChangeDate(e,'geaccepteerd')||e.updatedAt;if(!at2)return;const dt=new Date(at2);const key=dt.getFullYear()+'-Q'+(Math.floor(dt.getMonth()/3)+1);qMap[key]=(qMap[key]||0)+entryTotal(e);});
       const qKeys=Object.keys(qMap).sort();const qMax=Math.max(1,...qKeys.map(k=>qMap[k]));
       const rateBar=(lab,o,col)=>{return <div style={{marginBottom:10}}>
         <div className="flex" style={{justifyContent:'space-between',fontSize:12,marginBottom:3}}><span style={{fontWeight:600}}>{lab}</span><span style={{color:'#888'}}>{o.rate==null?'—':o.rate+'%'} · {o.a}/{o.a+o.r} <span style={{color:'#b0b4b2'}}>({o.n} tot.)</span></span></div>
@@ -3655,8 +3829,8 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
 
     {/* Doc-type filter */}
     <div className="flex g8" style={{marginBottom:8,flexWrap:'wrap'}}>
-      {[['alle','Alle'],['offertes','Offertes'],['change_orders','Change orders'],['deliveries','Opleveringen'],['discharges','Decharges']].map(([id,lab])=>{
-        const on=typeFilter===id;const c=id==='change_orders'?'#6b4ea0':id==='deliveries'?'#0f766e':id==='discharges'?'#0f766e':'#071412';
+      {[['alle','Alle'],['offertes','Offertes'],['change_orders','Change orders'],['deliveries','Opleveringen'],['discharges','Decharges'],['reports','Rapporten']].map(([id,lab])=>{
+        const on=typeFilter===id;const c=id==='change_orders'?'#6b4ea0':id==='deliveries'?'#0f766e':id==='discharges'?'#0f766e':id==='reports'?'#b45309':'#071412';
         return <button key={id} className="btn btn-sm" onClick={()=>setTypeFilter(id)} style={{border:'1px solid '+(on?c:'#d0d0ce'),background:on?c:'#fff',color:on?'#fff':'#555',fontWeight:on?700:600}}>{lab} <span style={{opacity:.7}}>({typeCounts[id]||0})</span></button>;
       })}
     </div>
@@ -3688,6 +3862,8 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
             <button className="btn btn-xs btn-g" title="Change order" onClick={()=>onNewCOForProject(g.name)}>+ CO</button>
             <button className="btn btn-xs btn-g" title="Oplevering" onClick={()=>onNewDeliveryForProject(g.name)}>+ Oplev.</button>
             <button className="btn btn-xs btn-g" title="Dechargeverklaring (oplever-certificaat)" onClick={()=>onNewDischargeForProject(g.name)}>+ Decharge</button>
+            <button className="btn btn-xs btn-g" title="Schaderapport (foto-voorop)" onClick={()=>onNewDamageForProject(g.name)}>+ Schade</button>
+            <button className="btn btn-xs btn-g" title="Onderhoudsrapport (foto-voorop)" onClick={()=>onNewMaintenanceForProject(g.name)}>+ Onderhoud</button>
           </div>
         </div>
         {!isColl&&g.rows.length>1&&(()=>{
@@ -4229,6 +4405,231 @@ function DischargeFlow({data:dv,set,onBack}){
   </div>;
 }
 
+// ── Rapport-weergave (Schaderapport / Onderhoudsrapport) ──
+function ReportDoc({T,L}){
+  const NL=L==='nl';
+  const isDmg=T.kind==='damage';
+  const ink='#05100e',body='#2b302f',sec='#4a4f4e',muted='#7a807e',faint='#9aa09e',hair='#e5e4e0',paper='#f6f5f1',mono="'JetBrains Mono',monospace";
+  const docTitle=NL?(isDmg?'Schaderapport':'Onderhoudsrapport'):(isDmg?'Damage report':'Maintenance report');
+  const SecHead=({n,title})=><div style={{display:'flex',alignItems:'baseline',gap:12,marginBottom:14}}><span style={{fontFamily:mono,fontSize:13,color:muted}}>{n}</span><span style={{fontSize:13,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:ink}}>{title}</span></div>;
+  const entries=T.entries||[],photos=T.photos||[];
+  let _n=2;const sn=()=>String(++_n).padStart(2,'0');
+  const sumNo=T.summary?sn():null;
+  const entNo=(T.entriesEnabled!==false&&entries.length)?sn():null;
+  const phNo=(T.photosEnabled!==false&&photos.length)?sn():null;
+  const causeNo=(isDmg&&T.cause)?sn():null;
+  const repNo=(isDmg&&(T.repair_action||T.change_order_ref))?sn():null;
+  const recNo=(!isDmg&&T.recommendationsEnabled!==false&&T.recommendations)?sn():null;
+  const tagHead=NL?(isDmg?'Ernst':'Status'):(isDmg?'Severity':'Status');
+  return <div style={{background:'#d8d6cf',padding:28,display:'flex',flexDirection:'column',alignItems:'center',gap:28,borderRadius:8,overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
+    <div style={{width:794,flexShrink:0,background:paper,boxSizing:'border-box',padding:'64px 57px',color:ink,display:'flex',flexDirection:'column',boxShadow:'0 1px 3px rgba(5,16,14,.16)'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <Logo color={ink} h={34}/>
+        <div style={{fontSize:20,lineHeight:1,letterSpacing:'0.04em',textTransform:'uppercase',fontWeight:500,color:'#000'}}>{docTitle}</div>
+      </div>
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:18}}>
+        <div style={{fontSize:12,lineHeight:1.7,color:sec}}>{(NL?'Afgegeven door ':'Issued by ')+T.prepared_by}<br/>{T.address}<br/>{T.registration}</div>
+        <div style={{fontSize:12,lineHeight:1.7,color:sec,textAlign:'right'}}><span style={{color:faint}}>No.</span> {T.certNo}<br/><span style={{color:faint}}>{NL?'Datum':'Date'}</span> {T.issued}<br/><span style={{color:faint}}>{NL?'Offerteref.':'Quotation ref.'}</span> {T.quoteRef}</div>
+      </div>
+      <div style={{height:1,background:hair,margin:'30px 0'}}/>
+      <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'0.14em',fontWeight:600,color:ink}}>{NL?'Project':'Project'}</div>
+      <h1 style={{fontSize:36,lineHeight:1.06,letterSpacing:'-0.02em',fontWeight:500,margin:'10px 0 0'}}>{T.title||'[Project]'}</h1>
+      {T.subtitle&&<div style={{fontSize:18,fontWeight:400,color:sec,marginTop:8}}>{T.subtitle}</div>}
+      <div style={{display:'flex',gap:48,marginTop:48}}>
+        <div style={{flex:1}}>
+          <SecHead n="01" title={NL?'Opdrachtgever':'Client'}/>
+          <div style={{fontSize:13,lineHeight:1.6,color:body}}>{[T.client_name,T.client_contact,T.client_email].filter(Boolean).map((x,i)=><React.Fragment key={i}>{i?<br/>:null}{x}</React.Fragment>)}</div>
+        </div>
+        <div style={{flex:1}}>
+          <SecHead n="02" title={NL?(isDmg?'Schadedetails':'Onderhoudsdetails'):(isDmg?'Damage details':'Maintenance details')}/>
+          <div style={{fontSize:13,lineHeight:1.7,color:body}}>
+            <span style={{color:muted}}>{NL?'Locatie':'Location'}</span>{'  '}{T.location||'-'}<br/>
+            <span style={{color:muted}}>{NL?(isDmg?'Schadedatum':'Onderhoudsdatum'):(isDmg?'Date of damage':'Maintenance date')}</span>{'  '}{T.report_date}<br/>
+            <span style={{color:muted}}>{NL?(isDmg?'Geconstateerd door':'Uitgevoerd door'):(isDmg?'Identified by':'Performed by')}</span>{'  '}{T.performed_by}
+            {!isDmg&&T.visit_type&&<React.Fragment><br/><span style={{color:muted}}>{NL?'Type':'Type'}</span>{'  '}{T.visit_type}</React.Fragment>}
+            {!isDmg&&T.next_service&&<React.Fragment><br/><span style={{color:muted}}>{NL?'Volgende service':'Next service'}</span>{'  '}{T.next_service}</React.Fragment>}
+          </div>
+        </div>
+      </div>
+      {sumNo&&<div style={{marginTop:28}}>
+        <SecHead n={sumNo} title={NL?'Samenvatting':'Summary'}/>
+        <div style={{fontSize:14,lineHeight:1.65,color:body,whiteSpace:'pre-wrap'}}>{T.summary}</div>
+      </div>}
+      {entNo&&<div style={{marginTop:28}}>
+        <SecHead n={entNo} title={NL?(isDmg?'Geconstateerde schade':'Uitgevoerde werkzaamheden'):(isDmg?'Damage identified':'Work performed')}/>
+        <div style={{display:'flex',gap:16,padding:'0 0 8px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}><div style={{width:24}}/><div style={{flex:1}}>{NL?'Omschrijving':'Description'}</div><div style={{width:110,textAlign:'right'}}>{tagHead}</div></div>
+        {entries.map((it,i)=><div key={i} style={{display:'flex',gap:16,padding:'11px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
+          <div style={{width:24,fontFamily:mono,fontSize:11,color:faint}}>{it.no}</div>
+          <div style={{flex:1}}><div style={{color:ink}}>{it.item}</div>{it.detail&&<div style={{color:sec,fontSize:12,lineHeight:1.5,marginTop:2}}>{it.detail}</div>}</div>
+          <div style={{width:110,textAlign:'right',color:sec,fontSize:12}}>{it.tag}</div>
+        </div>)}
+      </div>}
+      {phNo&&<div style={{marginTop:28}}>
+        <SecHead n={phNo} title={NL?'Fotodocumentatie':'Photo documentation'}/>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px 24px'}}>
+          {photos.map((p,i)=><div key={i}><img src={p.src} style={{width:'100%',aspectRatio:'1.4',objectFit:'cover',display:'block',background:'#e5e4e0'}}/>{p.caption&&<div style={{fontSize:11,color:sec,lineHeight:1.4,marginTop:5}}>{p.caption}</div>}</div>)}
+        </div>
+      </div>}
+      {causeNo&&<div style={{marginTop:28}}>
+        <SecHead n={causeNo} title={NL?'Oorzaak & verantwoordelijkheid':'Cause & responsibility'}/>
+        <div style={{fontSize:14,lineHeight:1.65,color:body,whiteSpace:'pre-wrap'}}>{T.cause}</div>
+      </div>}
+      {repNo&&<div style={{marginTop:28}}>
+        <SecHead n={repNo} title={NL?'Aanbevolen herstel':'Recommended repair'}/>
+        {T.repair_action&&<div style={{fontSize:14,lineHeight:1.65,color:body,whiteSpace:'pre-wrap'}}>{T.repair_action}</div>}
+        {T.change_order_ref&&<div style={{fontSize:13,color:body,marginTop:10}}><span style={{color:muted}}>{NL?'Doorbelasting via change order ':'Charged via change order '}</span>{T.change_order_ref}</div>}
+      </div>}
+      {recNo&&<div style={{marginTop:28}}>
+        <SecHead n={recNo} title={NL?'Aanbevelingen':'Recommendations'}/>
+        <div style={{fontSize:14,lineHeight:1.65,color:body,whiteSpace:'pre-wrap'}}>{T.recommendations}</div>
+      </div>}
+      <div style={{marginTop:28,borderTop:'1px solid '+hair,paddingTop:14}}>
+        <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted,marginBottom:6}}>{NL?'Opgesteld door':'Prepared by'}</div>
+        <div style={{fontSize:15,fontWeight:500,color:ink}}>{T.prepared_by}</div>
+        <div style={{fontSize:12,color:sec,marginTop:3}}>TEAL · {T.issued}</div>
+      </div>
+      <div style={{flex:1,minHeight:24}}/>
+      <div style={{fontFamily:mono,fontSize:10,color:muted,letterSpacing:'0.03em',borderTop:'1px solid '+hair,paddingTop:14,marginTop:30,display:'flex',justifyContent:'flex-end'}}><span>{docTitle+' '+T.certNo}</span></div>
+    </div>
+  </div>;
+}
+
+// ── Rapport-editor ──
+function ReportTab({data:d,set}){
+  const NL=d.lang==='nl';
+  const isDmg=d.kind==='damage';
+  const r=d.report||defaultReport(d.kind);
+  const up=(patch)=>set({...d,report:{...r,...patch}});
+  const upProj=(patch)=>set({...d,project:{...d.project,...patch}});
+  const upBil=(field,val)=>{const o=r[field];const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[d.lang]=val;up({[field]:nn});};
+  const entries=r.entries&&r.entries.length?r.entries:[{item:'',detail:'',tag:''}];
+  const setEntries=(arr)=>up({entries:arr});
+  const photos=r.photos||[];
+  const addPhoto=(src)=>up({photos:[...photos,{src,caption:{nl:'',en:''}}]});
+  const setCaption=(i,val)=>{const a=photos.slice();const o=a[i]||{src:'',caption:{nl:'',en:''}};const cc=typeof o.caption==='string'?{nl:o.caption,en:o.caption}:{...(o.caption||{nl:'',en:''})};cc[d.lang]=val;a[i]={...o,caption:cc};up({photos:a});};
+  const delPhoto=(i)=>up({photos:photos.filter((_,j)=>j!==i)});
+  const onPick=(e)=>{const fl=[...((e.target.files)||[])];Promise.all(fl.filter(f=>/^image\//.test(f.type)).map(f=>imgToDataUrlFree(f))).then(us=>us.forEach(u=>addPhoto(u)));e.target.value='';};
+  const onPaste=(e)=>{const its=(e.clipboardData&&e.clipboardData.items)||[];for(const it of its){if(/^image\//.test(it.type)){const f=it.getAsFile();if(f)imgToDataUrlFree(f).then(u=>addPhoto(u));}}};
+  const onDrop=(e)=>{e.preventDefault();[...((e.dataTransfer&&e.dataTransfer.files)||[])].filter(x=>/^image\//.test(x.type)).forEach(f=>imgToDataUrlFree(f).then(u=>addPhoto(u)));};
+  const hasContent=entries.some(x=>String(x.item||'').trim())||photos.length>0;
+  const tagPlaceholder=NL?(isDmg?'Ernst (bv. licht/ernstig)':'Status'):(isDmg?'Severity':'Status (bv. vervangen)');
+  return <div>
+    <div className="card">
+      <div className="between" style={{alignItems:'center',flexWrap:'wrap',gap:8}}>
+        <div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?(isDmg?'Schaderapport':'Onderhoudsrapport'):(isDmg?'Damage report':'Maintenance report')}</div>
+        <button className="btn btn-s" disabled={!hasContent} onClick={()=>exportReportPDF(d)}>{NL?'Download PDF':'Download PDF'}</button>
+      </div>
+      <p className="sm muted" style={{margin:'6px 0 0'}}>{isDmg?(NL?'Legt geconstateerde schade vast met foto’s, oorzaak en aanbevolen herstel. Aparte A4-PDF, foto-voorop.':'Records identified damage with photos, cause and recommended repair. Separate A4 PDF, photo-forward.'):(NL?'Legt een onderhoudsbezoek vast: uitgevoerde werkzaamheden met foto’s en aanbevelingen. Aparte A4-PDF, foto-voorop.':'Records a maintenance visit: work performed with photos and recommendations. Separate A4 PDF, photo-forward.')}</p>
+    </div>
+
+    <div className="card">
+      <div className="card-h">{NL?(isDmg?'Schadedetails':'Onderhoudsdetails'):(isDmg?'Damage details':'Maintenance details')}</div>
+      <div className="fg"><label>{NL?'Locatie':'Location'}</label><input value={d.project.location||''} placeholder={NL?'bv. Van Gendthallen, Amsterdam':'e.g. location'} onChange={e=>upProj({location:e.target.value})}/></div>
+      <div className="row">
+        <div className="fg"><label>{NL?(isDmg?'Schadedatum':'Onderhoudsdatum'):(isDmg?'Date of damage':'Maintenance date')}</label><input type="date" value={r.reportDate||''} onChange={e=>up({reportDate:e.target.value})}/></div>
+        <div className="fg"><label>{NL?(isDmg?'Geconstateerd door':'Uitgevoerd door'):(isDmg?'Identified by':'Performed by')}</label><input value={r.performedBy||''} onChange={e=>up({performedBy:e.target.value})}/></div>
+      </div>
+      {!isDmg&&<div className="row">
+        <div className="fg"><label>{NL?'Type bezoek':'Visit type'}</label><input value={r.visitType||''} placeholder={NL?'bv. regulier / correctief':'e.g. scheduled / corrective'} onChange={e=>up({visitType:e.target.value})}/></div>
+        <div className="fg"><label>{NL?'Volgende service':'Next service'}</label><input value={r.nextService||''} placeholder={NL?'bv. over 6 maanden':'e.g. in 6 months'} onChange={e=>up({nextService:e.target.value})}/></div>
+      </div>}
+    </div>
+
+    <div className="card">
+      <div className="card-h">{NL?'Samenvatting':'Summary'}</div>
+      <div className="fg"><div className="between" style={{alignItems:'center'}}><label style={{margin:0}}>{NL?'Inleiding':'Intro'}</label><button className="btn btn-sm btn-g" style={{padding:'2px 8px',fontSize:11}} onClick={()=>up({summary:defaultReport(d.kind).summary})}>{NL?'standaardtekst':'default text'}</button></div><textarea rows={3} value={t(r.summary,d.lang)} onChange={e=>upBil('summary',e.target.value)}/></div>
+    </div>
+
+    <div className="card">
+      <div className="between" style={{alignItems:'center',marginBottom:10}}>
+        <div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?(isDmg?'Geconstateerde schade':'Uitgevoerde werkzaamheden'):(isDmg?'Damage identified':'Work performed')}</div>
+        <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#555',cursor:'pointer',margin:0}}><input type="checkbox" checked={r.entriesEnabled!==false} onChange={e=>up({entriesEnabled:e.target.checked})}/>{NL?'opnemen':'include'}</label>
+      </div>
+      {entries.map((it,i)=><div key={i} style={{display:'flex',gap:8,alignItems:'flex-start',marginBottom:8}}>
+        <div className="fg" style={{flex:2,margin:0}}><input placeholder={NL?'Onderdeel (bv. twig B4-12)':'Item'} value={it.item||''} onChange={e=>{const a=entries.slice();a[i]={...a[i],item:e.target.value};setEntries(a);}}/></div>
+        <div className="fg" style={{flex:3,margin:0}}><input placeholder={NL?'Toelichting / wat is gedaan':'Detail / what was done'} value={it.detail||''} onChange={e=>{const a=entries.slice();a[i]={...a[i],detail:e.target.value};setEntries(a);}}/></div>
+        <div className="fg" style={{flex:1,margin:0}}><input placeholder={tagPlaceholder} value={it.tag||''} onChange={e=>{const a=entries.slice();a[i]={...a[i],tag:e.target.value};setEntries(a);}}/></div>
+        <button className="btn btn-sm btn-g" onClick={()=>{const a=entries.slice();a.splice(i,1);setEntries(a.length?a:[{item:'',detail:'',tag:''}]);}}>×</button>
+      </div>)}
+      <button className="btn btn-sm btn-g" onClick={()=>setEntries([...entries,{item:'',detail:'',tag:''}])}>+ {NL?'Regel':'Row'}</button>
+    </div>
+
+    <div className="card" onPaste={onPaste} onDragOver={e=>e.preventDefault()} onDrop={onDrop}>
+      <div className="between" style={{alignItems:'center',marginBottom:10}}>
+        <div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Foto’s':'Photos'}</div>
+        <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#555',cursor:'pointer',margin:0}}><input type="checkbox" checked={r.photosEnabled!==false} onChange={e=>up({photosEnabled:e.target.checked})}/>{NL?'opnemen':'include'}</label>
+      </div>
+      <p className="sm muted" style={{margin:'0 0 10px'}}>{NL?'Kies bestanden, of plak/sleep afbeeldingen in dit vak.':'Pick files, or paste/drop images into this card.'}</p>
+      <label className="btn btn-sm btn-g" style={{display:'inline-block',cursor:'pointer'}}>+ {NL?'Foto’s toevoegen':'Add photos'}<input type="file" accept="image/*" multiple style={{display:'none'}} onChange={onPick}/></label>
+      {photos.length>0&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:12,marginTop:12}}>
+        {photos.map((p,i)=><div key={i} style={{border:'1px solid #e5e4e0',borderRadius:4,overflow:'hidden',background:'#fff'}}>
+          <div style={{position:'relative'}}><img src={p.src} style={{width:'100%',height:120,objectFit:'cover',display:'block'}}/><button className="btn btn-sm" onClick={()=>delPhoto(i)} style={{position:'absolute',top:4,right:4,background:'rgba(5,16,14,.7)',color:'#fff',border:0,borderRadius:3,padding:'2px 7px'}}>×</button></div>
+          <input placeholder={NL?'Bijschrift':'Caption'} value={t(p.caption,d.lang)} onChange={e=>setCaption(i,e.target.value)} style={{width:'100%',border:0,borderTop:'1px solid #e5e4e0',padding:'6px 8px',fontSize:12,boxSizing:'border-box'}}/>
+        </div>)}
+      </div>}
+    </div>
+
+    {isDmg?<div className="card">
+      <div className="card-h">{NL?'Oorzaak, herstel & doorbelasting':'Cause, repair & recharge'}</div>
+      <div className="fg"><label>{NL?'Oorzaak & verantwoordelijkheid':'Cause & responsibility'}</label><textarea rows={2} value={t(r.cause,d.lang)} onChange={e=>upBil('cause',e.target.value)}/></div>
+      <div className="fg"><label>{NL?'Aanbevolen herstel / uitgevoerd herstel':'Recommended / performed repair'}</label><textarea rows={2} value={t(r.repairAction,d.lang)} onChange={e=>upBil('repairAction',e.target.value)}/></div>
+      <div className="fg"><label>{NL?'Change order-referentie (doorbelasting)':'Change order reference (recharge)'}</label><input value={r.changeOrderRef||''} placeholder={NL?'bv. B-260713-2-CO1':'e.g. B-260713-2-CO1'} onChange={e=>up({changeOrderRef:e.target.value})}/></div>
+    </div>:<div className="card">
+      <div className="between" style={{alignItems:'center',marginBottom:10}}>
+        <div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Aanbevelingen':'Recommendations'}</div>
+        <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#555',cursor:'pointer',margin:0}}><input type="checkbox" checked={r.recommendationsEnabled!==false} onChange={e=>up({recommendationsEnabled:e.target.checked})}/>{NL?'opnemen':'include'}</label>
+      </div>
+      <textarea rows={3} value={t(r.recommendations,d.lang)} placeholder={NL?'Aanbevelingen voor vervolg / volgende onderhoudsbeurt':'Recommendations for follow-up / next service'} onChange={e=>upBil('recommendations',e.target.value)}/>
+    </div>}
+  </div>;
+}
+function ReportFlow({data:dv,set,onBack}){
+  const NL=dv.lang==='nl';
+  const isDmg=dv.kind==='damage';
+  const[showPrev,setShowPrev]=useState(true);
+  const upProj=(patch)=>set({...dv,project:{...dv.project,...patch}});
+  const upClient=(patch)=>set({...dv,client:{...dv.client,...patch}});
+  const S=resolveSharedInfo(dv);
+  return <div>
+    <div className="between mb16" style={{flexWrap:'wrap',gap:8}}>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <button className="btn btn-g btn-sm" onClick={onBack}>‹ Dashboard</button>
+        <span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:isDmg?'#b3261e':'#0f766e'}}>{NL?(isDmg?'schade':'onderhoud'):(isDmg?'damage':'maintenance')}</span>
+        <span style={{fontSize:12,color:'#999'}}>{dv.ref}{dv.parentRef?' · '+(NL?'bij ':'for ')+dv.parentRef:''}</span>
+      </div>
+      <div className="flex g8" style={{alignItems:'center'}}>
+        <button className="btn btn-g btn-sm" onClick={()=>setShowPrev(s=>!s)}>{showPrev?(NL?'Voorbeeld verbergen':'Hide preview'):(NL?'Voorbeeld tonen':'Show preview')}</button>
+        <div className="flex" style={{border:'1px solid #d0d0ce',borderRadius:4,overflow:'hidden'}}>
+          {['nl','en'].map(lng=><button key={lng} className="btn btn-sm" onClick={()=>set({...dv,lang:lng})} style={{borderRadius:0,border:0,background:dv.lang===lng?'#071412':'#fff',color:dv.lang===lng?'#fff':'#555',fontWeight:dv.lang===lng?700:600}}>{lng.toUpperCase()}</button>)}
+        </div>
+      </div>
+    </div>
+    {S.editable
+      ? <div className="card"><div className="card-h">{NL?'Projectgegevens':'Project details'}</div>
+          <div className="row"><div className="fg"><label>{NL?'Projectnaam':'Project name'}</label><input value={dv.project.name} onChange={e=>upProj({name:e.target.value})}/></div>
+            <div className="fg"><label>{NL?'Gekoppelde offerte (ref.)':'Linked quotation (ref.)'}</label><input value={dv.parentRef||''} onChange={e=>{const pr=e.target.value;let pid=null;if(pr.trim()){try{const par=loadArchiveLive().find(x=>!isChildKind(x.kind)&&x.ref===pr.trim());pid=par?par.id:null;}catch(_e){}}set({...dv,parentRef:pr,parentId:pid});}}/></div></div>
+          <div className="row3"><div className="fg"><label>{NL?'Klant':'Client'}</label><input value={dv.client.name} onChange={e=>upClient({name:e.target.value})}/></div>
+            <div className="fg"><label>Contact</label><input value={dv.client.contact} onChange={e=>upClient({contact:e.target.value})}/></div>
+            <div className="fg"><label>E-mail</label><input value={dv.client.email} onChange={e=>upClient({email:e.target.value})}/></div></div>
+        </div>
+      : <div className="card">
+          <div className="between" style={{alignItems:'baseline'}}><div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Projectgegevens':'Project details'}</div>
+            <span className="sm muted">{S.source==='offerte'?(NL?'overgenomen van de offerte':'inherited from the quotation'):(NL?'overgenomen van het project':'inherited from the project')}</span></div>
+          <div className="sm" style={{marginTop:10,lineHeight:1.8,color:'#2b302f'}}>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Project':'Project'}</span>{S.projectName||'-'}{S.phase?' · '+S.phase:''}</div>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Klant':'Client'}</span>{[S.client.name,S.client.contact,S.client.email].filter(Boolean).join(' · ')||'-'}</div>
+            <div><span style={{color:'#999',display:'inline-block',width:150}}>{NL?'Gekoppelde offerte':'Linked quotation'}</span>{S.linkedRef||'-'}</div>
+          </div>
+          <p className="sm muted" style={{marginTop:8,marginBottom:0}}>{NL?'De locatie beheer je hieronder bij de details.':'Set the location below under details.'}</p>
+        </div>}
+    <ReportTab data={dv} set={set}/>
+    {showPrev&&<div style={{marginTop:24}}>
+      <div className="card-h" style={{marginBottom:12}}>{NL?'Voorbeeld':'Preview'}</div>
+      <ReportDoc T={mapReportToTokens(dv)} L={dv.lang}/>
+    </div>}
+  </div>;
+}
+
 // ── App ──
 // Open de Claude DESKTOP-app met een kant-en-klare prompt, zodat Claude via de "TEAL Offerte
 // Tool"-connector de offerte maakt/bijwerkt. Gebruikt je Claude-abonnement (geen API-kosten).
@@ -4255,7 +4656,7 @@ function App(){
 
   useEffect(()=>{
     migrateDeliveryRefs();
-    const _std=x=>x&&(x.kind==='change_order'||x.kind==='delivery'||x.kind==='discharge');
+    const _std=x=>x&&isChildKind(x.kind);
     const imp=loadImportHash();
     if(imp){const saved=archiveSave(imp,'created');save(saved);setD(saved);setShowDash(false);history.replaceState(null,'',location.pathname);return;}
     const sid=loadShortId();
@@ -4273,7 +4674,7 @@ function App(){
     else{setD(null);}
   },[]);
 
-  const isStandalone=(x)=>x&&(x.kind==='change_order'||x.kind==='delivery'||x.kind==='discharge');
+  const isStandalone=(x)=>x&&isChildKind(x.kind);
   const openQuote=(data)=>{const md=isStandalone(data)?data:migrateConds(data);const saved=archiveSave(md,'updated');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const newQuote=(type)=>{const proj=createProject(type);const saved=archiveSave(proj,'created');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const newQuoteInProject=(fromEntry)=>{const type=fromEntry.type||(fromEntry.data&&fromEntry.data.type)||'build';const proj=createProject(type);proj.project.name=fromEntry.projectName||(fromEntry.data&&fromEntry.data.project&&fromEntry.data.project.name)||'';const pc=(fromEntry.data&&fromEntry.data.client)||{};proj.client={...proj.client,name:pc.name||'',contact:pc.contact||'',email:pc.email||'',addr:pc.addr||'',zip:pc.zip||'',city:pc.city||''};proj.project.location=(fromEntry.data&&fromEntry.data.project&&fromEntry.data.project.location)||'';const saved=archiveSave(proj,'created');save(saved);setD(saved);setTab('project');setShowDash(false);};
@@ -4288,6 +4689,8 @@ function App(){
   const newDeliveryForProject=(name)=>{const dvd=createDelivery(null,(d&&d.lang)||'nl');if(name)dvd.project.name=name;const saved=archiveSave(dvd,'created');save(saved);setD(saved);setShowDash(false);};
   const newDischarge=(parentEntry)=>{const lang=parentEntry?parentEntry.lang:((d&&d.lang)||'nl');const dcd=createDischarge(parentEntry,lang);const saved=archiveSave(dcd,'created');save(saved);setD(saved);setShowDash(false);};
   const newDischargeForProject=(name)=>{const dcd=createDischarge(null,(d&&d.lang)||'nl');if(name)dcd.project.name=name;const saved=archiveSave(dcd,'created');save(saved);setD(saved);setShowDash(false);};
+  const newReport=(kind,parentEntry)=>{const lang=parentEntry?parentEntry.lang:((d&&d.lang)||'nl');const rp=createReport(kind,parentEntry,lang);const saved=archiveSave(rp,'created');save(saved);setD(saved);setShowDash(false);};
+  const newReportForProject=(kind,name)=>{const rp=createReport(kind,null,(d&&d.lang)||'nl');if(name)rp.project.name=name;const saved=archiveSave(rp,'created');save(saved);setD(saved);setShowDash(false);};
   const newExternalProject=()=>{const name=window.prompt('Projectnaam (offerte buiten de tool):');if(name===null)return;const co=createChangeOrder(null,'nl');co.project.name=(name||'').trim();const saved=archiveSave(co,'created');save(saved);setD(saved);setShowDash(false);};
   const importDoc=(merged)=>{if(!merged)return;const saved=archiveSave(merged,'created');save(saved);setD(saved);setTab('project');setShowDash(false);};
   const bumpVersion=(id)=>{const note=window.prompt('Wat is er anders in deze nieuwe versie? (kort)');if(note===null)return;const e=archiveBumpVersion(id,note);if(e&&d&&d._archiveId===id){setD(e.data);save(e.data);}};
@@ -4367,7 +4770,8 @@ function App(){
   const isCO=d&&d.kind==='change_order';
   const isDelivery=d&&d.kind==='delivery';
   const isDischarge=d&&d.kind==='discharge';
-  const isChild=isCO||isDelivery||isDischarge;
+  const isReport=d&&isReportKind(d.kind);
+  const isChild=isCO||isDelivery||isDischarge||isReport;
   return <div className="app">
     <div className="topbar">
       <Header data={showDash||isChild?null:d} onPdf={handlePdf} onExport={handleExport} setData={setDWithArchive} onBack={goToDash}/>
@@ -4375,10 +4779,11 @@ function App(){
       {!showDash&&d&&!isChild&&<button className="btn btn-g btn-sm" style={{marginLeft:8,color:'var(--teal-mint)',borderColor:'rgba(212,236,230,.3)'}} title={d.lang==='nl'?'Alle secties op één doorlopende pagina (geen tabs)':'All sections on one continuous page (no tabs)'} onClick={()=>setTab(t=>t==='all'?'project':'all')}>{tab==='all'?(d.lang==='nl'?'Per tab':'By tab'):(d.lang==='nl'?'📄 Eén pagina':'📄 One page')}</button>}
     </div>
     <div className="main">
-      {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onNewFrom={newQuoteFrom} onNewInProject={newQuoteInProject} onNewExternalProject={newExternalProject} onImport={importDoc} onDuplicate={duplicateQuote} onDelete={deleteQuote} onNewCO={newCO} onNewDelivery={newDelivery} onNewCOForProject={newCOForProject} onNewDeliveryForProject={newDeliveryForProject} onNewDischargeForProject={newDischargeForProject} onBumpVersion={bumpVersion}/>:
+      {showDash?<Dashboard onOpen={openQuote} onNew={newQuote} onNewFrom={newQuoteFrom} onNewInProject={newQuoteInProject} onNewExternalProject={newExternalProject} onImport={importDoc} onDuplicate={duplicateQuote} onDelete={deleteQuote} onNewCO={newCO} onNewDelivery={newDelivery} onNewCOForProject={newCOForProject} onNewDeliveryForProject={newDeliveryForProject} onNewDischargeForProject={newDischargeForProject} onNewDamageForProject={(name)=>newReportForProject('damage',name)} onNewMaintenanceForProject={(name)=>newReportForProject('maintenance',name)} onBumpVersion={bumpVersion}/>:
       isCO?<ChangeOrderFlow data={d} set={setDWithArchive} onBack={goToDash}/>:
       isDelivery?<DeliveryFlow data={d} set={setDWithArchive} onBack={goToDash}/>:
       isDischarge?<DischargeFlow data={d} set={setDWithArchive} onBack={goToDash}/>:
+      isReport?<ReportFlow data={d} set={setDWithArchive} onBack={goToDash}/>:
       !d?<Start onSelect={type=>{if(type==='load'){const r=load();if(r)openQuote(r);}else newQuote(type);}}/>:<>
         <div className="between mb16">
           <div style={{display:'flex',alignItems:'center',gap:8}}>
