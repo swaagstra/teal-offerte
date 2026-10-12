@@ -3241,7 +3241,7 @@ function defaultReport(kind){
     photos:[],
     recommendations:{nl:'',en:''},
     // damage-specifiek
-    cause:{nl:'',en:''}, repairAction:{nl:'',en:''}, changeOrderRef:'',
+    cause:{nl:'',en:''}, repairAction:{nl:'',en:''}, changeOrderRef:'', rechargeType:'invoice',
     // maintenance-specifiek
     visitType:'', nextService:'',
     entriesEnabled:true, photosEnabled:true, recommendationsEnabled:true
@@ -3290,7 +3290,7 @@ function mapReportToTokens(d){
     next_service:r.nextService||'',
     summary:t(r.summary,L)||'',
     entries:entries, photos:photos,
-    cause:t(r.cause,L)||'', repair_action:t(r.repairAction,L)||'', change_order_ref:r.changeOrderRef||'',
+    cause:t(r.cause,L)||'', repair_action:t(r.repairAction,L)||'', change_order_ref:r.changeOrderRef||'', recharge_type:r.rechargeType==='change_order'?'change_order':'invoice',
     recommendations:t(r.recommendations,L)||'',
     entriesEnabled:r.entriesEnabled!==false, photosEnabled:r.photosEnabled!==false, recommendationsEnabled:r.recommendationsEnabled!==false
   };
@@ -3359,7 +3359,7 @@ function buildReportDocDef(D, logoImg){
     if(D.repair_action||D.change_order_ref){
       var repStack=[secHead(sn(),D.nl?'Aanbevolen herstel':'Recommended repair')];
       if(D.repair_action)repStack.push({text:D.repair_action,fontSize:14*k,color:body,lineHeight:1.65});
-      if(D.change_order_ref)repStack.push({text:[{text:(D.nl?'Doorbelasting via change order ':'Charged via change order '),color:muted},{text:D.change_order_ref,color:ink,font:'I5'}],fontSize:13*k,margin:[0,10*k,0,0]});
+      if(D.change_order_ref)repStack.push({text:[{text:(D.recharge_type==='change_order'?(D.nl?'Doorbelast via change order ':'Charged via change order '):(D.nl?'Doorbelast via factuur ':'Charged via invoice ')),color:muted},{text:D.change_order_ref,color:ink,font:'I5'}],fontSize:13*k,margin:[0,10*k,0,0]});
       c.push({stack:repStack,margin:[0,22*k,0,0],unbreakable:true});
     }
   } else if(D.recommendationsEnabled!==false&&D.recommendations){
@@ -4477,7 +4477,7 @@ function ReportDoc({T,L}){
       {repNo&&<div style={{marginTop:28}}>
         <SecHead n={repNo} title={NL?'Aanbevolen herstel':'Recommended repair'}/>
         {T.repair_action&&<div style={{fontSize:14,lineHeight:1.65,color:body,whiteSpace:'pre-wrap'}}>{T.repair_action}</div>}
-        {T.change_order_ref&&<div style={{fontSize:13,color:body,marginTop:10}}><span style={{color:muted}}>{NL?'Doorbelasting via change order ':'Charged via change order '}</span>{T.change_order_ref}</div>}
+        {T.change_order_ref&&<div style={{fontSize:13,color:body,marginTop:10}}><span style={{color:muted}}>{T.recharge_type==='change_order'?(NL?'Doorbelast via change order ':'Charged via change order '):(NL?'Doorbelast via factuur ':'Charged via invoice ')}</span>{T.change_order_ref}</div>}
       </div>}
       {recNo&&<div style={{marginTop:28}}>
         <SecHead n={recNo} title={NL?'Aanbevelingen':'Recommendations'}/>
@@ -4573,7 +4573,7 @@ function ReportTab({data:d,set}){
       <div className="card-h">{NL?'Oorzaak, herstel & doorbelasting':'Cause, repair & recharge'}</div>
       <div className="fg"><label>{NL?'Oorzaak & verantwoordelijkheid':'Cause & responsibility'}</label><textarea rows={2} value={t(r.cause,d.lang)} onChange={e=>upBil('cause',e.target.value)}/></div>
       <div className="fg"><label>{NL?'Aanbevolen herstel / uitgevoerd herstel':'Recommended / performed repair'}</label><textarea rows={2} value={t(r.repairAction,d.lang)} onChange={e=>upBil('repairAction',e.target.value)}/></div>
-      <div className="fg"><label>{NL?'Change order-referentie (doorbelasting)':'Change order reference (recharge)'}</label><input value={r.changeOrderRef||''} placeholder={NL?'bv. B-260713-2-CO1':'e.g. B-260713-2-CO1'} onChange={e=>up({changeOrderRef:e.target.value})}/></div>
+      <div className="row"><div className="fg" style={{flex:'0 0 170px'}}><label>{NL?'Doorbelasting via':'Recharged via'}</label><select value={r.rechargeType==='change_order'?'change_order':'invoice'} onChange={e=>up({rechargeType:e.target.value})}><option value="invoice">{NL?'Factuur':'Invoice'}</option><option value="change_order">Change order</option></select></div><div className="fg"><label>{NL?'Referentie (factuur- of CO-nummer)':'Reference (invoice or CO number)'}</label><input value={r.changeOrderRef||''} placeholder={NL?'bv. 2026/0123':'e.g. INV/2026/0123'} onChange={e=>up({changeOrderRef:e.target.value})}/></div></div>
     </div>:<div className="card">
       <div className="between" style={{alignItems:'center',marginBottom:10}}>
         <div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Aanbevelingen':'Recommendations'}</div>
