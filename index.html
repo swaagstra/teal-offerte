@@ -3282,7 +3282,7 @@ function mapReportToTokens(d){
   const r=d.report||defaultReport(d.kind);
   const S=resolveSharedInfo(d);
   const entries=(r.entries||[]).filter(x=>x&&String(x.item||'').trim()).map((x,i)=>({no:String(i+1).padStart(2,'0'),item:x.item,detail:x.detail||'',tag:x.tag||''}));
-  const photos=(r.photos||[]).filter(p=>p&&p.src).map(p=>({src:p.src,caption:t(p.caption,L)||(typeof p.caption==='string'?p.caption:'')}));
+  const photos=(r.photos||[]).filter(p=>p&&p.src).map(p=>({src:p.src,pos:p.pos||null,marks:p.marks||[],caption:t(p.caption,L)||(typeof p.caption==='string'?p.caption:'')}));
   return {
     kind:d.kind, nl:NL,
     prepared_by:d.project.preparedBy||'Erik Swaagstra',
@@ -3358,7 +3358,7 @@ function buildReportDocDef(D, logoImg){
     var colW=(CW-24*k)/2;
     var photoRows=[secHead(sn(),D.nl?'Fotodocumentatie':'Photo documentation')];
     var ph=D.photos||[];
-    function pcell(p){return p?{width:colW,stack:[{image:p.src,fit:[colW,colW*0.72],margin:[0,0,0,5*k]}].concat(p.caption?[{text:p.caption,fontSize:11*k,color:sec,lineHeight:1.4}]:[])}:{width:colW,text:''};}
+    function pcell(p){return p?{width:colW,stack:[{image:p.src,width:colW,height:colW/PHOTO_AR,margin:[0,0,0,5*k]}].concat(p.caption?[{text:p.caption,fontSize:11*k,color:sec,lineHeight:1.4}]:[])}:{width:colW,text:''};}
     for(var pi=0;pi<ph.length;pi+=2){
       photoRows.push({columns:[pcell(ph[pi]),pcell(ph[pi+1])],columnGap:24*k,margin:[0,pi?16*k:16*k,0,0],unbreakable:true});
     }
@@ -3401,8 +3401,10 @@ function exportReportPDF(d){
     pdfMake.vfs=Object.assign({},pdfMake.vfs||{},window._PDF_VFS||{});
     pdfMake.fonts={I4:{normal:'I4.ttf',bold:'I7.ttf'},I5:{normal:'I5.ttf',bold:'I7.ttf'},I6:{normal:'I6.ttf',bold:'I7.ttf'},I7:{normal:'I7.ttf',bold:'I7.ttf'},M4:{normal:'M4.ttf',bold:'M5.ttf'},I5d:{normal:'I5d.ttf',bold:'I7d.ttf'},I7d:{normal:'I7d.ttf',bold:'I7d.ttf'},I4d:{normal:'I4d.ttf',bold:'I7d.ttf'},Sig:{normal:'Caveat.ttf',bold:'Caveat.ttf'}};
   }
-  resolveRemoteImages(d).then(function(dd){
+  resolveRemoteImages(d).then(async function(dd){
     const D=mapReportToTokens(dd);
+    // Uitsnede + cirkels/pijlen inbakken, zodat de PDF exact de preview volgt.
+    D.photos=await Promise.all((D.photos||[]).map(async p=>({...p,src:await bakePhoto(p)})));
     const docDef=buildReportDocDef(D,window._TEAL_LOGO_PNG);
     pdfMake.createPdf(docDef).getBuffer(function(buf){const blob=new Blob([buf],{type:'application/pdf'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=pdfFilename;a.click();URL.revokeObjectURL(url);});
   });
@@ -4416,6 +4418,140 @@ function DischargeFlow({data:dv,set,onBack}){
   </div>;
 }
 
+// ── Rapportfoto's: uitsnede (pos) + markeringen (marks) ──
+// Elke foto toont in een vast kader (PHOTO_AR) met object-fit 'cover'. pos={x,y} (0..1) bepaalt
+// welk deel zichtbaar blijft, zoals CSS object-position. marks zijn rode cirkels/pijlen in
+// coördinaten relatief aan de hele foto (0..1), zodat ze meeschuiven met de uitsnede.
+// Eén virtueel kader (PHOTO_VW×PHOTO_VH) voor editor, preview én PDF-bake: overal dezelfde weergave.
+const PHOTO_AR=1.4,PHOTO_VW=1400,PHOTO_VH=1000,MARK_RED='#e0201b';
+const _imgDims={};
+function useImgDims(src){
+  const[dims,setDims]=useState(()=>_imgDims[src]||null);
+  useEffect(()=>{
+    if(!src)return;
+    if(_imgDims[src]){setDims(_imgDims[src]);return;}
+    let live=true;const im=new Image();
+    im.onload=()=>{_imgDims[src]={w:im.naturalWidth,h:im.naturalHeight};if(live)setDims(_imgDims[src]);};
+    im.src=src;
+    return()=>{live=false;};
+  },[src]);
+  return dims;
+}
+function coverGeom(dims,pos){
+  const s=Math.max(PHOTO_VW/dims.w,PHOTO_VH/dims.h);const dw=dims.w*s,dh=dims.h*s;
+  const px=pos&&pos.x!=null?pos.x:0.5,py=pos&&pos.y!=null?pos.y:0.5;
+  return {dw,dh,ox:(PHOTO_VW-dw)*px,oy:(PHOTO_VH-dh)*py};
+}
+// Markering → vormen in kadercoördinaten (gedeeld door SVG en canvas).
+function markShape(m,g){
+  const X=u=>g.ox+u*g.dw,Y=v=>g.oy+v*g.dh;
+  const x1=X(m.x1),y1=Y(m.y1),x2=X(m.x2),y2=Y(m.y2);
+  if(m.t==='circle')return {t:'circle',cx:(x1+x2)/2,cy:(y1+y2)/2,rx:Math.max(4,Math.abs(x2-x1)/2),ry:Math.max(4,Math.abs(y2-y1)/2)};
+  const a=Math.atan2(y2-y1,x2-x1),hl=70,hw=0.45;
+  return {t:'arrow',x1,y1,x2,y2,h1:[x2-hl*Math.cos(a-hw),y2-hl*Math.sin(a-hw)],h2:[x2-hl*Math.cos(a+hw),y2-hl*Math.sin(a+hw)]};
+}
+const MARK_W=14;
+function MarkSvg({m,g}){
+  const s=markShape(m,g);
+  const st={fill:'none',stroke:MARK_RED,strokeWidth:MARK_W,strokeLinecap:'round',strokeLinejoin:'round'};
+  if(s.t==='circle')return <ellipse cx={s.cx} cy={s.cy} rx={s.rx} ry={s.ry} {...st}/>;
+  return <g {...st}><line x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2}/><polyline points={s.h1.join(',')+' '+s.x2+','+s.y2+' '+s.h2.join(',')}/></g>;
+}
+// mode: null (alleen tonen) | 'pan' (slepen = uitsnede verschuiven) | 'circle' | 'arrow' (slepen = tekenen)
+function PhotoFrame({p,mode,onChange,style}){
+  const dims=useImgDims(p.src);
+  const ref=React.useRef(null);
+  const drag=React.useRef(null);
+  const[draft,setDraft]=useState(null);
+  const[livePos,setLivePos]=useState(null);
+  const toV=e=>{const r=ref.current.getBoundingClientRect();return {x:(e.clientX-r.left)/r.width*PHOTO_VW,y:(e.clientY-r.top)/r.height*PHOTO_VH};};
+  const g=dims?coverGeom(dims,livePos||p.pos):null;
+  const toImg=v=>({u:Math.min(1,Math.max(0,(v.x-g.ox)/g.dw)),v:Math.min(1,Math.max(0,(v.y-g.oy)/g.dh))});
+  const down=e=>{
+    if(!mode||!g||!onChange)return;
+    e.preventDefault();e.stopPropagation();
+    try{ref.current.setPointerCapture(e.pointerId);}catch(_){}
+    drag.current={start:toV(e),g};
+  };
+  const move=e=>{
+    const d=drag.current;if(!d)return;
+    const v=toV(e);
+    if(mode==='pan'){
+      const nx=d.g.ox+(v.x-d.start.x),ny=d.g.oy+(v.y-d.start.y);
+      const fx=PHOTO_VW-d.g.dw,fy=PHOTO_VH-d.g.dh;
+      const cl=n=>Math.min(1,Math.max(0,n));
+      const pos={x:fx<-0.5?cl(nx/fx):0.5,y:fy<-0.5?cl(ny/fy):0.5};
+      setLivePos(pos);
+    }else{
+      const a=toImg(d.start),b=toImg(v);
+      setDraft({t:mode,x1:a.u,y1:a.v,x2:b.u,y2:b.v});
+    }
+  };
+  const up=e=>{
+    const d=drag.current;drag.current=null;
+    if(!d)return;
+    if(mode==='pan'){if(livePos)onChange({...p,pos:livePos});setLivePos(null);return;}
+    if(draft){
+      const big=Math.hypot((draft.x2-draft.x1)*d.g.dw,(draft.y2-draft.y1)*d.g.dh)>20;
+      if(big)onChange({...p,marks:[...(p.marks||[]),draft]});
+      setDraft(null);
+    }
+  };
+  return <svg ref={ref} viewBox={'0 0 '+PHOTO_VW+' '+PHOTO_VH} preserveAspectRatio="none"
+    onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+    style={{width:'100%',aspectRatio:String(PHOTO_AR),display:'block',background:'#e5e4e0',touchAction:mode?'none':'auto',cursor:mode==='pan'?'move':mode?'crosshair':'default',userSelect:'none',...(style||{})}}>
+    {g&&<image href={p.src} x={g.ox} y={g.oy} width={g.dw} height={g.dh} preserveAspectRatio="none"/>}
+    {g&&(p.marks||[]).map((m,i)=><MarkSvg key={i} m={m} g={g}/>)}
+    {g&&draft&&<MarkSvg m={draft} g={g}/>}
+  </svg>;
+}
+// PDF: uitsnede + markeringen in een JPEG bakken (src is hier al een data-URL).
+function bakePhoto(p){
+  return new Promise(res=>{
+    const im=new Image();
+    im.onload=()=>{try{
+      const W=1120,H=W/PHOTO_AR,k=W/PHOTO_VW;
+      const g=coverGeom({w:im.naturalWidth,h:im.naturalHeight},p.pos);
+      const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+      const cx=cv.getContext('2d');cx.scale(k,k);
+      cx.drawImage(im,g.ox,g.oy,g.dw,g.dh);
+      cx.strokeStyle=MARK_RED;cx.lineWidth=MARK_W;cx.lineCap='round';cx.lineJoin='round';
+      (p.marks||[]).forEach(m=>{const s=markShape(m,g);cx.beginPath();
+        if(s.t==='circle')cx.ellipse(s.cx,s.cy,s.rx,s.ry,0,0,Math.PI*2);
+        else{cx.moveTo(s.x1,s.y1);cx.lineTo(s.x2,s.y2);cx.moveTo(s.h1[0],s.h1[1]);cx.lineTo(s.x2,s.y2);cx.lineTo(s.h2[0],s.h2[1]);}
+        cx.stroke();});
+      res(cv.toDataURL('image/jpeg',0.85));
+    }catch(e){res(p.src);}};
+    im.onerror=()=>res(p.src);
+    im.src=p.src;
+  });
+}
+// Groot bewerkvenster: uitsnede verschuiven, cirkels en pijlen tekenen.
+function PhotoEditor({p,NL,onSave,onClose}){
+  const[cur,setCur]=useState(p);
+  const[mode,setMode]=useState('circle');
+  const tool=(m,label)=><button className={'btn btn-sm '+(mode===m?'btn-s':'btn-g')} onClick={()=>setMode(m)}>{label}</button>;
+  const marks=cur.marks||[];
+  return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(7,20,18,.55)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,padding:20}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:8,padding:16,width:'min(860px,100%)',maxHeight:'100%',overflowY:'auto',boxSizing:'border-box'}}>
+      <div className="flex g8" style={{flexWrap:'wrap',alignItems:'center',marginBottom:12}}>
+        {tool('pan',(NL?'✥ Verschuiven':'✥ Move'))}
+        {tool('circle',(NL?'◯ Cirkel':'◯ Circle'))}
+        {tool('arrow',(NL?'➚ Pijl':'➚ Arrow'))}
+        <span style={{flex:1}}/>
+        <button className="btn btn-sm btn-g" disabled={!marks.length} onClick={()=>setCur({...cur,marks:marks.slice(0,-1)})}>{NL?'↶ Ongedaan maken':'↶ Undo'}</button>
+        <button className="btn btn-sm btn-g" disabled={!marks.length} onClick={()=>setCur({...cur,marks:[]})}>{NL?'Wis markeringen':'Clear marks'}</button>
+      </div>
+      <div style={{width:'min(100%, calc((100vh - 200px) * '+PHOTO_AR+'))',margin:'0 auto'}}><PhotoFrame p={cur} mode={mode} onChange={np=>setCur(np)}/></div>
+      <p className="sm muted" style={{margin:'8px 0 0'}}>{mode==='pan'?(NL?'Sleep de foto om te kiezen welk deel zichtbaar blijft.':'Drag the photo to choose which part stays visible.'):(NL?'Sleep over de foto om een '+(mode==='circle'?'cirkel':'pijl')+' te tekenen.':'Drag across the photo to draw '+(mode==='circle'?'a circle':'an arrow')+'.')}</p>
+      <div className="flex g8" style={{justifyContent:'flex-end',marginTop:12}}>
+        <button className="btn btn-sm btn-g" onClick={onClose}>{NL?'Annuleren':'Cancel'}</button>
+        <button className="btn btn-sm btn-s" onClick={()=>onSave(cur)}>{NL?'Opslaan':'Save'}</button>
+      </div>
+    </div>
+  </div>;
+}
+
 // ── Rapport-weergave (Schaderapport / Onderhoudsrapport) ──
 function ReportDoc({T,L}){
   const NL=L==='nl';
@@ -4478,7 +4614,7 @@ function ReportDoc({T,L}){
       {phNo&&<div style={{marginTop:28}}>
         <SecHead n={phNo} title={NL?'Fotodocumentatie':'Photo documentation'}/>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px 24px'}}>
-          {photos.map((p,i)=><div key={i}><img src={p.src} style={{width:'100%',aspectRatio:'1.4',objectFit:'cover',display:'block',background:'#e5e4e0'}}/>{p.caption&&<div style={{fontSize:11,color:sec,lineHeight:1.4,marginTop:5}}>{p.caption}</div>}</div>)}
+          {photos.map((p,i)=><div key={i}><PhotoFrame p={p}/>{p.caption&&<div style={{fontSize:11,color:sec,lineHeight:1.4,marginTop:5}}>{p.caption}</div>}</div>)}
         </div>
       </div>}
       {causeNo&&<div style={{marginTop:28}}>
@@ -4519,9 +4655,15 @@ function ReportTab({data:d,set}){
   const addPhoto=(src)=>up({photos:[...photos,{src,caption:{nl:'',en:''}}]});
   const setCaption=(i,val)=>{const a=photos.slice();const o=a[i]||{src:'',caption:{nl:'',en:''}};const cc=typeof o.caption==='string'?{nl:o.caption,en:o.caption}:{...(o.caption||{nl:'',en:''})};cc[d.lang]=val;a[i]={...o,caption:cc};up({photos:a});};
   const delPhoto=(i)=>up({photos:photos.filter((_,j)=>j!==i)});
+  const setPhoto=(i,np)=>{const a=photos.slice();a[i]=np;up({photos:a});};
+  const[editI,setEditI]=useState(null);
+  const dragRef=React.useRef(null);
+  const[dragI,setDragI]=useState(null);
+  const endDrag=()=>{dragRef.current=null;setDragI(null);};
+  const dropOn=(i,e)=>{if(dragRef.current==null)return;e.preventDefault();e.stopPropagation();const from=dragRef.current;if(from!==i){const a=photos.slice();const[x]=a.splice(from,1);a.splice(i,0,x);up({photos:a});}endDrag();};
   const onPick=(e)=>{const fl=[...((e.target.files)||[])];Promise.all(fl.filter(f=>/^image\//.test(f.type)).map(f=>imgToDataUrlFree(f))).then(us=>us.forEach(u=>addPhoto(u)));e.target.value='';};
   const onPaste=(e)=>{const its=(e.clipboardData&&e.clipboardData.items)||[];for(const it of its){if(/^image\//.test(it.type)){const f=it.getAsFile();if(f)imgToDataUrlFree(f).then(u=>addPhoto(u));}}};
-  const onDrop=(e)=>{e.preventDefault();[...((e.dataTransfer&&e.dataTransfer.files)||[])].filter(x=>/^image\//.test(x.type)).forEach(f=>imgToDataUrlFree(f).then(u=>addPhoto(u)));};
+  const onDrop=(e)=>{e.preventDefault();if(dragRef.current!=null){endDrag();return;}[...((e.dataTransfer&&e.dataTransfer.files)||[])].filter(x=>/^image\//.test(x.type)).forEach(f=>imgToDataUrlFree(f).then(u=>addPhoto(u)));};
   const hasContent=entries.some(x=>String(x.item||'').trim())||photos.length>0;
   const tagPlaceholder=NL?(isDmg?'Ernst (bv. licht/ernstig)':'Status'):(isDmg?'Severity':'Status (bv. vervangen)');
   return <div>
@@ -4570,14 +4712,22 @@ function ReportTab({data:d,set}){
         <div className="card-h" style={{border:0,padding:0,margin:0}}>{NL?'Foto’s':'Photos'}</div>
         <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#555',cursor:'pointer',margin:0}}><input type="checkbox" checked={r.photosEnabled!==false} onChange={e=>up({photosEnabled:e.target.checked})}/>{NL?'opnemen':'include'}</label>
       </div>
-      <p className="sm muted" style={{margin:'0 0 10px'}}>{NL?'Kies bestanden, of plak/sleep afbeeldingen in dit vak.':'Pick files, or paste/drop images into this card.'}</p>
+      <p className="sm muted" style={{margin:'0 0 10px'}}>{NL?'Kies bestanden, of plak/sleep afbeeldingen in dit vak. Sleep ⠿ om de volgorde te wijzigen, sleep in een foto om de uitsnede te kiezen, en gebruik ✎ voor een rode cirkel of pijl.':'Pick files, or paste/drop images into this card. Drag ⠿ to reorder, drag inside a photo to choose the crop, and use ✎ to add a red circle or arrow.'}</p>
       <label className="btn btn-sm btn-g" style={{display:'inline-block',cursor:'pointer'}}>+ {NL?'Foto’s toevoegen':'Add photos'}<input type="file" accept="image/*" multiple style={{display:'none'}} onChange={onPick}/></label>
       {photos.length>0&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:12,marginTop:12}}>
-        {photos.map((p,i)=><div key={i} style={{border:'1px solid #e5e4e0',borderRadius:4,overflow:'hidden',background:'#fff'}}>
-          <div style={{position:'relative'}}><img src={p.src} style={{width:'100%',height:120,objectFit:'cover',display:'block'}}/><button className="btn btn-sm" onClick={()=>delPhoto(i)} style={{position:'absolute',top:4,right:4,background:'rgba(5,16,14,.7)',color:'#fff',border:0,borderRadius:3,padding:'2px 7px'}}>×</button></div>
+        {photos.map((p,i)=><div key={i} onDragOver={e=>{if(dragRef.current!=null)e.preventDefault();}} onDrop={e=>dropOn(i,e)} style={{border:'1px solid '+(dragI!=null&&dragI!==i?'#9ad1c4':'#e5e4e0'),borderRadius:4,overflow:'hidden',background:'#fff',opacity:dragI===i?0.45:1,transition:'opacity .12s'}}>
+          <div style={{position:'relative'}}>
+            <PhotoFrame p={p} mode="pan" onChange={np=>setPhoto(i,np)}/>
+            <span draggable onDragStart={e=>{try{e.dataTransfer.setData('text/plain','');e.dataTransfer.effectAllowed='move';}catch(_){}dragRef.current=i;setDragI(i);}} onDragEnd={endDrag} title={NL?'Sleep om te herordenen':'Drag to reorder'} style={{position:'absolute',top:4,left:4,background:'rgba(5,16,14,.7)',color:'#fff',borderRadius:3,padding:'1px 6px',cursor:'grab',fontSize:15,lineHeight:'20px',userSelect:'none'}}>⠿</span>
+            <div style={{position:'absolute',top:4,right:4,display:'flex',gap:4}}>
+              <button className="btn btn-sm" title={NL?'Cirkel / pijl tekenen':'Draw circle / arrow'} onClick={()=>setEditI(i)} style={{background:'rgba(5,16,14,.7)',color:'#fff',border:0,borderRadius:3,padding:'2px 7px'}}>✎</button>
+              <button className="btn btn-sm" onClick={()=>delPhoto(i)} style={{background:'rgba(5,16,14,.7)',color:'#fff',border:0,borderRadius:3,padding:'2px 7px'}}>×</button>
+            </div>
+          </div>
           <input placeholder={NL?'Bijschrift':'Caption'} value={t(p.caption,d.lang)} onChange={e=>setCaption(i,e.target.value)} style={{width:'100%',border:0,borderTop:'1px solid #e5e4e0',padding:'6px 8px',fontSize:12,boxSizing:'border-box'}}/>
         </div>)}
       </div>}
+      {editI!=null&&photos[editI]&&<PhotoEditor p={photos[editI]} NL={NL} onClose={()=>setEditI(null)} onSave={np=>{setPhoto(editI,np);setEditI(null);}}/>}
     </div>
 
     {isDmg?<div className="card">
