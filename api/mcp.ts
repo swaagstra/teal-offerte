@@ -231,7 +231,8 @@ export const PATCH_WHITELIST: ReadonlySet<string> = new Set([
   'hotelN', 'hotelR', 'pdRate', 'bookOn', 'co2bill', 'hotelNManual', 'pdDaysManual',
   // payment / conditions
   'milestones', 'pct', 'validity', 'paymentTerm', 'warranty', 'warrantyEnabled', 'meerwerk',
-  'meerwerkEnabled', 'akkoord', 'akkoordEnabled', 'avNL', 'avEN', 'exclusionsEnabled',
+  'meerwerkEnabled', 'akkoord', 'akkoordEnabled', 'avNL', 'avEN', 'exclusionsEnabled', 'customItems',
+  'timelineEnabled',
   // annexes + blocks
   'assumptions', 'rateCard', 'responsibilities', 'custom', 'text', 'rows', 'label', 'party',
   'item', 'title', 'src', 'caption',

@@ -1961,6 +1961,16 @@ function PaymentTab({data:d,set}){
         <textarea rows={2} value={t(d.conditions.meerwerk,L)} placeholder={ll.meerwerkTekst} onChange={e=>{const o=d.conditions.meerwerk;const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=e.target.value;set({...d,conditions:{...d.conditions,meerwerk:nn}});}}/>
       </div></div>
 
+      <div className="mt16">
+        <label style={{margin:'0 0 6px',display:'block'}}>{L==='nl'?'Eigen voorwaarden':'Additional terms'}</label>
+        <p className="sm muted" style={{margin:'0 0 8px'}}>{L==='nl'?'Extra regels die onder de kop Voorwaarden in de offerte komen.':'Extra lines shown under the Terms & conditions heading.'}</p>
+        {(d.conditions.customItems||[]).map((ci,i)=><div key={i} style={{display:'flex',gap:8,alignItems:'flex-start',marginBottom:8}}>
+          <textarea rows={2} style={{flex:1,minHeight:44}} value={t(ci,L)} placeholder={L==='nl'?'bv. Hoogwerker wordt door de opdrachtgever geregeld.':'e.g. The client arranges the aerial lift.'} onChange={e=>{const arr=(d.conditions.customItems||[]).slice();const o=arr[i];const nn=typeof o==='string'?{nl:o,en:o}:{...(o||{nl:'',en:''})};nn[L]=e.target.value;arr[i]=nn;set({...d,conditions:{...d.conditions,customItems:arr}})}}/>
+          <button className="btn btn-sm btn-g" title={L==='nl'?'Regel verwijderen':'Remove line'} onClick={()=>{const arr=(d.conditions.customItems||[]).filter((_,j)=>j!==i);set({...d,conditions:{...d.conditions,customItems:arr}})}}>×</button>
+        </div>)}
+        <button className="btn btn-sm btn-g" onClick={()=>set({...d,conditions:{...d.conditions,customItems:[...(d.conditions.customItems||[]),{nl:'',en:''}]}})}>+ {L==='nl'?'Voorwaarde':'Term'}</button>
+      </div>
+
       <div className="row full mt16"><div className="fg" style={{width:'100%'}}>
         <div className="between" style={{alignItems:'center'}}>
           <label style={{display:'flex',alignItems:'center',gap:6,margin:0}}><input type="checkbox" checked={d.conditions.akkoordEnabled!==false} onChange={e=>set({...d,conditions:{...d.conditions,akkoordEnabled:e.target.checked}})} style={{width:14,height:14}}/>{L==='nl'?'Akkoordverklaring':'Approval statement'}</label>
@@ -2766,6 +2776,7 @@ function mapQuoteToTokens(d){
   const conditions=[];
   if(d.conditions.warrantyEnabled!==false&&t(d.conditions.warranty,L))conditions.push((NL?'Garantie: ':'Warranty: ')+t(d.conditions.warranty,L));
   if(d.conditions.meerwerkEnabled!==false&&t(d.conditions.meerwerk,L))conditions.push(t(d.conditions.meerwerk,L));
+  (d.conditions.customItems||[]).forEach(ci=>{const tx=String(t(ci,L)||'').trim();if(tx)conditions.push(tx);});
   if(d.conditions.avNL||d.conditions.avEN)conditions.push(ll.avTekst);
   const sign_line=(d.conditions.akkoordEnabled!==false&&t(d.conditions.akkoord,L))?t(d.conditions.akkoord,L):'';
   const ax=d.annexes||{};
