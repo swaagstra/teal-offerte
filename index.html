@@ -3566,7 +3566,7 @@ function odooPayloadFromEntry(entry){
     note:(d.project?.name||'')+' · '+d.ref+multiNote,lines,milestones};
 }
 async function pushToOdoo(entry,opts={}){
-  const payload=odooPayloadFromEntry(entry);
+  const payload={...odooPayloadFromEntry(entry),ws:getWorkspaceId()};
   if(!payload.lines.length){alert('Geen kostenregels om naar Odoo te sturen.');return;}
   if(!opts.skipConfirm&&!confirm('Concept-factuur aanmaken in TEAL Odoo voor '+(payload.client.name||'deze klant')+'?\nHet blijft een concept; er wordt niets verstuurd of geboekt.'))return;
   try{

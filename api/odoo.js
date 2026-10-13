@@ -6,7 +6,8 @@
 //   { type:'quote'|'change_order', ref, lang,
 //     client:{ name, email, contact },
 //     note, lines:[ { name, price } ], date?:'YYYY-MM-DD',
-//     partner?:{ company, street, zip, city, country:'NL', vat, contact, contactEmail } }
+//     partner?:{ company, street, zip, city, country:'NL', vat, contact, contactEmail },
+//     ws?: workspace token (required when Google login is off) }
 //   partner (optioneel): factureer aan een bedrijf mét adres + btw, met een factuurcontact eronder.
 // -> { ok:true, invoiceId, partnerId, url }
 //
@@ -18,6 +19,8 @@
 //   ODOO_INCOME_ACCOUNT_ID   (optional) account.account id for invoice lines
 //   ODOO_JOURNAL_ID          (optional) sales journal id
 //   ODOO_TAX_ID              (optional) account.tax id, e.g. BTW 21%, applied to every line
+//   ODOO_ALLOWED_WS          (optional) workspace tokens allowed to push when Google login is off
+//                            (falls back to PRIMARY_WS). Auth: see isAuthorized() below.
 //
 // Zero npm dependencies: XML-RPC is built by hand over global fetch.
 
@@ -83,17 +86,66 @@ async function rpc(path, method, params) {
   return xml;
 }
 
+// --- Auth -------------------------------------------------------------------
+// Zelfde model als de rest van de tool (zie api/auth.js):
+//  • Google-login actief (GOOGLE_CLIENT_ID gezet): een geldige sessie-cookie `sid` is vereist.
+//  • Login slapend: de werkruimte-token `ws` in de body is de credential. Staat
+//    ODOO_ALLOWED_WS (komma/spatie-lijst) of PRIMARY_WS, dan moet ws daarin staan;
+//    anders moet er een archief voor die ws bestaan (arch:<ws>).
+// Wordt gecontroleerd vóór elke Odoo-aanroep.
+const KV_BASE = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+
+async function redis(cmd) {
+  if (!KV_BASE || !KV_TOKEN) throw new Error('storage-not-configured');
+  const r = await fetch(KV_BASE, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(cmd),
+  });
+  const j = await r.json();
+  if (j.error) throw new Error(j.error);
+  return j.result;
+}
+
+const cleanWs = (v) => String(v || '').replace(/[^a-z0-9]/gi, '').slice(0, 40);
+
+function parseCookies(req) {
+  const out = {};
+  const h = req.headers && req.headers.cookie;
+  if (!h) return out;
+  h.split(';').forEach((p) => { const i = p.indexOf('='); if (i > -1) out[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim()); });
+  return out;
+}
+
+async function isAuthorized(req, body) {
+  const sid = parseCookies(req).sid;
+  if (sid) {
+    const raw = await redis(['GET', 'sess:' + sid]);
+    let sess = null; try { sess = raw ? JSON.parse(raw) : null; } catch (e) { sess = null; }
+    if (sess && sess.email && sess.ws) return true;
+  }
+  if (process.env.GOOGLE_CLIENT_ID) return false;
+  const ws = cleanWs(body && body.ws);
+  if (ws.length < 8) return false;
+  const allow = String(process.env.ODOO_ALLOWED_WS || process.env.PRIMARY_WS || '')
+    .split(/[,\s]+/).map(cleanWs).filter(Boolean);
+  if (allow.length) return allow.includes(ws);
+  return !!(await redis(['EXISTS', 'arch:' + ws]));
+}
+
 module.exports = async (req, res) => {
   try {
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST');
       return res.status(405).json({ error: 'method-not-allowed' });
     }
+    let body = req.body;
+    if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { return res.status(400).json({ error: 'bad-json' }); } }
+    if (!(await isAuthorized(req, body))) return res.status(401).json({ error: 'unauthorized' });
     if (!URLB || !DB || !LOGIN || !APIKEY) {
       return res.status(501).json({ error: 'odoo-not-configured' });
     }
-    let body = req.body;
-    if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { return res.status(400).json({ error: 'bad-json' }); } }
     const client = (body && body.client) || {};
     const lines = (body && body.lines) || [];
     if (!Array.isArray(lines) || lines.length === 0) return res.status(400).json({ error: 'no-lines' });
