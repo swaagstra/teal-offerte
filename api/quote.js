@@ -1,6 +1,6 @@
 // /api/quote — publieke, klant-veilige weergave + online akkoord van één offerte.
 //
-// Publiceren (door de tool):   POST  {ws, archiveId, snapshot, lang, projectName}      -> { id }
+// Publiceren (door de tool):   POST  {ws, archiveId, snapshot, lang, projectName}      -> { id }   (auth vereist, anders 401)
 // Bekijken   (door de klant):  GET   ?id=<id>   -> { snapshot, lang, projectName, status, acceptedBy, acceptedAt }
 // Accorderen (door de klant):  POST  ?id=<id>   {action:'accept', name, note}           -> { ok, status }
 //
@@ -37,6 +37,34 @@ async function getRec(id) {
   try { return JSON.parse(v); } catch (e) { return null; }
 }
 const putRec = (id, rec) => redis(['SET', 'q:' + id, JSON.stringify(rec), 'EX', TTL]);
+
+// Auth voor publiceren — zelfde model als api/odoo.js / api/auth.js:
+//  • Google-login actief (GOOGLE_CLIENT_ID gezet): een geldige sessie-cookie `sid` is vereist.
+//  • Login slapend: `ws` in de body is de credential. Staat ODOO_ALLOWED_WS of PRIMARY_WS,
+//    dan moet ws daarin staan; anders moet er een archief voor die ws bestaan (arch:<ws>).
+// Bekijken en accorderen (?id=) blijven publiek: die zijn voor de klant.
+function parseCookies(req) {
+  const out = {};
+  const h = req.headers && req.headers.cookie;
+  if (!h) return out;
+  h.split(';').forEach((p) => { const i = p.indexOf('='); if (i > -1) out[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim()); });
+  return out;
+}
+async function isAuthorized(req, body) {
+  const sid = parseCookies(req).sid;
+  if (sid) {
+    const raw = await redis(['GET', 'sess:' + sid]);
+    let sess = null; try { sess = raw ? JSON.parse(raw) : null; } catch (e) { sess = null; }
+    if (sess && sess.email && sess.ws) return true;
+  }
+  if (process.env.GOOGLE_CLIENT_ID) return false;
+  const ws = cleanWs(body && body.ws);
+  if (ws.length < 8) return false;
+  const allow = String(process.env.ODOO_ALLOWED_WS || process.env.PRIMARY_WS || '')
+    .split(/[,\s]+/).map(cleanWs).filter(Boolean);
+  if (allow.length) return allow.includes(ws);
+  return !!(await redis(['EXISTS', 'arch:' + ws]));
+}
 
 // Patch the workspace archive entry (status / changelog) so the tool picks it up on next sync.
 async function patchArchive(ws, archiveId, mutate) {
@@ -161,6 +189,7 @@ module.exports = async (req, res) => {
     if (req.method === 'POST' && !id) {
       // Publiceren
       let body = req.body; if (typeof body === 'string') body = JSON.parse(body);
+      if (!(await isAuthorized(req, body))) return res.status(401).json({ error: 'unauthorized' });
       const ws = cleanWs(body && body.ws);
       if (ws.length < 8) return res.status(400).json({ error: 'bad-ws' });
       if (!body || !body.snapshot || typeof body.snapshot !== 'object') return res.status(400).json({ error: 'bad-snapshot' });
