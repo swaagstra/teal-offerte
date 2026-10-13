@@ -5,7 +5,9 @@
 // POST body (JSON):
 //   { type:'quote'|'change_order', ref, lang,
 //     client:{ name, email, contact },
-//     note, lines:[ { name, price } ] }
+//     note, lines:[ { name, price } ], date?:'YYYY-MM-DD',
+//     partner?:{ company, street, zip, city, country:'NL', vat, contact, contactEmail } }
+//   partner (optioneel): factureer aan een bedrijf mét adres + btw, met een factuurcontact eronder.
 // -> { ok:true, invoiceId, partnerId, url }
 //
 // Env vars (set in Vercel project settings, never in the frontend):
@@ -106,10 +108,44 @@ module.exports = async (req, res) => {
     let partnerId = null;
     const email = (client.email || '').trim();
     const name = (client.name || '').trim();
-    if (email) partnerId = allInts(await exec('res.partner', 'search', [[['email', '=', email]]], { limit: 1 }))[0] || null;
-    if (!partnerId && name) partnerId = allInts(await exec('res.partner', 'search', [[['name', '=', name]]], { limit: 1 }))[0] || null;
-    if (!partnerId) {
-      partnerId = firstInt(await exec('res.partner', 'create', [{ name: name || email || 'Onbekende klant', email: email || false }]));
+    const P = (body && body.partner) || null;
+    if (P && (P.company || P.vat)) {
+      // Bedrijf (op btw-nummer, anders exacte naam) mét adres + btw, en optioneel een
+      // factuurcontact eronder. Bestaande bedrijven krijgen alleen ontbrekende velden aangevuld.
+      const vat = String(P.vat || '').replace(/\s|\./g, '').toUpperCase();
+      let companyId = null;
+      if (vat) companyId = allInts(await exec('res.partner', 'search', [[['vat', '=', vat], ['is_company', '=', true]]], { limit: 1 }))[0] || null;
+      if (!companyId && P.company) companyId = allInts(await exec('res.partner', 'search', [[['name', '=', String(P.company).trim()], ['is_company', '=', true]]], { limit: 1 }))[0] || null;
+      let countryId = null;
+      const cc = String(P.country || 'NL').toUpperCase();
+      countryId = allInts(await exec('res.country', 'search', [[['code', '=', cc]]], { limit: 1 }))[0] || null;
+      const addr = {};
+      if (P.street) addr.street = String(P.street);
+      if (P.zip) addr.zip = String(P.zip);
+      if (P.city) addr.city = String(P.city);
+      if (countryId) addr.country_id = countryId;
+      if (!companyId) {
+        const vals = Object.assign({ name: String(P.company || name || 'Onbekende klant').trim(), is_company: true }, addr);
+        if (vat) vals.vat = vat;
+        if (P.companyEmail) vals.email = String(P.companyEmail);
+        companyId = firstInt(await exec('res.partner', 'create', [vals]));
+      }
+      if (!companyId) return res.status(500).json({ error: 'partner-failed' });
+      partnerId = companyId;
+      const cEmail = String(P.contactEmail || email || '').trim();
+      const cName = String(P.contact || '').trim();
+      if (cName || cEmail) {
+        let contactId = null;
+        if (cEmail) contactId = allInts(await exec('res.partner', 'search', [[['email', '=', cEmail], ['parent_id', '=', companyId]]], { limit: 1 }))[0] || null;
+        if (!contactId) contactId = firstInt(await exec('res.partner', 'create', [{ name: cName || cEmail, email: cEmail || false, parent_id: companyId, type: 'invoice' }]));
+        if (contactId) partnerId = contactId;
+      }
+    } else {
+      if (email) partnerId = allInts(await exec('res.partner', 'search', [[['email', '=', email]]], { limit: 1 }))[0] || null;
+      if (!partnerId && name) partnerId = allInts(await exec('res.partner', 'search', [[['name', '=', name]]], { limit: 1 }))[0] || null;
+      if (!partnerId) {
+        partnerId = firstInt(await exec('res.partner', 'create', [{ name: name || email || 'Onbekende klant', email: email || false }]));
+      }
     }
     if (!partnerId) return res.status(500).json({ error: 'partner-failed' });
 
@@ -143,7 +179,7 @@ module.exports = async (req, res) => {
         invoices.push({ id, label: 'Termijn ' + (i + 1) + '/' + n, url: urlFor(id) });
       }
     } else {
-      const id = await createInvoice(lines, body.ref, body.note);
+      const id = await createInvoice(lines, body.ref, body.note, body.date);
       if (!id) return res.status(500).json({ error: 'invoice-failed' });
       invoices.push({ id, label: 'Factuur', url: urlFor(id) });
     }
