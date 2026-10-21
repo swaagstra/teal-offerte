@@ -3039,7 +3039,7 @@ function createDelivery(parent,lang){
 function defaultDischarge(){
   return {
     issuedDate:'', completionDate:'', inspectionDate:'',
-    warranty:{nl:'12 maanden vanaf oplevering',en:'12 months from completion'},
+    warranty:{nl:'12 maanden vanaf oplevering',en:'12 months from completion'}, warrantyEnabled:true,
     tealSignatory:'Erik Swaagstra', clientSignatory:'',
     worksIntro:{
       nl:'De hieronder beschreven werkzaamheden zijn door TEAL gefabriceerd, geassembleerd, getest en op locatie geïnstalleerd, conform het overeengekomen technisch ontwerp en de goedgekeurde materiaalstaat.',
@@ -3067,7 +3067,7 @@ function buildDischargeDocDef(D, logoImg){
   det.push({text:[{text:(D.nl?'Locatie':'Location')+'  ',color:muted},{text:D.location||'-',color:body}],fontSize:13*k,lineHeight:1.7});
   det.push({text:[{text:(D.nl?'Opgeleverd':'Completed')+'  ',color:muted},{text:D.completed,color:body}],fontSize:13*k,lineHeight:1.7});
   det.push({text:[{text:(D.nl?'Geïnspecteerd':'Inspected')+'  ',color:muted},{text:D.inspected,color:body}],fontSize:13*k,lineHeight:1.7});
-  det.push({text:[{text:(D.nl?'Garantie':'Warranty')+'  ',color:muted},{text:D.warranty,color:body}],fontSize:13*k,lineHeight:1.7});
+  if(D.warrantyEnabled!==false)det.push({text:[{text:(D.nl?'Garantie':'Warranty')+'  ',color:muted},{text:D.warranty,color:body}],fontSize:13*k,lineHeight:1.7});
 
   // Sectienummers lopen door en slaan uitgezette secties over (01 Opdrachtgever, 02 Details vast).
   var _n=2; function sn(){_n+=1;return String(_n).padStart(2,'0');}
@@ -3181,7 +3181,7 @@ function mapDischargeToTokens(d){
     location:(d.project.location&&String(d.project.location).trim())||S.location||'',
     completed:dc.completionDate?fmtLong(dc.completionDate):'-',
     inspected:dc.inspectionDate?fmtLong(dc.inspectionDate):'-',
-    warranty:t(dc.warranty,L)||'-',
+    warranty:t(dc.warranty,L)||'-', warrantyEnabled:dc.warrantyEnabled!==false,
     works_intro:t(dc.worksIntro,L)||'',
     discharge_statement:t(dc.dischargeStatement,L)||'',
     transfer_clause:t(dc.transferClause,L)||'',
@@ -4213,8 +4213,8 @@ function DischargeDoc({T,L}){
           <div style={{fontSize:13,lineHeight:1.7,color:body}}>
             <span style={{color:muted}}>{NL?'Locatie':'Location'}</span>{'  '}{T.location||'-'}<br/>
             <span style={{color:muted}}>{NL?'Opgeleverd':'Completed'}</span>{'  '}{T.completed}<br/>
-            <span style={{color:muted}}>{NL?'Geïnspecteerd':'Inspected'}</span>{'  '}{T.inspected}<br/>
-            <span style={{color:muted}}>{NL?'Garantie':'Warranty'}</span>{'  '}{T.warranty}
+            <span style={{color:muted}}>{NL?'Geïnspecteerd':'Inspected'}</span>{'  '}{T.inspected}
+            {T.warrantyEnabled!==false&&<React.Fragment><br/><span style={{color:muted}}>{NL?'Garantie':'Warranty'}</span>{'  '}{T.warranty}</React.Fragment>}
           </div>
         </div>
       </div>
@@ -4306,7 +4306,7 @@ function DischargeTab({data:d,set}){
         <div className="fg"><label>{NL?'Opleverdatum':'Completion date'}</label><input type="date" value={dc.completionDate||''} onChange={e=>up({completionDate:e.target.value})}/></div>
         <div className="fg"><label>{NL?'Inspectiedatum':'Inspection date'}</label><input type="date" value={dc.inspectionDate||''} onChange={e=>up({inspectionDate:e.target.value})}/></div>
       </div>
-      <div className="fg"><label>{NL?'Garantie':'Warranty'}</label><input value={t(dc.warranty,d.lang)} onChange={e=>upBil('warranty',e.target.value)}/></div>
+      <div className="fg"><div className="between" style={{alignItems:'center'}}><label style={{margin:0}}>{NL?'Garantie':'Warranty'}</label><label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#555',cursor:'pointer',margin:0}}><input type="checkbox" checked={dc.warrantyEnabled!==false} onChange={e=>up({warrantyEnabled:e.target.checked})}/>{NL?'opnemen':'include'}</label></div><input value={t(dc.warranty,d.lang)} disabled={dc.warrantyEnabled===false} onChange={e=>upBil('warranty',e.target.value)}/></div>
     </div>
 
     <div className="card">
