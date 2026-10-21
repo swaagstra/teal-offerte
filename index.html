@@ -3051,7 +3051,7 @@ function defaultDischarge(){
       nl:'Risico, zorg en beheer van de installatie gaan bij ondertekening over op de opdrachtgever. De garantie gaat in op de opleverdatum en dekt gebreken in fabricage en assemblage onder normale gebruiksomstandigheden. De eindfactuur wordt na ondertekening van dit certificaat verstuurd en is betaalbaar binnen 14 dagen na factuurdatum.',
       en:'Risk, care and custody of the installation transfer to the client on the date of signing. The warranty commences on the completion date and covers defects in fabrication and assembly under normal operating conditions. The final invoice is issued following signature of this certificate, payable within 14 days of the invoice date.'},
     items:[{item:'',status:''}],
-    documents:[''],
+    documents:[''], filesUrl:'',
     snags:[{item:'',owner:'',due:''}], snagsEnabled:false,
     worksEnabled:true, documentsEnabled:true, statementEnabled:true, transferEnabled:true
   };
@@ -3114,7 +3114,8 @@ function buildDischargeDocDef(D, logoImg){
         {width:'*',stack:docs[di+1]?[cell(docs[di+1]),{canvas:[{type:'line',x1:0,y1:0,x2:(CW-48*k)/2,y2:0,lineWidth:0.5,lineColor:hair}]}]:[{text:''}]}
       ],columnGap:48*k});
     }
-    c.push({stack:[secHead(sn(),D.nl?'Overgedragen documenten':'Documents handed over')].concat(docRows.length?docRows:[{text:'—',fontSize:13*k,color:muted}]),margin:[0,22*k,0,0]});
+    var docTail=D.files_url?[{text:[{text:(D.nl?'Digitale overdrachtsmap  ':'Digital handover folder  '),color:muted},{text:D.files_url,link:D.files_url,color:'#2a7a4f',decoration:'underline'}],fontSize:12*k,margin:[0,14*k,0,0]}]:[];
+    c.push({stack:[secHead(sn(),D.nl?'Overgedragen documenten':'Documents handed over')].concat(docRows.length?docRows:(D.files_url?[]:[{text:'—',fontSize:13*k,color:muted}])).concat(docTail),margin:[0,22*k,0,0]});
   }
   // Restpunten (optioneel — oplevering onder voorbehoud)
   if(D.snagsEnabled && (D.snags||[]).length){
@@ -3189,6 +3190,7 @@ function mapDischargeToTokens(d){
     client_signatory:dc.clientSignatory||S.client.name||d.client.name||'',
     teal_signature:getSignature()||'',
     items:items, documents:docs, nl:NL,
+    files_url:/^https?:\/\//i.test(String(dc.filesUrl||'').trim())?String(dc.filesUrl).trim():'',
     snags:(dc.snags||[]).filter(x=>x&&String(x.item||'').trim()).map((x,i)=>({no:String(i+1).padStart(2,'0'),item:x.item,owner:x.owner||'',due:x.due||''})),
     snagsEnabled:dc.snagsEnabled===true,
     worksEnabled:dc.worksEnabled!==false, documentsEnabled:dc.documentsEnabled!==false,
@@ -4233,7 +4235,8 @@ function DischargeDoc({T,L}){
         <SecHead n={docsNo} title={NL?'Overgedragen documenten':'Documents handed over'}/>
         {docs.length?<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 48px'}}>
           {docs.map((s,i)=><div key={i} style={{display:'flex',alignItems:'baseline',gap:12,padding:'10px 0',borderBottom:'1px solid '+hair,fontSize:13,color:body}}><span style={{width:7,height:7,background:ink,display:'inline-block',flex:'none'}}/><span>{s}</span></div>)}
-        </div>:<div style={{fontSize:13,color:muted}}>—</div>}
+        </div>:(T.files_url?null:<div style={{fontSize:13,color:muted}}>—</div>)}
+        {T.files_url&&<div style={{fontSize:12,marginTop:14,color:body}}><span style={{color:muted}}>{NL?'Digitale overdrachtsmap':'Digital handover folder'}</span>{'  '}<a href={T.files_url} target="_blank" rel="noopener" style={{color:'#2a7a4f',wordBreak:'break-all'}}>{T.files_url}</a></div>}
       </div>}
       {snagsNo&&<div style={{marginTop:28}}>
         <SecHead n={snagsNo} title={NL?'Restpunten':'Outstanding items'}/>
@@ -4333,6 +4336,7 @@ function DischargeTab({data:d,set}){
         <button className="btn btn-sm btn-g" onClick={()=>{const a=docs.slice();a.splice(i,1);setDocs(a.length?a:['']);}}>×</button>
       </div>)}
       <button className="btn btn-sm btn-g" onClick={()=>setDocs([...docs,''])}>+ {NL?'Document':'Document'}</button>
+      <div className="fg" style={{marginTop:14}}><label>{NL?'Digitale overdrachtsmap (link)':'Digital handover folder (link)'}</label><input value={dc.filesUrl||''} placeholder="https://drive.google.com/drive/folders/…" onChange={e=>up({filesUrl:e.target.value})}/><p className="sm muted" style={{margin:'4px 0 0'}}>{NL?'Bijv. een gedeelde Drive-map met tekeningen, STEP-bestanden en handleidingen. Klikbaar in de PDF en in de online versie. Zet de deelrechten in Drive zelf.':'E.g. a shared Drive folder with drawings, STEP files and manuals. Clickable in the PDF and online. Set sharing in Drive itself.'}</p></div>
     </div>
 
     <div className="card">
