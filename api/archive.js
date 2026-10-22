@@ -81,6 +81,7 @@ async function offloadImages(node, archiveId, put, stats) {
         });
         container[key] = url;
         stats.moved += 1;
+        if (stats.map) stats.map[hash] = url;
       } catch (e) {
         stats.failed += 1;
       }
@@ -101,7 +102,7 @@ async function offloadImages(node, archiveId, put, stats) {
 async function offloadArchive(archive) {
   const put = await getPut();
   if (!put) return { moved: 0, failed: 0, skipped: true };
-  const stats = { moved: 0, failed: 0 };
+  const stats = { moved: 0, failed: 0, map: {} };
   for (const entry of archive) {
     if (entry && entry.id && entry.data && typeof entry.data === 'object') {
       await offloadImages(entry.data, String(entry.id), put, stats);
@@ -122,11 +123,14 @@ module.exports = async (req, res) => {
       const archive = body && body.archive;
       if (!Array.isArray(archive)) return res.status(400).json({ error: 'bad-archive' });
       // Move any embedded base64 images to Blob before storing (best-effort, never throws).
-      await offloadArchive(archive);
+      const off = await offloadArchive(archive);
       const payload = JSON.stringify(archive);
       if (payload.length > 5000000) return res.status(413).json({ error: 'too-large' });
       await redis(['SET', 'arch:' + ws, payload, 'EX', TTL]);
-      return res.status(200).json({ ok: true });
+      // Stuur terug welke afbeeldingen (sha256-16 van de bytes) naar welke Blob-URL zijn
+      // verplaatst, zodat de browser zijn lokale data:-URL's vervangt en ze niet bij elke
+      // volgende sync opnieuw uploadt (elke put telt als Blob 'advanced request').
+      return res.status(200).json({ ok: true, moved: off.moved || 0, map: off.map || {} });
     }
 
     if (req.method === 'GET') {

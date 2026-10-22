@@ -997,7 +997,40 @@ async function pushArchive(){
   try{syncState.status='syncing';
     const res=await fetch('/api/archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ws,archive:loadArchive()})});
     syncState.status=res.ok?'ok':'error';syncState.at=Date.now();
+    if(res.ok){try{const j=await res.json();if(j&&j.map&&Object.keys(j.map).length)await applyOffloadMap(j.map);}catch(_e){}}
   }catch(e){syncState.status='error';syncState.at=Date.now();}
+}
+// Vervang lokale data:image-URL's door de Blob-URL's die de server heeft aangemaakt
+// (sleutel = eerste 16 hex van sha256 over de bytes, net als api/archive.js). Zo wordt
+// elke afbeelding één keer geüpload i.p.v. bij elke sync opnieuw.
+const _DATA_IMG=/^data:image\/[a-zA-Z0-9.+-]+;base64,/;
+async function _sha16OfDataUrl(s){const b64=s.slice(s.indexOf(',')+1);const bin=atob(b64);const u8=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);const h=await crypto.subtle.digest('SHA-256',u8);return [...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('').slice(0,16);}
+function _collectImgs(node,out){
+  if(Array.isArray(node)){for(const v of node){if(typeof v==='string'&&_DATA_IMG.test(v))out.add(v);else if(v&&typeof v==='object')_collectImgs(v,out);}}
+  else if(node&&typeof node==='object'){for(const k of Object.keys(node)){const v=node[k];if(typeof v==='string'&&_DATA_IMG.test(v))out.add(v);else if(v&&typeof v==='object')_collectImgs(v,out);}}
+  return out;
+}
+// Synchroon vervangen (exacte string → URL), zodat er geen bewerking tussendoor verloren gaat.
+function replaceImgsSync(node,strMap){
+  let n=0;const walk=o=>{
+    if(Array.isArray(o)){for(let i=0;i<o.length;i++){const v=o[i];if(typeof v==='string'&&strMap.has(v)){o[i]=strMap.get(v);n++;}else if(v&&typeof v==='object')walk(v);}}
+    else if(o&&typeof o==='object'){for(const k of Object.keys(o)){const v=o[k];if(typeof v==='string'&&strMap.has(v)){o[k]=strMap.get(v);n++;}else if(v&&typeof v==='object')walk(v);}}
+  };walk(node);return n;
+}
+let _offloadStrMap=null;
+async function applyOffloadMap(map){
+  try{
+    // 1) async: welke data:-strings horen bij welke Blob-URL
+    const imgs=_collectImgs(loadArchive(),new Set());const cur0=load();if(cur0)_collectImgs(cur0,imgs);
+    const strMap=new Map();
+    for(const v of imgs){const h=await _sha16OfDataUrl(v);if(map[h])strMap.set(v,map[h]);}
+    if(!strMap.size)return;
+    // 2) sync: vervang in de verse archiefversie en het actieve document (geen push nodig, server heeft de URL's al)
+    const all=loadArchive();if(replaceImgsSync(all,strMap)){try{localStorage.setItem(AK,JSON.stringify(all));}catch(e){}}
+    const cur=load();if(cur&&replaceImgsSync(cur,strMap))save(cur);
+    _offloadStrMap=strMap;
+    window.dispatchEvent(new CustomEvent('teal-images-offloaded'));
+  }catch(e){}
 }
 async function pullArchive(){
   const ws=getWorkspaceId();if(!ws)return loadArchiveLive();
@@ -4818,6 +4851,7 @@ function App(){
   const[showDash,setShowDash]=useState(true);
   const[activeOptIdx,setActiveOptIdx]=useState(0); // which option Scope/Budget currently edit
   useEffect(()=>{setActiveOptIdx(0)},[d&&d._archiveId]); // reset when switching to a different quote
+  useEffect(()=>{const h=()=>{const m=_offloadStrMap;if(!m)return;setD(prev=>{if(!prev)return prev;const cp=JSON.parse(JSON.stringify(prev));return replaceImgsSync(cp,m)?cp:prev;});};window.addEventListener('teal-images-offloaded',h);return()=>window.removeEventListener('teal-images-offloaded',h);},[]);
 
   useEffect(()=>{
     migrateDeliveryRefs();
