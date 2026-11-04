@@ -53,6 +53,7 @@
   .btn-g{background:0;color:var(--dark-grey);border:1px solid #d0d0ce}.btn-g:hover{background:var(--warm-grey)}
   .btn-sm{padding:4px 10px;font-size:12px}
   .btn-xs{padding:3px 8px;font-size:11px;border-radius:5px}
+  summary::-webkit-details-marker{display:none}
   .costrow .costmove{opacity:.5;transition:opacity .12s}
   .costrow:hover .costmove{opacity:1}
   .costrow .costmove button:disabled{opacity:.35}
@@ -1262,7 +1263,7 @@ function ProjectTab({data:d,set}){
         <div className="fg"><label>{ll.locatie||'Locatie'}</label><input value={d.project.location||''} onChange={e=>up('location',e.target.value)} placeholder={d.lang==='nl'?'bijv. Den Haag':'e.g. The Hague'}/></div>
       </div>
       <div className="row">
-        <div className="fg"><label>{L==='nl'?'Fase':'Phase'}</label><input value={d.project.subtitle||''} onChange={e=>up('subtitle',e.target.value)} placeholder={L==='nl'?'bijv. Ontwerpfase':'e.g. Design phase'}/></div>
+        <div className="fg"><label>{L==='nl'?'Titel offerte (ondertitel)':'Quote title (subtitle)'}</label><input value={d.project.subtitle||''} onChange={e=>up('subtitle',e.target.value)} placeholder={L==='nl'?'bijv. Twig replacement of Ontwerpfase':'e.g. Twig replacement or Design phase'}/></div>
         <div className="fg"><label>{L==='nl'?'Fase-label (details)':'Phase label (details)'}</label><input value={d.project.phaseLabel||''} onChange={e=>up('phaseLabel',e.target.value)} placeholder={L==='nl'?'bijv. Ontwerpfase (betaald)':'e.g. Design phase (paid de-risk)'}/></div>
       </div>
       <div className="row">
@@ -3615,6 +3616,12 @@ async function pushToOdoo(entry,opts={}){
 }
 
 // ── Dashboard ──
+// Titel van een document voor het overzicht: ondertitel/fase, anders afgeleid van de fases.
+function docTitle(e){try{const p=(e.data&&e.data.project)||{};const s=String(p.subtitle||p.phaseLabel||'').trim();if(s)return s;
+  const k=e.kind||(e.data&&e.data.kind)||'quote';
+  if(k==='quote'&&e.data){const ph=((primaryBundle(e.data).phases)||[]).filter(x=>x.enabled!==false);const names=ph.map(x=>x.customName||(x.name&&(x.name.nl||x.name.en))||'').filter(Boolean);
+    if(names.length)return names.slice(0,3).join(' · ')+(names.length>3?' +'+(names.length-3):'');}
+  return '';}catch(_e){return '';}}
 function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,onImport,onDuplicate,onDelete,onNewCO,onNewDelivery,onNewCOForProject,onNewDeliveryForProject,onNewDischargeForProject,onNewDamageForProject,onNewMaintenanceForProject,onBumpVersion}){
   const[archive,setArchive]=useState(loadArchiveLive());
   const[baseOpen,setBaseOpen]=useState(false);
@@ -3672,13 +3679,13 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
   const matchType=e=>{if(typeFilter==='alle')return true;const k=kindOf(e);if(typeFilter==='offertes')return !isChildKind(k);if(typeFilter==='change_orders')return k==='change_order';if(typeFilter==='deliveries')return k==='delivery';if(typeFilter==='discharges')return k==='discharge';if(typeFilter==='reports')return isReportKind(k);return true;};
   const matchStatus=e=>filter==='alle'?true:filter==='opvolgen'?needsFollowUp(e):effectiveStatus(e)===filter;
   const qn=q.trim().toLowerCase();
-  const matchQ=e=>{if(!qn)return true;const hay=[(e.projectName||''),clientLabel(e),(e.ref||''),(e.data&&e.data.project&&(e.data.project.subtitle||e.data.project.phaseLabel))||''].join(' ').toLowerCase();return hay.includes(qn);};
+  const matchQ=e=>{if(!qn)return true;const hay=[(e.projectName||''),clientLabel(e),(e.ref||''),docTitle(e)].join(' ').toLowerCase();return hay.includes(qn);};
   const docVisible=e=>matchType(e)&&matchStatus(e)&&matchQ(e);
   // KPI's (deliveries carry no money)
   const _now=new Date();const _q0=new Date(_now.getFullYear(),Math.floor(_now.getMonth()/3)*3,1);
-  let openVal=0,wonQ=0,acc=0,rej=0;
+  let openVal=0,openN=0,wonQ=0,acc=0,rej=0;
   archive.forEach(e=>{if(kindOf(e)==='delivery'||kindOf(e)==='discharge'||isReportKind(kindOf(e)))return;const st=effectiveStatus(e);const tot=entryTotal(e);
-    if(st==='concept'||st==='verstuurd')openVal+=tot;
+    if(st==='concept'||st==='verstuurd'){openVal+=tot;openN++;}
     if(st==='geaccepteerd'){acc++;const at=new Date(e.statusAt||e.updatedAt);if(at>=_q0)wonQ+=tot;}
     if(st==='afgewezen')rej++;});
   const winRate=(acc+rej)>0?Math.round(acc/(acc+rej)*100):null;
@@ -3705,29 +3712,38 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
     const k=kindOf(item);const isCO=k==='change_order';const isDel=k==='delivery';const isDC=k==='discharge';const isDmg=k==='damage';const isMnt=k==='maintenance';
     const badge=isCO?{t:'CO',c:'#6b4ea0',label:'Change order'}:isDel?{t:'OPL',c:'#0f766e',label:'Oplevering'}:isDC?{t:'DC',c:'#0f766e',label:'Dechargeverklaring'}:isDmg?{t:'SCH',c:'#b3261e',label:'Schaderapport'}:isMnt?{t:'OND',c:'#b45309',label:'Onderhoudsrapport'}:{t:(item.type==='build'?'B':'A'),c:item.type==='build'?'#071412':'#2D8659',label:(item.type==='build'?'Build offerte':'Assemble offerte')};
     const meta=statusMeta[effectiveStatus(item)]||statusMeta.concept;
-    const phase=item.data&&item.data.project&&(item.data.project.subtitle||item.data.project.phaseLabel);
-    const title=(!indent&&phase)?phase:(item.projectName||badge.label);
-    const sub=isDel?(((item.data&&item.data.deliverables)?item.data.deliverables.length:0)+' deliverables'):fmtE(entryTotal(item));
+    const ttl=docTitle(item);
+    const title=ttl||badge.label;
+    const noMoney=isDel||isDC||isDmg||isMnt;
+    const amount=noMoney?'':fmtE(entryTotal(item));
+    const ver=(isCO||noMoney)?1:((item.versions||[]).length+1);
     const cl=clientLabel(item);
     const eStat=effectiveStatus(item);
-    const d2x=(!isCO&&!isDel&&eStat==='verstuurd')?daysUntilExpiry(item):null;
+    const d2x=(!isCO&&!noMoney&&eStat==='verstuurd')?daysUntilExpiry(item):null;
     const expChip=d2x!=null?(d2x<=7?{c:'#8a6d00',bg:'#fff6e0',t:'verloopt over '+d2x+'d'}:{c:'#9a9f9d',bg:'transparent',t:'nog '+d2x+' dagen geldig'}):null;
     const lastExp=lastExportOf(item);
     const followUp=needsFollowUp(item);
+    const viewed=(item.changelog||[]).filter(c=>c&&/^bekeken/i.test(c.action||'')).pop();
+    const sub=isDel?(((item.data&&item.data.deliverables)?item.data.deliverables.length:0)+' deliverables'):'';
+    const chipS={flexShrink:0,fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:10,whiteSpace:'nowrap'};
     return <div key={item.id} style={{borderTop:'1px solid #f1f0ec'}}>
       <div onClick={()=>setExpandedId(isExpanded?null:item.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 16px',paddingLeft:indent?44:16,cursor:'pointer',borderLeft:'3px solid '+badge.c,background:isExpanded?'#faf9f6':'transparent'}}>
         <span title={badge.label} style={{flexShrink:0,minWidth:24,height:19,padding:'0 5px',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,letterSpacing:.5,color:'#fff',background:badge.c,borderRadius:3}}>{badge.t}</span>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap'}}>
-            <span style={{fontWeight:600,fontSize:14,color:'#071412'}}>{title}</span>
+            <span style={{fontWeight:600,fontSize:14,color:ttl?'#071412':'#8a908d'}}>{title}</span>
+            {ver>1&&<span title={(ver-1)+' eerdere versie(s)'} style={{fontSize:10,fontWeight:700,color:'#6b706e',background:'#f0f0ee',padding:'1px 6px',borderRadius:8}}>v{ver}</span>}
             <span style={{color:'#b0b0ab',fontSize:12,fontFamily:"'JetBrains Mono',monospace"}}>{item.ref}</span>
           </div>
-          <div style={{marginTop:2,fontSize:12,color:'#9a9a94'}}>{cl?cl+' · ':''}{sub} · {fmtDt(item.updatedAt)}{indent&&item.parentRef?' · bij '+item.parentRef:''}</div>
+          <div style={{marginTop:2,fontSize:12,color:'#9a9a94'}}>{[cl,sub,'bijgewerkt '+fmtDt(item.updatedAt),indent&&item.parentRef?'bij '+item.parentRef:''].filter(Boolean).join(' · ')}</div>
+          {(expChip||followUp||viewed)&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:5}}>
+            {followUp&&<span title="Verstuurd en verdient opvolging" style={{...chipS,fontWeight:700,color:'#fff',background:'#d97706'}}>⏰ Opvolgen</span>}
+            {expChip&&<span title="Geldigheid offerte" style={{...chipS,color:expChip.c,background:expChip.bg,padding:expChip.bg==='transparent'?0:'2px 8px'}}>{expChip.t}</span>}
+            {viewed&&<span title="Klant heeft de offerte online bekeken" style={{...chipS,color:'#0a6b57',background:'#e6f4f0'}}>👁 bekeken {fmtDt(viewed.date)}</span>}
+          </div>}
         </div>
-        {expChip&&<span title="Geldigheid offerte" style={{flexShrink:0,fontSize:11,fontWeight:600,color:expChip.c,background:expChip.bg,padding:expChip.bg==='transparent'?0:'2px 7px',borderRadius:10,whiteSpace:'nowrap'}}>{expChip.t}</span>}
-        {followUp&&<span title="Verstuurd en verdient opvolging" style={{flexShrink:0,fontSize:11,fontWeight:700,color:'#fff',background:'#d97706',padding:'2px 8px',borderRadius:10,whiteSpace:'nowrap'}}>⏰ Opvolgen</span>}
-        {(()=>{const v=(item.changelog||[]).filter(c=>c&&/^bekeken/i.test(c.action||'')).pop();return v?<span title={'Klant heeft de offerte online bekeken'} style={{flexShrink:0,fontSize:11,fontWeight:600,color:'#0a6b57',background:'#e6f4f0',padding:'2px 8px',borderRadius:10,whiteSpace:'nowrap'}}>👁 bekeken {fmtDt(v.date)}</span>:null;})()}
-        <span style={{display:'flex',alignItems:'center',gap:6,flexShrink:0,fontSize:12,fontWeight:600,color:meta.color}}><span style={{width:7,height:7,borderRadius:7,background:meta.color,flexShrink:0}}/>{meta.label}</span>
+        <div style={{flexShrink:0,minWidth:96,textAlign:'right',fontSize:14,fontWeight:600,color:'#071412',fontFamily:"'JetBrains Mono',monospace"}}>{amount||<span style={{color:'#d0d0ce'}}>—</span>}</div>
+        <span style={{display:'flex',alignItems:'center',gap:6,flexShrink:0,minWidth:104,fontSize:12,fontWeight:600,color:meta.color}}><span style={{width:7,height:7,borderRadius:7,background:meta.color,flexShrink:0}}/>{meta.label}</span>
         <span style={{fontSize:15,color:'#ccc',flexShrink:0,transform:isExpanded?'rotate(180deg)':'',transition:'.15s'}}>▾</span>
       </div>
       {isExpanded&&<div style={{padding:'14px 16px 16px',paddingLeft:indent?44:16,background:'#faf9f6',borderLeft:'3px solid '+badge.c}}>
@@ -3809,15 +3825,29 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
     {/* KPI-strip */}
     <div className="card" style={{marginBottom:16,padding:0,display:'flex',flexWrap:'wrap'}}>
       {[
-        {lab:'Openstaand',val:fmtE(openVal),sub:'concept + verstuurd',c:'#071412'},
+        {lab:'Openstaand',val:fmtE(openVal),sub:openN+' offertes · concept + verstuurd',c:'#071412'},
         {lab:'Gewonnen dit kwartaal',val:fmtE(wonQ),sub:acc+' geaccepteerd totaal',c:'#2D8659'},
         {lab:'Win-rate',val:winRate==null?'–':winRate+'%',sub:acc+' gewonnen / '+rej+' verloren',c:'#071412'},
-      ].map((k,i)=><div key={i} style={{flex:'1 1 160px',padding:'14px 18px',borderLeft:i?'1px solid #f1f0ec':'none'}}>
+        {lab:'Opvolgen',val:String(counts.opvolgen||0),sub:(counts.opvolgen?'klik om te filteren':'niets openstaand'),c:counts.opvolgen?'#d97706':'#9a9f9d',go:'opvolgen'},
+      ].map((k,i)=><div key={i} onClick={k.go?()=>{setFilter(filter===k.go?'alle':k.go);}:undefined} style={{flex:'1 1 160px',padding:'14px 18px',borderLeft:i?'1px solid #f1f0ec':'none',cursor:k.go?'pointer':'default'}}>
         <div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,color:'#9a9f9d',marginBottom:4}}>{k.lab}</div>
         <div style={{fontSize:22,fontWeight:700,color:k.c,lineHeight:1.1}}>{k.val}</div>
         <div style={{fontSize:11,color:'#a8adaa',marginTop:2}}>{k.sub}</div>
       </div>)}
     </div>
+
+    {(()=>{const fu=parents.filter(needsFollowUp).sort((a,b)=>(daysUntilExpiry(a)==null?99:daysUntilExpiry(a))-(daysUntilExpiry(b)==null?99:daysUntilExpiry(b)));
+      if(!fu.length||filter==='opvolgen')return null;
+      return <div style={{background:'#fff8ec',border:'1px solid #f0d9b5',borderRadius:8,padding:'10px 14px',marginBottom:16}}>
+        <div className="between" style={{alignItems:'center',marginBottom:6}}><span style={{fontSize:12,fontWeight:700,color:'#b45309'}}>⏰ {fu.length} {fu.length===1?'offerte vraagt':'offertes vragen'} opvolging</span><button className="btn btn-xs btn-g" onClick={()=>setFilter('opvolgen')}>Alleen deze tonen</button></div>
+        {fu.slice(0,5).map(e=>{const du=daysUntilExpiry(e);const t=docTitle(e);return <div key={e.id} onClick={()=>onOpen(e.data)} style={{display:'flex',gap:10,alignItems:'baseline',padding:'3px 0',cursor:'pointer',fontSize:13}}>
+          <span style={{fontWeight:600,color:'#071412'}}>{e.projectName||'—'}{t?' · '+t:''}</span>
+          <span style={{color:'#9a9a94',fontSize:12}}>{clientLabel(e)}</span>
+          <span style={{marginLeft:'auto',color:du!=null&&du<0?'#b3261e':'#8a6d00',fontSize:12,whiteSpace:'nowrap'}}>{du==null?'':du<0?'verlopen '+(-du)+'d geleden':'verloopt over '+du+'d'}</span>
+          <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12,minWidth:90,textAlign:'right'}}>{fmtE(entryTotal(e))}</span>
+        </div>;})}
+        {fu.length>5&&<div style={{fontSize:11,color:'#a8adaa',marginTop:4}}>+ {fu.length-5} meer</div>}
+      </div>;})()}
 
     {/* Zoeken + sorteren + acties */}
     <div className="flex g8" style={{marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
@@ -3877,7 +3907,7 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
 
     {/* Doc-type filter */}
     <div className="flex g8" style={{marginBottom:8,flexWrap:'wrap'}}>
-      {[['alle','Alle'],['offertes','Offertes'],['change_orders','Change orders'],['deliveries','Opleveringen'],['discharges','Decharges'],['reports','Rapporten']].map(([id,lab])=>{
+      {[['alle','Alle'],['offertes','Offertes'],['change_orders','Change orders'],['deliveries','Opleveringen'],['discharges','Decharges'],['reports','Rapporten']].filter(([id])=>id==='alle'||id==='offertes'||typeFilter===id||(typeCounts[id]||0)>0).map(([id,lab])=>{
         const on=typeFilter===id;const c=id==='change_orders'?'#6b4ea0':id==='deliveries'?'#0f766e':id==='discharges'?'#0f766e':id==='reports'?'#b45309':'#071412';
         return <button key={id} className="btn btn-sm" onClick={()=>setTypeFilter(id)} style={{border:'1px solid '+(on?c:'#d0d0ce'),background:on?c:'#fff',color:on?'#fff':'#555',fontWeight:on?700:600}}>{lab} <span style={{opacity:.7}}>({typeCounts[id]||0})</span></button>;
       })}
@@ -3895,29 +3925,44 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
       <p style={{color:'#999',marginBottom:16}}>{archive.length===0?'Nog geen documenten. Begin met een nieuwe offerte.':'Geen documenten in dit filter.'}</p>
     </div>:
     <div>
-      {groups.map((g,gi)=>{const isSrc=projDragName===g.name,isTgt=projDragName&&projDragName!==g.name;const isColl=!!collapsedProj[g.key];const nOff=g.rows.filter(r=>!r.child&&kindOf(r.e)!=='change_order'&&kindOf(r.e)!=='delivery').length;const projVal=g.rows.filter(r=>kindOf(r.e)!=='delivery').reduce((s,r)=>s+entryTotal(r.e),0);return <div key={gi} className="card" style={{marginBottom:12,padding:0,overflow:'hidden',opacity:isSrc?0.5:1,outline:isTgt?'2px dashed #2D8659':'none',outlineOffset:2,transition:'opacity .12s'}}
+      {groups.map((g,gi)=>{const isSrc=projDragName===g.name,isTgt=projDragName&&projDragName!==g.name;const isColl=!!collapsedProj[g.key];const nOff=g.rows.filter(r=>!r.child&&!isChildKind(kindOf(r.e))).length;
+        const stOf=r=>effectiveStatus(r.e);
+        const accVal=g.rows.filter(r=>stOf(r)==='geaccepteerd').reduce((s,r)=>s+entryTotal(r.e),0);
+        const openV=g.rows.filter(r=>stOf(r)==='concept'||stOf(r)==='verstuurd').reduce((s,r)=>s+entryTotal(r.e),0);
+        const fuN=g.rows.filter(r=>needsFollowUp(r.e)).length;
+        const gClient=(g.rows.map(r=>clientLabel(r.e)).find(Boolean))||'';
+        const chip={fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:10,whiteSpace:'nowrap'};
+        const addItems=[['Change order',()=>onNewCOForProject(g.name)],['Oplevering',()=>onNewDeliveryForProject(g.name)],['Dechargeverklaring',()=>onNewDischargeForProject(g.name)],['Schaderapport',()=>onNewDamageForProject(g.name)],['Onderhoudsrapport',()=>onNewMaintenanceForProject(g.name)]];
+        return <div key={gi} className="card" style={{marginBottom:12,padding:0,opacity:isSrc?0.5:1,outline:isTgt?'2px dashed #2D8659':'none',outlineOffset:2,transition:'opacity .12s'}}
         onDragOver={e=>{if(projDragRef.current&&projDragRef.current.name!==g.name)e.preventDefault();}} onDrop={e=>dropProj(g,e)}>
-        <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',background:'#faf9f6',borderBottom:isColl?'none':'1px solid #ecebe6'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',background:'#faf9f6',borderRadius:isColl?8:'8px 8px 0 0',borderBottom:isColl?'none':'1px solid #ecebe6',flexWrap:'wrap'}}>
           <span draggable onDragStart={()=>startProjDrag(g)} onDragEnd={endProjDrag} title={isTgt?'Laat hier los om samen te voegen':'Sleep op een ander project om samen te voegen'} style={{cursor:'grab',color:'#c4c8c6',fontSize:15,lineHeight:1,userSelect:'none'}}>⠿</span>
-          <div onClick={()=>toggleProj(g.key)} title={isColl?'Uitvouwen':'Invouwen'} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',flex:1,minWidth:0}}>
+          <div onClick={()=>toggleProj(g.key)} title={isColl?'Uitvouwen':'Invouwen'} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',flex:'1 1 220px',minWidth:0}}>
             <span style={{fontSize:11,color:'#b0b4b2',display:'inline-block',transform:isColl?'rotate(-90deg)':'none',transition:'.12s'}}>▾</span>
-            <span style={{fontSize:14,fontWeight:700,color:'#071412',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.name}</span>
-            <span style={{fontSize:11,color:'#a0a4a2',whiteSpace:'nowrap'}}>{(nOff>0?nOff+'× offerte':'extern')+' · '+g.rows.length+' doc.'}</span>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:15,fontWeight:700,color:'#071412',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.name}</div>
+              <div style={{fontSize:11,color:'#a0a4a2',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{[gClient,(nOff>0?nOff+(nOff===1?' offerte':' offertes'):'extern'),g.rows.length+' doc.'].filter(Boolean).join(' · ')}</div>
+            </div>
           </div>
-          <span style={{fontSize:12,color:'#6b706e',fontWeight:600,whiteSpace:'nowrap'}}>{fmtE(projVal)}</span>
-          <div className="proj-actions flex g6" style={{flexShrink:0}}>
+          <div className="flex g6" style={{alignItems:'center',flexWrap:'wrap'}}>
+            {fuN>0&&<span title="Offertes die opvolging vragen" style={{...chip,fontWeight:700,color:'#fff',background:'#d97706'}}>⏰ {fuN}</span>}
+            {openV>0&&<span title="Concept + verstuurd, ex btw" style={{...chip,color:'#1d6fb8',background:'#e7f0fb'}}>open {fmtE(openV)}</span>}
+            {accVal>0&&<span title="Geaccepteerd, ex btw" style={{...chip,color:'#2D8659',background:'#e6f5ec'}}>akkoord {fmtE(accVal)}</span>}
+          </div>
+          <div className="proj-actions flex g6" style={{flexShrink:0,position:'relative'}}>
             <button className="btn btn-xs btn-g" title="Nieuwe offerte in dit project" onClick={()=>onNewInProject(g.src)}>+ Offerte</button>
-            <button className="btn btn-xs btn-g" title="Change order" onClick={()=>onNewCOForProject(g.name)}>+ CO</button>
-            <button className="btn btn-xs btn-g" title="Oplevering" onClick={()=>onNewDeliveryForProject(g.name)}>+ Oplev.</button>
-            <button className="btn btn-xs btn-g" title="Dechargeverklaring (oplever-certificaat)" onClick={()=>onNewDischargeForProject(g.name)}>+ Decharge</button>
-            <button className="btn btn-xs btn-g" title="Schaderapport (foto-voorop)" onClick={()=>onNewDamageForProject(g.name)}>+ Schade</button>
-            <button className="btn btn-xs btn-g" title="Onderhoudsrapport (foto-voorop)" onClick={()=>onNewMaintenanceForProject(g.name)}>+ Onderhoud</button>
+            <details style={{position:'relative'}}>
+              <summary className="btn btn-xs btn-g" style={{listStyle:'none',cursor:'pointer'}}>+ Document ▾</summary>
+              <div style={{position:'absolute',right:0,top:'100%',marginTop:4,zIndex:20,background:'#fff',border:'1px solid #d0d0ce',borderRadius:8,boxShadow:'0 6px 20px rgba(0,0,0,.12)',minWidth:180,padding:4}}>
+                {addItems.map(([lab,fn])=><div key={lab} onClick={ev=>{const dt=ev.currentTarget.closest('details');if(dt)dt.removeAttribute('open');fn();}} style={{padding:'7px 10px',fontSize:13,cursor:'pointer',borderRadius:5,color:'#071412'}} onMouseEnter={ev=>ev.currentTarget.style.background='#f4f3ef'} onMouseLeave={ev=>ev.currentTarget.style.background='transparent'}>{lab}</div>)}
+              </div>
+            </details>
           </div>
         </div>
         {!isColl&&g.rows.length>1&&(()=>{
           const seq=g.rows.slice().sort((a,b)=>new Date(a.e.createdAt||a.e.updatedAt||0)-new Date(b.e.createdAt||b.e.updatedAt||0));
           return <div style={{display:'flex',alignItems:'flex-start',gap:0,padding:'12px 18px 4px',overflowX:'auto',borderBottom:'1px solid #f1f0ec'}}>
-            {seq.map((r,i)=>{const e=r.e;const k=kindOf(e);const m=statusMeta[effectiveStatus(e)]||statusMeta.concept;const tl=k==='change_order'?'CO':k==='delivery'?'OPL':k==='discharge'?'DC':(e.type==='build'?'B':'A');return <div key={e.id} style={{display:'flex',alignItems:'center',flexShrink:0}}>
+            {seq.map((r,i)=>{const e=r.e;const k=kindOf(e);const m=statusMeta[effectiveStatus(e)]||statusMeta.concept;const tl=k==='change_order'?'CO':k==='delivery'?'OPL':k==='discharge'?'DC':k==='damage'?'SCH':k==='maintenance'?'OND':(e.type==='build'?'B':'A');return <div key={e.id} style={{display:'flex',alignItems:'center',flexShrink:0}}>
               {i>0&&<div style={{width:28,height:2,background:'#e6e5e0',margin:'0 2px',marginBottom:22}}/>}
               <div title={tl+' '+e.ref+' — '+m.label} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,minWidth:44}}>
                 <span style={{width:12,height:12,borderRadius:12,background:m.color,border:'2px solid #fff',boxShadow:'0 0 0 1px '+m.color}}/>
