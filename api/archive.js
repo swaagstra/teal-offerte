@@ -73,12 +73,20 @@ async function offloadImages(node, archiveId, put, stats) {
       const hash = createHash('sha256').update(buf).digest('hex').slice(0, 16);
       const path = `quotes/${archiveId}/${hash}.${extFromMime(mime)}`;
       try {
-        const { url } = await put(path, buf, {
-          access: 'public',
-          contentType: `image/${mime}`,
-          addRandomSuffix: false,
-          allowOverwrite: true,
-        });
+        // Dedupe: dit pad is al eens geüpload → hergebruik de URL zonder put (bespaart een
+        // 'advanced request'; vangt ook oude browsers/tabs op die nog data:-URL's opnieuw sturen).
+        let url = null;
+        try { url = await redis(['GET', 'blobseen:' + path]); } catch (e) { url = null; }
+        if (!url) {
+          ({ url } = await put(path, buf, {
+            access: 'public',
+            contentType: `image/${mime}`,
+            addRandomSuffix: false,
+            allowOverwrite: true,
+          }));
+          try { await redis(['SET', 'blobseen:' + path, url, 'EX', TTL]); } catch (e) { /* best-effort */ }
+          stats.puts = (stats.puts || 0) + 1;
+        }
         container[key] = url;
         stats.moved += 1;
         if (stats.map) stats.map[hash] = url;
