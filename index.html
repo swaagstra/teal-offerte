@@ -2273,7 +2273,7 @@ function buildFinancialLines(d,totals,L){
     const pd=totals.phaseData[pi]||{};
     const total=(pd.total||0)+(extraByPhase[ph.id]||0);
     if(total<=0.005)return;
-    lines.push({desc:pn(ph),total,key:'ph:'+(ph.id||pi)});
+    lines.push({desc:pn(ph),sub:(t(ph.description,L)||'').trim(),total,key:'ph:'+(ph.id||pi)});
   });
 
   // Niet-gekoppelde inkoop/onderaannemers → aparte klantregels (met optionele "toon als"-groepering).
@@ -2304,6 +2304,8 @@ function buildFinancialLines(d,totals,L){
 
   // Apply the user's custom display order (from the preview's move-up/down controls). Keys not
   // present in costOrder keep their natural position (stable sort), so new lines land sensibly.
+  // Regels van € 0 (of 'gratis') tonen we nooit aan de klant.
+  for(let i=lines.length-1;i>=0;i--){if(Math.abs(+lines[i].total||0)<0.005)lines.splice(i,1);}
   const order=Array.isArray(d.costOrder)?d.costOrder:[];
   if(order.length){
     lines.forEach((l,i)=>l._i=i);
@@ -2430,7 +2432,7 @@ function QuoteDoc({T,L,editable,onMove}){
               <button aria-label={NL?'Omhoog':'Move up'} title={NL?'Omhoog':'Move up'} disabled={i===0} onClick={()=>onMove(opt.cost_items,i,-1)} style={{cursor:i===0?'default':'pointer',border:'1px solid '+hair,background:'#fff',color:i===0?faint:body,borderRadius:4,width:24,height:18,lineHeight:'14px',fontSize:11,padding:0,touchAction:'manipulation'}}>↑</button>
               <button aria-label={NL?'Omlaag':'Move down'} title={NL?'Omlaag':'Move down'} disabled={i===opt.cost_items.length-1} onClick={()=>onMove(opt.cost_items,i,1)} style={{cursor:i===opt.cost_items.length-1?'default':'pointer',border:'1px solid '+hair,background:'#fff',color:i===opt.cost_items.length-1?faint:body,borderRadius:4,width:24,height:18,lineHeight:'14px',fontSize:11,padding:0,touchAction:'manipulation'}}>↓</button>
             </div>}
-            <div style={{flex:1,color:ink}}>{it.d}</div><div style={{width:140,textAlign:'right',fontWeight:500,fontVariantNumeric:'tabular-nums'}}>{it.a}</div>
+            <div style={{flex:1,color:ink}}>{it.d}{it.s&&<div style={{fontSize:11.5,lineHeight:1.5,color:muted,marginTop:3,paddingRight:18}}>{it.s}</div>}</div><div style={{width:140,textAlign:'right',fontWeight:500,fontVariantNumeric:'tabular-nums'}}>{it.a}</div>
           </div>)}
           <div style={{display:'flex',justifyContent:'flex-end'}}>
             <div style={{width:300}}>
@@ -2588,7 +2590,7 @@ function PreviewTab_OLD({data:d}){
       <thead><tr><th>{ll.omschrijvingFinCol}</th><th style={{textAlign:'right'}}>{ll.bedragCol}</th></tr></thead>
       <tbody>
         {finLines.map((ln,i)=><tr key={i}>
-          <td>{ln.desc}</td>
+          <td>{ln.desc}{ln.sub&&<div style={{fontSize:11,color:'#777',marginTop:2}}>{ln.sub}</div>}</td>
           <td style={{textAlign:'right'}}>{fmtE(ln.total)}</td>
         </tr>)}
         <tr style={{fontWeight:700,borderTop:'2px solid #111'}}>
@@ -2796,7 +2798,7 @@ function buildQuoteDocDef(D, logoImg){
   function costStack(items,totalFmt,label,leadIn){
     var totalLabel=label?(L('Totaal ','Total ')+label+' '):L('Totaal ','Total ');
     var cr=[[{text:L('OMSCHRIJVING','DESCRIPTION'),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:L('BEDRAG','AMOUNT'),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];
-    (items||[]).forEach(function(it){cr.push([{text:it.d,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:it.a,font:'I5',fontSize:13*k,color:ink,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});
+    (items||[]).forEach(function(it){cr.push([{text:it.s?[{text:it.d},{text:'\n'+it.s,fontSize:10.5*k,color:muted}]:it.d,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:it.a,font:'I5',fontSize:13*k,color:ink,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});
     var totalRow={columns:[{width:'*',text:''},{width:225,table:{widths:['*','auto'],body:[[{text:[{text:totalLabel,font:'I5'},{text:L('(excl. btw)','(excl. VAT)'),fontSize:11*k,color:muted}],fontSize:16*k,color:ink,border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]},{text:totalFmt,font:'I5',fontSize:16*k,color:ink,alignment:'right',border:[false,true,false,false],borderColor:[null,ink,null,null],margin:[0,9,0,0]}]]},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}}]};
     return (leadIn||[]).concat([{table:{widths:['*',105],body:cr},layout:{defaultBorder:false,paddingLeft:function(){return 0;},paddingRight:function(){return 0;},paddingTop:function(){return 0;},paddingBottom:function(){return 0;}}},totalRow]);
   }
@@ -2866,7 +2868,7 @@ function mapQuoteToTokens(d){
     const bTotals=calcTotals(bn);
     // costOrder lives on the top-level doc; inject it so option bundles honour the same order.
     const bFinLines=buildFinancialLines(bn.costOrder?bn:{...bn,costOrder:d.costOrder},bTotals,L);
-    const bCostItems=bFinLines.map(ln=>({d:ln.desc||'',a:fmtE(ln.total),k:ln.key}));
+    const bCostItems=bFinLines.map(ln=>({d:ln.desc||'',s:ln.sub||'',a:fmtE(ln.total),k:ln.key}));
     return {scope:bScope,phaseNames:bPhaseNames,effort:bEffort,cost_items:bCostItems,grandClient:bTotals.grandClient,total:fmtE(bTotals.grandClient)};
   };
   const base=tokensForBundle(bundle);
@@ -3571,7 +3573,7 @@ function mapChangeOrderTokens(co){
   const L=co.lang,NL=L==='nl';
   const S=resolveSharedInfo(co);
   const fmtLong=ds=>ds?new Date(ds).toLocaleDateString(NL?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
-  const items=(co.costItems||[]).filter(it=>t(it.desc,L)||(+it.amount)).map(it=>({d:t(it.desc,L)||'',a:fmtE(+it.amount||0)}));
+  const items=(co.costItems||[]).filter(it=>Math.abs(+it.amount||0)>=0.005).map(it=>({d:t(it.desc,L)||'',a:fmtE(+it.amount||0)}));
   const subtotal=(co.costItems||[]).reduce((s,it)=>s+(+it.amount||0),0);
   const vat=co.showVat?subtotal*(co.vatPct||0)/100:0;
   return {nl:NL,number:co.ref,parentRef:S.linkedRef||co.parentRef||'',date:fmtLong(co.date),valid:(co.validity||14)+' '+(NL?'dagen':'days'),
@@ -3621,7 +3623,7 @@ function buildChangeOrderDocDef(D,logoImg){
   }
   // 05 additional costs
   var cr=[[{text:lab.descCol.toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]},{text:lab.amount.toUpperCase(),font:'I6',fontSize:11*k,color:muted,characterSpacing:lsf(0.12,11*k),alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,ink],margin:[0,0,0,7.5]}]];
-  (D.items||[]).forEach(function(it){cr.push([{text:it.d,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:it.a,font:'I5',fontSize:13*k,color:ink,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});
+  (D.items||[]).forEach(function(it){cr.push([{text:it.s?[{text:it.d},{text:'\n'+it.s,fontSize:10.5*k,color:muted}]:it.d,fontSize:13*k,color:ink,border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]},{text:it.a,font:'I5',fontSize:13*k,color:ink,alignment:'right',border:[false,false,false,true],borderColor:[null,null,null,hair],margin:[0,9,0,9]}]);});
   var totRows=[];
   if(D.showVat){
     totRows.push([{text:lab.subtotal,fontSize:12*k,color:sec,border:[false,false,false,false],margin:[0,7,0,0]},{text:D.subtotal,font:'I4',fontSize:12*k,color:sec,alignment:'right',border:[false,false,false,false],margin:[0,7,0,0]}]);
@@ -4327,7 +4329,7 @@ function ChangeOrderPreview({data:co}){
         <div style={{display:'flex',alignItems:'baseline',padding:'0 0 10px',borderBottom:'1px solid '+ink,fontSize:11,textTransform:'uppercase',letterSpacing:'0.12em',fontWeight:600,color:muted}}>
           <div style={{flex:1}}>{NL?'Omschrijving':'Description'}</div><div style={{width:140,textAlign:'right'}}>{NL?'Bedrag':'Amount'}</div></div>
         {T.items.map((it,i)=><div key={i} style={{display:'flex',alignItems:'baseline',padding:'12px 0',borderBottom:'1px solid '+hair,fontSize:13}}>
-          <div style={{flex:1,color:ink}}>{it.d}</div><div style={{width:140,textAlign:'right',fontWeight:500,fontVariantNumeric:'tabular-nums'}}>{it.a}</div></div>)}
+          <div style={{flex:1,color:ink}}>{it.d}{it.s&&<div style={{fontSize:11.5,lineHeight:1.5,color:muted,marginTop:3,paddingRight:18}}>{it.s}</div>}</div><div style={{width:140,textAlign:'right',fontWeight:500,fontVariantNumeric:'tabular-nums'}}>{it.a}</div></div>)}
         <div style={{display:'flex',justifyContent:'flex-end',marginTop:0}}><div style={{width:300}}>
           {T.showVat&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,color:sec,padding:'7px 0 0'}}><span>{NL?'Subtotaal':'Subtotal'}</span><span style={{fontVariantNumeric:'tabular-nums'}}>{T.subtotal}</span></div>}
           {T.showVat&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,color:sec,padding:'3px 0 0'}}><span>{'BTW '+T.vatPct+'%'}</span><span style={{fontVariantNumeric:'tabular-nums'}}>{T.vat}</span></div>}

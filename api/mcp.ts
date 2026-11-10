@@ -150,7 +150,69 @@ function deepMerge(base: Dict, patch: Dict): Dict {
   return base;
 }
 const TEMPLATES = quoteTemplates as unknown as Record<string, Dict>;
-function buildQuoteFromSpec(spec: Dict): Dict {
+// Prijskaart (Dashboard → Instellingen) staat per workspace in Redis onder prices:<ws>.
+async function getPriceCard(ws: string): Promise<Dict | null> {
+  try {
+    const v = await redis(['GET', 'prices:' + ws]);
+    const c = JSON.parse((v as string) || 'null');
+    return isPlainObject(c) && Array.isArray(c.roles) ? c : null;
+  } catch { return null; }
+}
+const num = (v: unknown, d: number): number => (typeof v === 'number' && isFinite(v) ? v : d);
+function handlingFromCard(card: Dict | null, v: number): number | null {
+  const H = card && (card.handling as Dict[]);
+  if (!Array.isArray(H) || !H.length) return null;
+  for (const b of H) { const m = b.max == null ? Infinity : Number(b.max); if (v <= m) return Number(b.pct); }
+  return Number(H[H.length - 1].pct);
+}
+function applyPriceCard(data: Dict, spec: Dict, card: Dict): void {
+  const roles: Record<string, Dict> = {};
+  (card.roles as Dict[]).forEach((r) => { roles[String(r.id)] = r; });
+  // Uurtarieven per rol: alleen overschrijven wat de spec niet expliciet zelf zet.
+  ((data.phases as Dict[]) || []).forEach((ph, pi) => ((ph.items as Dict[]) || []).forEach((it, ii) => {
+    const r = roles[String(it.role)];
+    const sp = Array.isArray(spec.phases) ? (spec.phases as Dict[])[pi] : null;
+    const spIt = sp && Array.isArray(sp.items) ? (sp.items as Dict[])[ii] : null;
+    if (!r || (spIt && (spIt.ext != null || spIt.extRate != null))) return;
+    it.extRate = num(r.ext, num(it.extRate, 0));
+    if (!(spIt && (spIt.int != null || spIt.intRate != null))) it.intRate = num(r.int, num(it.intRate, 0));
+    if (r.unit) it.unit = r.unit;
+  }));
+  // Installatie: momentopname van tarieven en dagkosten (zoals de app bij een nieuwe offerte doet).
+  const P = (card.install as Dict) || {};
+  const inst = data.install as Dict;
+  const set = (k: string, v: unknown) => { if (!isPlainObject(spec.install) || (spec.install as Dict)[k] === undefined) inst[k] = v; };
+  set('coordPct', num(P.coordPct, num(inst.coordPct, 10)));
+  set('conPct', num(P.conPct, num(inst.conPct, 10)));
+  set('sbRate', num(P.standby, num(inst.sbRate, 600)));
+  set('pdRateStd', num(P.perDiemStd, num(inst.pdRateStd, 75)));
+  set('pdRateCity', num(P.perDiemCity, num(inst.pdRateCity, 120)));
+  inst.rates = { lead: P.lead, crew: P.crew, travelIntl: P.travelIntl, halfNL: P.halfNL, ot: P.ot, km: P.km, trans: P.trans };
+  if (isPlainObject(card.resCost)) inst.resCost = { ...(card.resCost as Dict) };
+  // Handling en coördinatie op inkoop/onderaannemers die de spec zelf geen percentage geeft.
+  ((data.procOTS as Dict[]) || []).forEach((it) => { if (it.handlingPct == null) { const h = handlingFromCard(card, Number(it.amount) || 0); if (h != null) it.handlingPct = h; } });
+  ((data.procCustom as Dict[]) || []).forEach((it) => { if (it.handlingPct == null) { const h = handlingFromCard(card, Number(it.amount) || 0); if (h != null) it.handlingPct = h; } });
+  if (card.coordPct != null) ((data.subs as Dict[]) || []).forEach((it) => { if (it.coordPct == null) it.coordPct = card.coordPct; });
+  // Tarievenkaart-bijlage uit de prijskaart.
+  const e = (n: number): string => '€ ' + (Number.isInteger(n) ? String(n) : n.toFixed(2).replace('.', ','));
+  const R = (id: string): number => num(roles[id] && roles[id].ext, 0);
+  const asm = [R('assembly'), R('assemblylead')].filter((x) => x > 0);
+  const asmTxt = asm.length ? (Math.min(...asm) === Math.max(...asm) ? e(asm[0]) : e(Math.min(...asm)) + '–' + String(Math.max(...asm)).replace('.', ',')) : '';
+  const hp = ((card.handling as Dict[]) || []).map((b) => Number(b.pct) * 100);
+  const hTxt = hp.length ? Math.round(Math.min(...hp)) + '–' + Math.round(Math.max(...hp)) + '%' : '';
+  const rc = (data.annexes as Dict | undefined)?.rateCard as Dict | undefined;
+  if (rc && Array.isArray(rc.rows) && !(isPlainObject(spec.annexes) && (spec.annexes as Dict).rateCard)) {
+    for (const row of rc.rows as Dict[]) {
+      const lab = String(((row.label as Dict) || {}).nl || '');
+      if (lab.startsWith('Ontwerp')) row.rate = e(R('design'));
+      else if (lab.startsWith('Productie')) row.rate = asmTxt;
+      else if (lab.startsWith('Installatieteam')) row.rate = e(num(P.crew, 0));
+      else if (lab.startsWith('Projectmanagement')) row.rate = e(R('pm'));
+      else if (lab.startsWith('Handling') && hTxt) row.rate = hTxt;
+    }
+  }
+}
+function buildQuoteFromSpec(spec: Dict, card: Dict | null = null): Dict {
   if (!TEMPLATES) throw new Error('templates-unavailable');
   const typ = spec.type === 'build' ? 'build' : 'assemble';
   const data = JSON.parse(JSON.stringify(TEMPLATES[typ])) as Dict;
@@ -187,6 +249,7 @@ function buildQuoteFromSpec(spec: Dict): Dict {
   for (const sect of ['procOTS', 'procCustom', 'subs']) {
     if (Array.isArray(spec[sect])) data[sect] = spec[sect];
   }
+  if (card) applyPriceCard(data, spec, card);
   return data;
 }
 
@@ -426,7 +489,8 @@ async function callTool(ws: string, name: string, args: Dict): Promise<ToolResul
     if (!TEMPLATES) return { text: 'FOUT: templates niet beschikbaar op de server.', isError: true };
     const spec = (args.spec as Dict) || {};
     let data: Dict;
-    try { data = buildQuoteFromSpec(spec); } catch (e) { return { text: 'FOUT bij opbouwen: ' + String((e as Error).message), isError: true }; }
+    const card = await getPriceCard(ws);
+    try { data = buildQuoteFromSpec(spec, card); } catch (e) { return { text: 'FOUT bij opbouwen: ' + String((e as Error).message), isError: true }; }
     const archive = await getArchive(ws);
     const refs = new Set(archive.map((e) => e && e.ref));
     const baseRef = (spec.ref as string) || ((spec.type === 'build' ? 'B' : 'A') + '-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-1');
@@ -446,7 +510,7 @@ async function callTool(ws: string, name: string, args: Dict): Promise<ToolResul
       changelog: [{ action: 'aangemaakt via Claude', date: now }], data,
     });
     await setArchive(ws, archive);
-    return { text: 'Nieuwe offerte ' + ref + ' (' + (projectName || '—') + ') aangemaakt en gesynct.' + imgNote + ' Ververs de Offerte Tool om hem te zien.' };
+    return { text: 'Nieuwe offerte ' + ref + ' (' + (projectName || '—') + ') aangemaakt en gesynct' + (card ? ' met de actuele prijskaart.' : ' (geen prijskaart gevonden, standaardtarieven).') + imgNote + ' Ververs de Offerte Tool om hem te zien.' };
   }
 
   return { text: 'Onbekende tool: ' + name, isError: true };
