@@ -128,6 +128,13 @@ module.exports = async (req, res) => {
       }
       const ws = cleanWs(body && body.ws);
       if (ws.length < 8) return res.status(400).json({ error: 'bad-ws' });
+      // Prijskaart (instelbare tarieven/marges): aparte sleutel, los van het offerte-archief.
+      if (body && body.prices && typeof body.prices === 'object' && !Array.isArray(body.prices)) {
+        const pj = JSON.stringify(body.prices);
+        if (pj.length > 200000) return res.status(413).json({ error: 'too-large' });
+        await redis(['SET', 'prices:' + ws, pj, 'EX', TTL]);
+        return res.status(200).json({ ok: true });
+      }
       const archive = body && body.archive;
       if (!Array.isArray(archive)) return res.status(400).json({ error: 'bad-archive' });
       // Move any embedded base64 images to Blob before storing (best-effort, never throws).
@@ -144,6 +151,11 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
       const ws = cleanWs(req.query && req.query.ws);
       if (ws.length < 8) return res.status(400).json({ error: 'bad-ws' });
+      if (req.query && req.query.kind === 'prices') {
+        const pv = await redis(['GET', 'prices:' + ws]);
+        res.setHeader('Content-Type', 'application/json');
+        return res.status(200).send(pv || '{}');
+      }
       const v = await redis(['GET', 'arch:' + ws]);
       res.setHeader('Content-Type', 'application/json');
       return res.status(200).send(v || '[]');

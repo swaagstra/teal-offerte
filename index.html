@@ -135,7 +135,8 @@ const roleMap=Object.fromEntries(ROLES.map(r=>[r.id,r]));
 const HANDLING_BRACKETS=[
   {max:5000,pct:.20},{max:25000,pct:.15},{max:100000,pct:.12},{max:Infinity,pct:.08}
 ];
-function getHandlingPct(v){for(const b of HANDLING_BRACKETS)if(v<=b.max)return b.pct;return .08}
+// Vaste fabrieks-staffel: alleen als terugval in berekeningen (zodat bestaande offertes niet verschuiven).
+function handlingPctLegacy(v){for(const b of HANDLING_BRACKETS)if(v<=b.max)return b.pct;return .08}
 
 const COORD_MARGIN=.12;
 
@@ -174,6 +175,91 @@ const INSTALL_DEFAULT={enabled:false,crew:[],coordOn:true,coordPct:10,
   pdTier:'std',pdRateStd:PERDIEM_STD,pdRateCity:PERDIEM_CITY,pdDays:'',
   kmNL:0,transMode:'flat',transCost:0,park:0,co2:0,
   sbDays:'',sbRate:600,conPct:10};
+
+// ── Prijskaart (instelbaar via Dashboard → Instellingen) ─────────────────────────────────────
+// Eén centrale bron voor tarieven, kostprijzen, marges, installatie- en toeslagpercentages.
+// De hard-gecodeerde constanten hierboven blijven de fabrieksinstelling én de terugval voor
+// bestaande offertes; een nieuwe offerte neemt een momentopname van de prijskaart (rollen via
+// de regelitems, installatie via install.rates/resCost). Wijzigen van de prijskaart verschuift
+// dus nooit een offerte die al bestaat.
+const PRICE_KEY='teal.offerte.prices';
+const ROLES_BASE=ROLES.map(r=>({id:r.id,name:{...r.name},ext:r.ext,int:r.int,unit:r.unit}));
+function priceDefaults(){return {v:1,updatedAt:null,
+  roles:ROLES_BASE.map(r=>({...r,name:{...r.name},builtin:true})),
+  install:{lead:INSTALL_RATES.lead,crew:INSTALL_RATES.crew,travelIntl:INSTALL_RATES.travelIntl,halfNL:INSTALL_RATES.halfNL,ot:INSTALL_RATES.ot,km:INSTALL_RATES.km,trans:INSTALL_RATES.trans,standby:600,coordPct:10,conPct:10,perDiemStd:PERDIEM_STD,perDiemCity:PERDIEM_CITY},
+  resCost:{...INSTALL_RESCOST},
+  handling:HANDLING_BRACKETS.map(b=>({max:b.max===Infinity?null:b.max,pct:b.pct})),
+  coordPct:COORD_MARGIN};}
+let PRICE=priceDefaults();
+function mergePrices(saved){
+  const def=priceDefaults();if(!saved||typeof saved!=='object')return def;
+  const out={...def,...saved,install:{...def.install,...(saved.install||{})},resCost:{...def.resCost,...(saved.resCost||{})}};
+  // Ingebouwde rollen blijven altijd bestaan (fase-sjablonen verwijzen ernaar); eigen rollen blijven behouden.
+  const have=new Set((saved.roles||[]).map(r=>r.id));
+  out.roles=(saved.roles&&saved.roles.length?saved.roles:def.roles).slice();
+  def.roles.forEach(r=>{if(!have.has(r.id)&&saved.roles&&saved.roles.length)out.roles.push(r);});
+  if(!Array.isArray(out.handling)||!out.handling.length)out.handling=def.handling;
+  return out;
+}
+function applyPrices(card){
+  PRICE=card;
+  ROLES.length=0;PRICE.roles.forEach(r=>ROLES.push({id:r.id,name:r.name,ext:+r.ext||0,int:+r.int||0,unit:r.unit||'uur'}));
+  Object.keys(roleMap).forEach(k=>{delete roleMap[k];});ROLES.forEach(r=>{roleMap[r.id]=r;});
+  // Labels in de crew-selector volgen de dagkosten (dagkost / 8 uur).
+  const f=n=>String(Math.round(n*100)/100).replace('.',',');const rc=PRICE.resCost;
+  INST_RES.erik='Erik (€'+f((rc.erik||0)/8)+'/u)';['L0','L1','L2','L3'].forEach(k=>{INST_RES[k]=k+' €'+f((rc[k]||0)/8);});
+}
+function loadPrices(){try{const r=localStorage.getItem(PRICE_KEY);return mergePrices(r?JSON.parse(r):null);}catch(e){return priceDefaults();}}
+let _priceTimer=null;
+function savePrices(card){
+  const st={...card,updatedAt:new Date().toISOString()};
+  try{localStorage.setItem(PRICE_KEY,JSON.stringify(st));}catch(e){}
+  applyPrices(st);
+  if(_priceTimer)clearTimeout(_priceTimer);_priceTimer=setTimeout(pushPrices,1200);
+  return st;
+}
+async function pushPrices(){
+  const ws=getWorkspaceId();if(!ws)return;
+  try{await fetch('/api/archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ws,prices:PRICE})});}catch(e){}
+}
+async function pullPrices(){
+  const ws=getWorkspaceId();if(!ws)return false;
+  try{
+    const res=await fetch('/api/archive?ws='+encodeURIComponent(ws)+'&kind=prices');if(!res.ok)return false;
+    const remote=await res.json();if(!remote||!remote.updatedAt)return false;
+    if(new Date(remote.updatedAt)>new Date(PRICE.updatedAt||0)){
+      const m=mergePrices(remote);try{localStorage.setItem(PRICE_KEY,JSON.stringify(m));}catch(e){}
+      applyPrices(m);window.dispatchEvent(new CustomEvent('teal-prices-changed'));return true;
+    }
+    if(PRICE.updatedAt&&new Date(PRICE.updatedAt)>new Date(remote.updatedAt))pushPrices();
+  }catch(e){}
+  return false;
+}
+// Handlingtoeslag volgens de actuele prijskaart (alleen voor NIEUWE regels; zie handlingPctLegacy).
+function getHandlingPct(v){const H=PRICE.handling;for(const b of H){const m=b.max==null?Infinity:b.max;if(v<=m)return b.pct;}return H[H.length-1].pct;}
+// Installatie-tarieven en dagkosten per offerte: momentopname uit het moment van aanmaken, anders fabrieks-terugval.
+function instRates(x){return {...INSTALL_RATES,...((x&&x.rates)||{})};}
+function instResCost(x){return {...INSTALL_RESCOST,...((x&&x.resCost)||{})};}
+function newInstall(){const P=PRICE.install;return {...INSTALL_DEFAULT,crew:[],coordPct:P.coordPct,conPct:P.conPct,sbRate:P.standby,pdRateStd:P.perDiemStd,pdRateCity:P.perDiemCity,
+  rates:{lead:P.lead,crew:P.crew,travelIntl:P.travelIntl,halfNL:P.halfNL,ot:P.ot,km:P.km,trans:P.trans},resCost:{...PRICE.resCost}};}
+// Klantgerichte tarievenkaart (bijlage) afgeleid van de prijskaart.
+function rateCardRows(){
+  const e=n=>'€ '+(Number.isInteger(n)?String(n):n.toFixed(2).replace('.',','));
+  const R=id=>(roleMap[id]&&roleMap[id].ext)||0;
+  const asm=[R('assembly'),R('assemblylead')].filter(x=>x>0);const asmTxt=asm.length?(Math.min(...asm)===Math.max(...asm)?e(asm[0]):e(Math.min(...asm)).replace('€ ','€ ')+'–'+String(Math.max(...asm)).replace('.',',')):'';
+  const hp=PRICE.handling.map(b=>b.pct);const hTxt=Math.round(Math.min(...hp)*100)+'–'+Math.round(Math.max(...hp)*100)+'%';
+  return [
+    {label:{nl:'Ontwerp & engineering',en:'Design & engineering'},rate:e(R('design')),unit:{nl:'per uur',en:'per hour'}},
+    {label:{nl:'Productie & assemblage',en:'Production & assembly'},rate:asmTxt,unit:{nl:'per uur',en:'per hour'}},
+    {label:{nl:'Installatieteam',en:'Installation crew'},rate:e(PRICE.install.crew),unit:{nl:'per dag',en:'per day'}},
+    {label:{nl:'Projectmanagement',en:'Project management'},rate:e(R('pm')),unit:{nl:'per uur',en:'per hour'}},
+    {label:{nl:'Transport',en:'Transport'},rate:'',unit:{nl:'per rit · op aanvraag',en:'per trip · on request'}},
+    {label:{nl:'Opslag',en:'Storage'},rate:'',unit:{nl:'per m² per maand · op aanvraag',en:'per m² per month · on request'}},
+    {label:{nl:'Reiskosten',en:'Travel'},rate:'€ 0,50',unit:{nl:'per km',en:'per km'}},
+    {label:{nl:'Handlingtoeslag materiaal',en:'Material handling surcharge'},rate:hTxt,unit:{nl:'staffel op inkoopwaarde',en:'tiered on purchase value'}}
+  ];
+}
+applyPrices(loadPrices());
 // Value helper: an auto-fillable field. Empty string / null / NaN → use the calendar-derived
 // fallback; a real number → manual override. Lets one input show the auto value yet be typed over.
 function _instNum(v,fallback){return (v!==''&&v!=null&&!isNaN(+v))?+v:fallback;}
@@ -182,7 +268,7 @@ function calcInstall(d){
   const empty={client:0,cost:0,labourC:0,labourCost:0,coord:0,beClient:0,beCost:0,sb:0,cont:0,persons:0,maxWD:0,minWDfail:false,
     hotelPN:0,hotelPNcal:0,pdDays:0,pdDaysCal:0,sbDays:0,sbDaysCal:0,pdRate:0};
   if(!x.enabled)return empty;
-  const P=INSTALL_RATES, RC=INSTALL_RESCOST;
+  const P=instRates(x), RC=instResCost(x);
   let labourC=0,labourCost=0,persons=0,maxWD=0,anyTI=false;
   // Everything time-based is derived straight from each person's painted calendar — the single
   // source of truth. hotelPNcal = person-nights (nights between first & last day away, summed),
@@ -489,16 +575,7 @@ function defaultAnnexes(){return {
   meerwerk:{enabled:false,text:{
     nl:'Meerwerk omvat al het werk buiten de overeengekomen scope, werk dat voortkomt uit niet-nagekomen verantwoordelijkheden van de klant, wijzigingen op verzoek van de klant, en werk dat voortvloeit uit onjuist gebleken uitgangspunten. TEAL meldt dit, stuurt een change order met de werkzaamheden en de kosten, en start het werk pas na schriftelijke bevestiging van de klant. Bevestigd meerwerk wordt aan het eind van de kalendermaand gefactureerd volgens de bijgevoegde tarievenkaart. De betalingstermijn van de hoofdovereenkomst is van toepassing.',
     en:'Additional work includes any work outside the agreed scope, work arising from client responsibilities that are not met, changes requested by the client, and work resulting from assumptions that prove incorrect. TEAL will notify the client and issue a change order specifying the work and the cost, and will start work only after the client’s written confirmation. Confirmed additional work is invoiced at the end of the calendar month at the attached rate card. The payment terms of the main agreement apply.'}},
-  rateCard:{enabled:false,rows:[
-    {label:{nl:'Ontwerp & engineering',en:'Design & engineering'},rate:'€ 120',unit:{nl:'per uur',en:'per hour'}},
-    {label:{nl:'Productie & assemblage',en:'Production & assembly'},rate:'€ 45–65',unit:{nl:'per uur',en:'per hour'}},
-    {label:{nl:'Installatieteam',en:'Installation crew'},rate:'€ 600',unit:{nl:'per dag',en:'per day'}},
-    {label:{nl:'Projectmanagement',en:'Project management'},rate:'€ 95',unit:{nl:'per uur',en:'per hour'}},
-    {label:{nl:'Transport',en:'Transport'},rate:'',unit:{nl:'per rit · op aanvraag',en:'per trip · on request'}},
-    {label:{nl:'Opslag',en:'Storage'},rate:'',unit:{nl:'per m² per maand · op aanvraag',en:'per m² per month · on request'}},
-    {label:{nl:'Reiskosten',en:'Travel'},rate:'€ 0,50',unit:{nl:'per km',en:'per km'}},
-    {label:{nl:'Handlingtoeslag materiaal',en:'Material handling surcharge'},rate:'8–20%',unit:{nl:'staffel op inkoopwaarde',en:'tiered on purchase value'}}
-  ]},
+  rateCard:{enabled:false,rows:rateCardRows()},
   responsibilities:{enabled:false,rows:[
     {party:{nl:'TEAL',en:'TEAL'},item:{nl:'Ontwerp, engineering en productiebegeleiding.',en:'Design, engineering and production supervision.'}},
     {party:{nl:'Klant',en:'Client'},item:{nl:'Locatie, stroom en toegang op de installatiedag.',en:'Site, power and access on the installation day.'}}
@@ -535,7 +612,7 @@ function createProject(type){
     procOTS:[],
     procCustom:[],
     subs:[],
-    install:{...INSTALL_DEFAULT},
+    install:newInstall(),
     travel:{rateNL:.50,note:{nl:'Reiskosten: \u20AC 0,50/km',en:'Travel: \u20AC 0.50/km'}},
     payment:{milestones:type==='build'
       ?[{name:{nl:'Opdrachtverstrekking',en:'Project start'},pct:30,date:''},{name:{nl:'Gereedmelding productie',en:'Production complete'},pct:40,date:''},{name:{nl:'Oplevering',en:'Delivery'},pct:30,date:''}]
@@ -567,7 +644,7 @@ function newOption(label,seedFrom){
     procOTS:src.procOTS?JSON.parse(JSON.stringify(src.procOTS)):[],
     procCustom:src.procCustom?JSON.parse(JSON.stringify(src.procCustom)):[],
     subs:src.subs?JSON.parse(JSON.stringify(src.subs)):[],
-    install:src.install?JSON.parse(JSON.stringify(src.install)):{...INSTALL_DEFAULT},
+    install:src.install?JSON.parse(JSON.stringify(src.install)):newInstall(),
   };
 }
 // The bundle used for computations/rendering when a quote isn't (or no longer is) multi-option,
@@ -662,7 +739,7 @@ function calcTotals(d){
   (d.procOTS||[]).forEach(it=>{
     const v=it.amount||0;
     b1Purchase+=v;
-    b1Handling+=v*(it.handlingPct!=null?it.handlingPct:getHandlingPct(v));
+    b1Handling+=v*(it.handlingPct!=null?it.handlingPct:handlingPctLegacy(v));
   });
 
   // Block B2: Custom
@@ -670,7 +747,7 @@ function calcTotals(d){
   (d.procCustom||[]).forEach(it=>{
     const v=it.amount||0;
     b2Purchase+=v;
-    b2Handling+=v*(it.handlingPct!=null?it.handlingPct:getHandlingPct(v));
+    b2Handling+=v*(it.handlingPct!=null?it.handlingPct:handlingPctLegacy(v));
     b2Risk+=v*(it.riskPct||0);
   });
 
@@ -874,8 +951,8 @@ function versionCostLines(data){
     const cont=client*(+p.contingency||0);
     if(cont>0.5) out.push({key:'ct:'+(p.id||pi), group:'Werk · '+pname, label:'Onvoorzien ('+Math.round((+p.contingency||0)*100)+'%)', amount:cont});
   });
-  (data.procOTS||[]).forEach((it,i)=>{const v=+it.amount||0;const amt=v+v*(it.handlingPct!=null?it.handlingPct:getHandlingPct(v));out.push({key:'ots:'+(it.id||i),group:'Inkoop (standaard)',label:(it.desc||it.supplier||'inkoop'),amount:amt});});
-  (data.procCustom||[]).forEach((it,i)=>{const v=+it.amount||0;const amt=v+v*(it.handlingPct!=null?it.handlingPct:getHandlingPct(v))+v*(+it.riskPct||0);out.push({key:'cus:'+(it.id||i),group:'Inkoop (custom)',label:(it.desc||it.supplier||'inkoop'),amount:amt});});
+  (data.procOTS||[]).forEach((it,i)=>{const v=+it.amount||0;const amt=v+v*(it.handlingPct!=null?it.handlingPct:handlingPctLegacy(v));out.push({key:'ots:'+(it.id||i),group:'Inkoop (standaard)',label:(it.desc||it.supplier||'inkoop'),amount:amt});});
+  (data.procCustom||[]).forEach((it,i)=>{const v=+it.amount||0;const amt=v+v*(it.handlingPct!=null?it.handlingPct:handlingPctLegacy(v))+v*(+it.riskPct||0);out.push({key:'cus:'+(it.id||i),group:'Inkoop (custom)',label:(it.desc||it.supplier||'inkoop'),amount:amt});});
   (data.subs||[]).forEach((it,i)=>{const v=+it.amount||0;const amt=v+v*(it.coordPct!=null?it.coordPct:COORD_MARGIN);out.push({key:'sub:'+(it.id||i),group:'Onderaannemer',label:(it.desc||it.supplier||it.name||'onderaannemer'),amount:amt});});
   try{const inst=calcInstall(data); if(inst&&inst.client>0.5) out.push({key:'install',group:'Installatie',label:'Installatie op locatie',amount:inst.client});}catch(_e){}
   return out;
@@ -1492,7 +1569,7 @@ function BudgetTab({data:d,set}){
   const rmCust=i=>set({...d,procCustom:(d.procCustom||[]).filter((_,idx)=>idx!==i)});
 
   const upSub=(i,k,v)=>{const a=[...(d.subs||[])];a[i]={...a[i],[k]:v};set({...d,subs:a})};
-  const addSub=()=>set({...d,subs:[...(d.subs||[]),{id:uid(),desc:'',company:'',amount:0,coordPct:COORD_MARGIN}]});
+  const addSub=()=>set({...d,subs:[...(d.subs||[]),{id:uid(),desc:'',company:'',amount:0,coordPct:PRICE.coordPct}]});
   const rmSub=i=>set({...d,subs:(d.subs||[]).filter((_,idx)=>idx!==i)});
   // ── Activiteit-gecentreerde kosten: inkoop/maatwerk/onderaannemer worden per regel aan een
   // activiteit (fase) gekoppeld via phaseId, zodat je per activiteit denkt i.p.v. per blok.
@@ -1509,7 +1586,7 @@ function BudgetTab({data:d,set}){
     if(type==='labour'){const p=[...d.phases];const idx=p.findIndex(x=>x.id===pid);if(idx<0)return;p[idx]={...p[idx],items:[...(p[idx].items||[]),{id:uid(),role:'design',desc:{nl:'',en:''},qty:0,extRate:120,intRate:75,unit:'uur'}]};set({...d,phases:p});}
     else if(type==='ots')set({...d,procOTS:[...(d.procOTS||[]),{id:uid(),desc:'',supplier:'',amount:0,handlingPct:.20,phaseId:pid||null}]});
     else if(type==='cust')set({...d,procCustom:[...(d.procCustom||[]),{id:uid(),desc:'',supplier:'',amount:0,handlingPct:.12,riskPct:.10,phaseId:pid||null}]});
-    else if(type==='sub')set({...d,subs:[...(d.subs||[]),{id:uid(),desc:'',company:'',amount:0,coordPct:COORD_MARGIN,phaseId:pid||null}]});
+    else if(type==='sub')set({...d,subs:[...(d.subs||[]),{id:uid(),desc:'',company:'',amount:0,coordPct:PRICE.coordPct,phaseId:pid||null}]});
   };
   const addPhase=()=>{const p=[...d.phases];const n=p.length;p.push({id:uid(),code:'',name:{nl:'Nieuwe activiteit',en:'New activity'},items:[],enabled:true,customName:null,startWeek:n*4,durationWeeks:4,description:{nl:'',en:''},effort:'',contingency:0.1,travel:{trips:0,km:0,rate:.5,hours:0,hourRate:0}});set({...d,phases:p});};
   const rmPhase=(pi)=>{if(!confirm(L==='nl'?'Deze activiteit verwijderen? (regels eronder gaan mee)':'Remove this activity?'))return;const ph=d.phases[pi];const p=d.phases.filter((_,i)=>i!==pi);set({...d,phases:p,procOTS:(d.procOTS||[]).filter(x=>(x.phaseId||'')!==ph.id),procCustom:(d.procCustom||[]).filter(x=>(x.phaseId||'')!==ph.id),subs:(d.subs||[]).filter(x=>(x.phaseId||'')!==ph.id)});};
@@ -1715,9 +1792,9 @@ function BudgetTab({data:d,set}){
           </tr></thead>
           <tbody>
             {((d.install||{}).crew||[]).map((r,i)=>{
-              const dp=r.role==='lead'?INSTALL_RATES.lead:INSTALL_RATES.crew;
-              const dc=r.res==='custom'?(+r.custom||0):(INSTALL_RESCOST[r.res]||0);
-              const rc=(+r.wd||0)*dp+(+r.td||0)*INSTALL_RATES.travelIntl+(+r.hn||0)*INSTALL_RATES.halfNL+(+r.ot||0)*INSTALL_RATES.ot;
+              const _ir=instRates(d.install);const dp=r.role==='lead'?_ir.lead:_ir.crew;
+              const dc=r.res==='custom'?(+r.custom||0):(instResCost(d.install)[r.res]||0);
+              const rc=(+r.wd||0)*dp+(+r.td||0)*_ir.travelIntl+(+r.hn||0)*_ir.halfNL+(+r.ot||0)*_ir.ot;
               const rk=((+r.wd||0)+(+r.td||0))*dc+(+r.hn||0)*(dc/2)+(+r.ot||0)*(dc/8);
               return <tr key={r.id||i}>
                 <td><select value={r.role} onChange={e=>upInstCrew(i,'role',e.target.value)}>
@@ -1808,7 +1885,7 @@ function BudgetTab({data:d,set}){
         </div>
         <div className="row">
           <div className="fg"><label>{L==='nl'?'Reis NL, km retour':'Travel NL, km return'}</label><input type="number" value={(d.install||{}).kmNL||''} onChange={e=>upInst('kmNL',parseFloat(e.target.value)||0)}/>
-            {(+(d.install||{}).kmNL||0)>0&&<div className="sm muted" style={{marginTop:2}}>{'= '+fmtE((+(d.install||{}).kmNL||0)*INSTALL_RATES.km)+' (€ '+INSTALL_RATES.km.toFixed(2).replace('.',',')+(L==='nl'?'/km, doorbelast)':'/km, at cost)')}</div>}</div>
+            {(+(d.install||{}).kmNL||0)>0&&<div className="sm muted" style={{marginTop:2}}>{'= '+fmtE((+(d.install||{}).kmNL||0)*instRates(d.install).km)+' (€ '+instRates(d.install).km.toFixed(2).replace('.',',')+(L==='nl'?'/km, doorbelast)':'/km, at cost)')}</div>}</div>
           <div className="fg"><label>{L==='nl'?'Parkeren / city access (kost)':'Parking / city access (cost)'}</label><input type="number" value={(d.install||{}).park||''} onChange={e=>upInst('park',parseFloat(e.target.value)||0)}/></div>
         </div>
         <div className="row">
@@ -3616,6 +3693,90 @@ async function pushToOdoo(entry,opts={}){
 }
 
 // ── Dashboard ──
+// Getalveld dat tijdens typen een tekst bewaart (komma/punt, leeg) en alleen geldige getallen doorgeeft.
+function NumField({value,onCommit,w}){
+  const[txt,setTxt]=useState(null);
+  const shown=txt!=null?txt:(value==null||isNaN(value)?'':String(value).replace('.',','));
+  return <input type="text" inputMode="decimal" value={shown} style={{width:w||78,textAlign:'right'}}
+    onFocus={e=>e.target.select()}
+    onChange={e=>{const v=e.target.value;setTxt(v);const n=parseFloat(v.replace(',','.'));if(!isNaN(n))onCommit(n);}}
+    onBlur={()=>setTxt(null)}/>;
+}
+const r05=n=>Math.round(n*2)/2;
+function PriceCardSettings(){
+  const[card,setCard]=useState(()=>JSON.parse(JSON.stringify(PRICE)));
+  const[savedAt,setSavedAt]=useState(null);
+  const[bump,setBump]=useState('');
+  const[allM,setAllM]=useState('');
+  useEffect(()=>{const h=()=>setCard(JSON.parse(JSON.stringify(PRICE)));window.addEventListener('teal-prices-changed',h);return()=>window.removeEventListener('teal-prices-changed',h);},[]);
+  const commit=next=>{const st=savePrices(next);setCard(JSON.parse(JSON.stringify(st)));setSavedAt(Date.now());};
+  const margin=r=>(r.ext>0?Math.round((r.ext-r.int)/r.ext*1000)/10:0);
+  const upRole=(i,patch)=>commit({...card,roles:card.roles.map((r,j)=>j===i?{...r,...patch}:r)});
+  const setMargin=(i,m)=>{const r=card.roles[i];if(m>=100||r.int<=0)return;upRole(i,{ext:r05(r.int/(1-m/100))});};
+  const addRole=()=>commit({...card,roles:[...card.roles,{id:'c'+Date.now().toString(36),name:{nl:'Nieuwe rol',en:'New role'},ext:0,int:0,unit:'uur',builtin:false}]});
+  const delRole=i=>{if(!window.confirm('Rol "'+card.roles[i].name.nl+'" verwijderen? Bestaande offertes behouden hun tarief.'))return;commit({...card,roles:card.roles.filter((_,j)=>j!==i)});};
+  const bumpAll=pct=>{if(!pct)return;commit({...card,roles:card.roles.map(r=>({...r,ext:r05(r.ext*(1+pct/100))})),install:{...card.install,lead:r05(card.install.lead*(1+pct/100)),crew:r05(card.install.crew*(1+pct/100)),travelIntl:r05(card.install.travelIntl*(1+pct/100)),halfNL:r05(card.install.halfNL*(1+pct/100)),ot:r05(card.install.ot*(1+pct/100))}});setBump('');};
+  const marginAll=m=>{if(!(m>0&&m<100))return;commit({...card,roles:card.roles.map(r=>r.int>0?{...r,ext:r05(r.int/(1-m/100))}:r)});setAllM('');};
+  const upInst=(k,v)=>commit({...card,install:{...card.install,[k]:v}});
+  const upRes=(k,v)=>commit({...card,resCost:{...card.resCost,[k]:v}});
+  const upHand=(i,patch)=>commit({...card,handling:card.handling.map((b,j)=>j===i?{...b,...patch}:b)});
+  const th={textAlign:'left',fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:.4,color:'#9a9f9d',padding:'4px 6px'};
+  const td={padding:'3px 6px'};
+  const sec={fontSize:12,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,color:'#071412',margin:'18px 0 6px'};
+  const INST=[['lead','Lead, per dag'],['crew','Crew, per dag'],['travelIntl','Reisdag internationaal'],['halfNL','Halve dag NL'],['ot','Overuren, per uur'],['km','Reis NL (km, doorbelast)',],['trans','Transport, per rit'],['standby','Standby, per dag'],['perDiemStd','Per diem standaard, per dag'],['perDiemCity','Per diem dure stad, per dag']];
+  return <div id="prijskaart">
+    <div className="between" style={{alignItems:'center',flexWrap:'wrap',gap:8}}>
+      <div className="card-h" style={{margin:0}}>Prijskaart</div>
+      <span className="sm" style={{color:savedAt?'var(--green)':'#999'}}>{savedAt?'● Opgeslagen en gesynchroniseerd':(card.updatedAt?'Laatst gewijzigd '+new Date(card.updatedAt).toLocaleDateString('nl-NL'):'Fabrieksinstelling')}</span>
+    </div>
+    <p className="sm muted" style={{margin:'6px 0 0'}}>Je tarieven, kostprijzen en marges. Elke <b>nieuwe</b> offerte start met deze prijskaart; bestaande offertes behouden hun eigen tarieven. Marge = (tarief − kostprijs) / tarief. Pas je het tarief aan, dan verandert de marge mee, en andersom (afgerond op € 0,50).</p>
+
+    <div style={sec}>Rollen (uur- en dagtarieven)</div>
+    <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',minWidth:560}}>
+      <thead><tr><th style={th}>Rol</th><th style={th}>Per</th><th style={{...th,textAlign:'right'}}>Tarief klant</th><th style={{...th,textAlign:'right'}}>Kostprijs</th><th style={{...th,textAlign:'right'}}>Marge %</th><th style={th}></th></tr></thead>
+      <tbody>{card.roles.map((r,i)=><tr key={r.id} style={{borderTop:'1px solid #f1f0ec'}}>
+        <td style={td}><input value={r.name.nl} onChange={e=>upRole(i,{name:{nl:e.target.value,en:r.builtin?r.name.en:e.target.value}})} style={{width:'100%',minWidth:150}}/></td>
+        <td style={td}><select value={r.unit} onChange={e=>upRole(i,{unit:e.target.value})}><option value="uur">uur</option><option value="dag">dag</option><option value="stuk">stuk</option></select></td>
+        <td style={{...td,textAlign:'right'}}><NumField value={r.ext} onCommit={v=>upRole(i,{ext:v})}/></td>
+        <td style={{...td,textAlign:'right'}}><NumField value={r.int} onCommit={v=>upRole(i,{int:v})}/></td>
+        <td style={{...td,textAlign:'right'}}><NumField value={margin(r)} onCommit={v=>setMargin(i,v)} w={64}/></td>
+        <td style={td}>{!r.builtin&&<button className="btn btn-xs btn-g" onClick={()=>delRole(i)} title="Rol verwijderen">×</button>}</td>
+      </tr>)}</tbody>
+    </table></div>
+    <div className="flex g8" style={{marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
+      <button className="btn btn-sm btn-g" onClick={addRole}>+ Rol toevoegen</button>
+      <span className="sm muted" style={{marginLeft:12}}>Alle tarieven</span><NumField value={bump===''?'':bump} onCommit={setBump} w={52}/><span className="sm muted">%</span><button className="btn btn-sm btn-g" onClick={()=>bumpAll(+bump)} disabled={!+bump} title="Verhoogt de klanttarieven van rollen en installatieteam met dit percentage">verhogen</button>
+      <span className="sm muted" style={{marginLeft:12}}>Alle marges op</span><NumField value={allM===''?'':allM} onCommit={setAllM} w={52}/><span className="sm muted">%</span><button className="btn btn-sm btn-g" onClick={()=>marginAll(+allM)} disabled={!(+allM>0&&+allM<100)} title="Rekent het klanttarief van alle rollen terug vanuit de kostprijs">instellen</button>
+    </div>
+
+    <div style={sec}>Installatieteam en reizen</div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:'6px 24px'}}>
+      {INST.map(([k,lab])=><div key={k} className="flex g8" style={{alignItems:'center',justifyContent:'space-between'}}><span className="sm">{lab}</span><NumField value={card.install[k]} onCommit={v=>upInst(k,v)}/></div>)}
+      <div className="flex g8" style={{alignItems:'center',justifyContent:'space-between'}}><span className="sm">Coördinatie installatie, %</span><NumField value={card.install.coordPct} onCommit={v=>upInst('coordPct',v)}/></div>
+      <div className="flex g8" style={{alignItems:'center',justifyContent:'space-between'}}><span className="sm">Onvoorzien installatie, %</span><NumField value={card.install.conPct} onCommit={v=>upInst('conPct',v)}/></div>
+    </div>
+    <div className="sm muted" style={{margin:'10px 0 4px'}}>Interne dagkosten per crewlid (8 uur). Hieruit volgt de installatiemarge.</div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:'6px 24px'}}>
+      {[['erik','Erik'],['L0','L0'],['L1','L1'],['L2','L2'],['L3','L3']].map(([k,lab])=><div key={k} className="flex g8" style={{alignItems:'center',justifyContent:'space-between'}}><span className="sm">{lab}</span><NumField value={card.resCost[k]} onCommit={v=>upRes(k,v)}/></div>)}
+    </div>
+
+    <div style={sec}>Inkoop en onderaannemers</div>
+    <div className="sm muted" style={{marginBottom:6}}>Handlingtoeslag op inkoopwaarde (staffel)</div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:'6px 24px'}}>
+      {card.handling.map((b,i)=><div key={i} className="flex g8" style={{alignItems:'center'}}>
+        <span className="sm" style={{minWidth:96}}>{b.max==null?'daarboven':'t/m € '}</span>
+        {b.max!=null&&<NumField value={b.max} onCommit={v=>upHand(i,{max:v})} w={84}/>}
+        <span className="sm muted">toeslag</span><NumField value={Math.round(b.pct*1000)/10} onCommit={v=>upHand(i,{pct:v/100})} w={56}/><span className="sm muted">%</span>
+      </div>)}
+    </div>
+    <div className="flex g8" style={{alignItems:'center',marginTop:8}}><span className="sm">Coördinatietoeslag onderaannemers</span><NumField value={Math.round(card.coordPct*1000)/10} onCommit={v=>commit({...card,coordPct:v/100})} w={56}/><span className="sm muted">%</span></div>
+
+    <div className="flex g8" style={{marginTop:16,alignItems:'center'}}>
+      <button className="btn btn-sm btn-g" onClick={()=>{if(window.confirm('Alle tarieven terugzetten naar de fabrieksinstelling?'))commit(priceDefaults());}}>Fabrieksinstelling herstellen</button>
+      <span className="sm muted">De tarievenkaart-bijlage in nieuwe offertes volgt deze prijskaart.</span>
+    </div>
+  </div>;
+}
 // Titel van een document voor het overzicht: ondertitel/fase, anders afgeleid van de fases.
 function docTitle(e){try{const p=(e.data&&e.data.project)||{};const s=String(p.subtitle||p.phaseLabel||'').trim();if(s)return s;
   const k=e.kind||(e.data&&e.data.kind)||'quote';
@@ -3647,7 +3808,7 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
   const[importErr,setImportErr]=useState('');
   const[synced,setSynced]=useState(false);
   const[signedNotice,setSignedNotice]=useState([]);
-  useEffect(()=>{pullArchive().then(a=>{migrateDeliveryRefs();setArchive(loadArchiveLive());setSynced(true);
+  useEffect(()=>{pullPrices();pullArchive().then(a=>{migrateDeliveryRefs();setArchive(loadArchiveLive());setSynced(true);
     // Melding: welke offertes zijn getekend sinds je laatste bezoek?
     try{const K='teal.offerte.lastSeen';const last=localStorage.getItem(K);const lt=last?new Date(last).getTime():0;
       const fresh=loadArchiveLive().filter(e=>e&&e.status==='geaccepteerd'&&e.statusAt&&new Date(e.statusAt).getTime()>lt);
@@ -3811,6 +3972,7 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
       </div>
       <div className="flex g8" style={{alignItems:'center'}}>
         <span className="sm" style={{color:synced?'var(--green)':'#999'}} title="Back-up naar de cloud">{synced?'● Back-up actief':'○ Synchroniseren…'}</span>
+        <button className="btn btn-g btn-sm" onClick={()=>{setShowSettings(true);setTimeout(()=>{const el=document.getElementById('prijskaart');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});},60);}} title="Tarieven, kostprijzen en marges voor nieuwe offertes">Prijskaart</button>
         <button className="btn btn-g btn-sm" onClick={copyWsUrl} title="Kopieer een prive-link om je offertes op een ander apparaat te openen">Apparaten</button>
         {window._SESSION_EMAIL&&<button className="btn btn-g btn-sm" onClick={doLogout} title={'Ingelogd als '+window._SESSION_EMAIL+' — uitloggen'}>Uitloggen</button>}
         <button className="btn btn-p" onClick={()=>onNew('build')}>+ Build</button>
@@ -3984,9 +4146,11 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
     <div style={{marginTop:28,borderTop:'1px solid #ecebe6',paddingTop:14}}>
       <div onClick={()=>setShowSettings(s=>!s)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',userSelect:'none'}}>
         <span style={{fontSize:11,color:'#b0b4b2',display:'inline-block',transform:showSettings?'none':'rotate(-90deg)',transition:'.12s'}}>▾</span>
-        <span style={{fontSize:12,fontWeight:600,color:'#8a908d'}}>Instellingen · Algemene Voorwaarden</span>
+        <span style={{fontSize:12,fontWeight:600,color:'#8a908d'}}>Instellingen · Prijskaart · Algemene Voorwaarden</span>
       </div>
       {showSettings&&<div className="card" style={{marginTop:12}}>
+        <PriceCardSettings/>
+        <div style={{borderTop:'1px solid #ecebe6',margin:'22px 0 16px'}}/>
         <div className="card-h">Algemene Voorwaarden (PDF)</div>
         <p className="sm muted" style={{margin:'0 0 10px'}}>Geldt voor alle offertes. Een geupload bestand wordt automatisch achter elke offerte geplakt en blijft bewaard in deze browser. Wijzig je je AV, vervang hier de PDF; de code hoef je niet meer aan te passen.</p>
         {['nl','en'].map(lng=>{const has=getAVB64(lng);return <div key={lng+avRefresh} className="flex g8" style={{alignItems:'center',marginBottom:6}}>
