@@ -2998,7 +2998,9 @@ function emailQuote(d,followUp){
   const contact=(d.client&&d.client.contact)||(d.client&&d.client.name)||'';
   const filename=`${NL?'Offerte':'Quotation'} ${ref||'Draft'} - TEAL.pdf`;
   const subject=(followUp?(NL?'Herinnering: offerte':'Reminder: quotation'):(NL?'Offerte':'Quotation'))+(ref?' '+ref:'')+(proj?' – '+proj:'');
-  const greet=contact?(NL?'Beste '+contact+',':'Dear '+contact+','):(NL?'Beste,':'Hello,');
+  const first=(d.client&&d.client.contact)?String(d.client.contact).trim().split(/\s+/)[0]:'';
+  const greet=first?(NL?'Beste '+first+',':'Dear '+first+','):(NL?'Beste,':'Hello,');
+  if(!to&&!confirm(NL?'Bij deze offerte staat geen e-mailadres van de contactpersoon. Toch een lege mail openen?':'This quote has no contact email address. Open an empty mail anyway?'))return;
   const body=followUp?(NL
     ? greet+'\n\nEven een korte herinnering aan onze offerte voor '+proj+' (ref. '+ref+'). Ik ben benieuwd of je er al naar hebt kunnen kijken.\n\nHeb je vragen of wil je iets aanpassen? Ik denk graag mee. Voor de zekerheid zit de offerte nogmaals in de bijlage.\n\nMet vriendelijke groet,\nErik Swaagstra\nTEAL · teamteal.nl\nerik@teamteal.nl'
     : greet+'\n\nJust a quick reminder about our quotation for '+proj+' (ref. '+ref+'). I was wondering whether you had a chance to review it.\n\nAny questions or changes? Happy to help. I have attached the quotation again for your convenience.\n\nKind regards,\nErik Swaagstra\nTEAL · teamteal.nl\nerik@teamteal.nl')
@@ -3900,7 +3902,7 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
           </div>
           <div style={{marginTop:2,fontSize:12,color:'#9a9a94'}}>{[cl,sub,'bijgewerkt '+fmtDt(item.updatedAt),indent&&item.parentRef?'bij '+item.parentRef:''].filter(Boolean).join(' · ')}</div>
           {(expChip||followUp||viewed)&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:5}}>
-            {followUp&&<span title="Verstuurd en verdient opvolging" style={{...chipS,fontWeight:700,color:'#fff',background:'#d97706'}}>⏰ Opvolgen</span>}
+            {followUp&&<span title="Klik: concept-mail naar de contactpersoon opstellen" onClick={e=>{e.stopPropagation();emailQuote(item.data,true);}} style={{...chipS,fontWeight:700,color:'#fff',background:'#d97706',cursor:'pointer'}}>⏰ Opvolgen ✉</span>}
             {expChip&&<span title="Geldigheid offerte" style={{...chipS,color:expChip.c,background:expChip.bg,padding:expChip.bg==='transparent'?0:'2px 8px'}}>{expChip.t}</span>}
             {viewed&&<span title="Klant heeft de offerte online bekeken" style={{...chipS,color:'#0a6b57',background:'#e6f4f0'}}>👁 bekeken {fmtDt(viewed.date)}</span>}
           </div>}
@@ -4006,8 +4008,9 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
         <div className="between" style={{alignItems:'center',marginBottom:6}}><span style={{fontSize:12,fontWeight:700,color:'#b45309'}}>⏰ {fu.length} {fu.length===1?'offerte vraagt':'offertes vragen'} opvolging</span><button className="btn btn-xs btn-g" onClick={()=>setFilter('opvolgen')}>Alleen deze tonen</button></div>
         {fu.slice(0,5).map(e=>{const du=daysUntilExpiry(e);const t=docTitle(e);return <div key={e.id} onClick={()=>onOpen(e.data)} style={{display:'flex',gap:10,alignItems:'baseline',padding:'3px 0',cursor:'pointer',fontSize:13}}>
           <span style={{fontWeight:600,color:'#071412'}}>{e.projectName||'—'}{t?' · '+t:''}</span>
-          <span style={{color:'#9a9a94',fontSize:12}}>{clientLabel(e)}</span>
-          <span style={{marginLeft:'auto',color:du!=null&&du<0?'#b3261e':'#8a6d00',fontSize:12,whiteSpace:'nowrap'}}>{du==null?'':du<0?'verlopen '+(-du)+'d geleden':'verloopt over '+du+'d'}</span>
+          <span style={{color:'#9a9a94',fontSize:12}}>{clientLabel(e)}{e.data&&e.data.client&&e.data.client.email?' · '+e.data.client.email:' · geen e-mail'}</span>
+          <button className="btn btn-xs btn-g" style={{marginLeft:'auto',color:'#b45309',borderColor:'#f0d9b5'}} onClick={ev=>{ev.stopPropagation();emailQuote(e.data,true);}}>✉ Concept-mail</button>
+          <span style={{color:du!=null&&du<0?'#b3261e':'#8a6d00',fontSize:12,whiteSpace:'nowrap'}}>{du==null?'':du<0?'verlopen '+(-du)+'d geleden':'verloopt over '+du+'d'}</span>
           <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12,minWidth:90,textAlign:'right'}}>{fmtE(entryTotal(e))}</span>
         </div>;})}
         {fu.length>5&&<div style={{fontSize:11,color:'#a8adaa',marginTop:4}}>+ {fu.length-5} meer</div>}
