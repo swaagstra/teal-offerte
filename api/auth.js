@@ -35,8 +35,9 @@ async function redis(cmd) {
 }
 
 const nowSec = () => Math.floor(Date.now() / 1000);
-const mintWs = () => (Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)).slice(0, 22);
-const mintSid = () => (Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 32);
+const { randomBytes } = require('node:crypto');
+const mintWs = () => randomBytes(12).toString('hex').slice(0, 22);
+const mintSid = () => randomBytes(24).toString('hex');
 
 function allowedEmails() {
   return (process.env.AUTH_ALLOWED_EMAILS || 'erik@teamteal.nl').toLowerCase().split(/[,\s]+/).filter(Boolean);

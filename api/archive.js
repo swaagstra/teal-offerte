@@ -119,6 +119,23 @@ async function offloadArchive(archive) {
   return stats;
 }
 
+// Per id de nieuwste versie behouden; volgorde van de client blijft leidend, onbekende server-entries volgen.
+function mergeArchives(server, client) {
+  const ts = (e) => { const t = Date.parse((e && (e.updatedAt || e.createdAt)) || ''); return isNaN(t) ? 0 : t; };
+  const byId = new Map();
+  server.forEach((e) => { if (e && e.id) byId.set(e.id, e); });
+  const out = [];
+  const seen = new Set();
+  client.forEach((e) => {
+    if (!e || !e.id) { out.push(e); return; }
+    const s = byId.get(e.id);
+    seen.add(e.id);
+    out.push(s && ts(s) > ts(e) ? s : e);
+  });
+  server.forEach((e) => { if (e && e.id && !seen.has(e.id)) out.push(e); });
+  return out;
+}
+
 module.exports = async (req, res) => {
   try {
     if (req.method === 'POST') {
@@ -139,7 +156,15 @@ module.exports = async (req, res) => {
       if (!Array.isArray(archive)) return res.status(400).json({ error: 'bad-archive' });
       // Move any embedded base64 images to Blob before storing (best-effort, never throws).
       const off = await offloadArchive(archive);
-      const payload = JSON.stringify(archive);
+      // Voeg samen met wat al op de server staat (per offerte wint de nieuwste updatedAt).
+      // Zo overschrijft een verouderd of leeg apparaat nooit een akkoord van de klant of
+      // offertes die het zelf nog niet kent. Verwijderen blijft werken via deletedAt-markeringen.
+      let merged = archive;
+      try {
+        const cur = JSON.parse((await redis(['GET', 'arch:' + ws])) || '[]');
+        if (Array.isArray(cur) && cur.length) merged = mergeArchives(cur, archive);
+      } catch (e) { /* geen of corrupt archief: dan geldt wat de client stuurt */ }
+      const payload = JSON.stringify(merged);
       if (payload.length > 5000000) return res.status(413).json({ error: 'too-large' });
       await redis(['SET', 'arch:' + ws, payload, 'EX', TTL]);
       // Stuur terug welke afbeeldingen (sha256-16 van de bytes) naar welke Blob-URL zijn

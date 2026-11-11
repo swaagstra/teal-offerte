@@ -260,6 +260,39 @@ function rateCardRows(){
   ];
 }
 applyPrices(loadPrices());
+// Zelfcontrole van het archief: rekent elke offerte na en meldt afwijkingen (geen wijzigingen).
+function auditArchive(arch){
+  const out=[];
+  (arch||[]).forEach(e=>{
+    const d=e&&e.data;const k=(e&&e.kind)||(d&&d.kind)||'quote';
+    if(!d||e.deletedAt||k!=='quote')return;
+    const ref=e.ref||d.ref||'?';const proj=e.projectName||(d.project&&d.project.name)||'';
+    const add=(sev,msg)=>out.push({sev,ref,proj,msg,id:e.id});
+    const bundles=(d.multiOption&&d.options&&d.options.length)?d.options.map(o=>({lab:' (optie '+o.label+')',b:o})):[{lab:'',b:d}];
+    bundles.forEach(({lab,b})=>{
+      try{
+        const bb=b.costOrder?b:{...b,costOrder:d.costOrder};
+        const tot=calcTotals(b);const lines=buildFinancialLines(bb,tot,d.lang||'nl');
+        const sum=lines.reduce((s2,l)=>s2+(+l.total||0),0);
+        if(!isFinite(tot.grandClient))add('fout','Totaal is geen getal'+lab);
+        else if(Math.abs(sum-tot.grandClient)>0.01)add('fout','Klantregels ('+fmtE(sum)+') wijken af van het totaal ('+fmtE(tot.grandClient)+')'+lab);
+        if(lines.some(l=>!isFinite(+l.total)))add('fout','Een regel heeft geen geldig bedrag'+lab);
+        (b.phases||[]).forEach(ph=>{if(ph.enabled===false)return;(ph.items||[]).forEach(it=>{
+          if((+it.qty||0)>0&&(+it.extRate||0)<=0)add('let op','Regel zonder tarief: '+(typeof it.desc==='string'?it.desc:(it.desc&&(it.desc.nl||it.desc.en))||it.role)+lab);
+          else if((+it.qty||0)>0&&(+it.intRate||0)>(+it.extRate||0))add('let op','Negatieve marge: '+((it.desc&&(it.desc.nl||it.desc.en))||it.role)+' (kost '+fmtE(it.intRate)+' > tarief '+fmtE(it.extRate)+')'+lab);
+          if(it.role&&!roleMap[it.role])add('let op','Onbekende rol "'+it.role+'"'+lab);
+        });});
+        const st=e.status;
+        if((st==='verstuurd'||st==='geaccepteerd')&&!(tot.grandClient>0))add('let op','Status '+st+' maar totaal is € 0'+lab);
+      }catch(err){add('fout','Rekenfout: '+(err&&err.message))}
+    });
+    const ms=(d.payment&&d.payment.milestones)||[];
+    if(ms.length){const pc=ms.reduce((s2,m)=>s2+(+m.pct||0),0);if(Math.abs(pc-100)>0.01)add('fout','Betaaltermijnen tellen op tot '+pc+'% in plaats van 100%');}
+    if((e.status==='verstuurd'||e.status==='geaccepteerd')&&!(d.client&&d.client.email))add('let op','Geen e-mailadres van de contactpersoon');
+    if(!(d.project&&d.project.name))add('let op','Geen projectnaam');
+  });
+  return out;
+}
 // Value helper: an auto-fillable field. Empty string / null / NaN → use the calendar-derived
 // fallback; a real number → manual override. Lets one input show the auto value yet be typed over.
 function _instNum(v,fallback){return (v!==''&&v!=null&&!isNaN(+v))?+v:fallback;}
@@ -1062,7 +1095,7 @@ function getWorkspaceId(){
     const q=new URLSearchParams(location.search).get('ws');
     if(q&&/^[a-z0-9]{8,40}$/i.test(q)){localStorage.setItem(WSK,q);return q;}
     let w=localStorage.getItem(WSK);
-    if(!w){w=(Date.now().toString(36)+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2)).slice(0,22);localStorage.setItem(WSK,w);}
+    if(!w){w=Array.from(crypto.getRandomValues(new Uint8Array(12))).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,22);localStorage.setItem(WSK,w);}
     return w;
   }catch(e){return null;}
 }
@@ -3806,6 +3839,7 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
   const[q,setQ]=useState('');
   const[sortBy,setSortBy]=useState('recent');
   const[showAnalytics,setShowAnalytics]=useState(false);
+  const[auditRes,setAuditRes]=useState(null);
   const[dupFor,setDupFor]=useState(null);
   const[importOpen,setImportOpen]=useState(false);
   const[importText,setImportText]=useState('');
@@ -4029,8 +4063,18 @@ function Dashboard({onOpen,onNew,onNewFrom,onNewInProject,onNewExternalProject,o
         <option value="status">Sorteer: status</option>
         <option value="name">Sorteer: naam (A–Z)</option>
       </select>
+      <button className="btn btn-sm btn-g" title="Rekent alle offertes na en meldt afwijkingen" onClick={()=>setAuditRes(r=>r?null:auditArchive(archive))} style={auditRes?{borderColor:'#071412',color:'#071412',fontWeight:700}:null}>Controle {auditRes?'▴':'▾'}</button>
       <button className="btn btn-sm btn-g" onClick={()=>setShowAnalytics(s=>!s)} style={showAnalytics?{borderColor:'#071412',color:'#071412',fontWeight:700}:null}>Analyse {showAnalytics?'▴':'▾'}</button>
     </div>
+
+    {auditRes&&<div style={{background:'#fff',border:'1px solid '+(auditRes.some(x=>x.sev==='fout')?'#e8b4b0':'#e0e0dc'),borderRadius:8,padding:'12px 16px',marginBottom:16}}>
+      <div style={{fontSize:13,fontWeight:700,color:auditRes.some(x=>x.sev==='fout')?'#b3261e':'#2D8659',marginBottom:auditRes.length?8:0}}>{auditRes.length?(auditRes.filter(x=>x.sev==='fout').length+' fout(en), '+auditRes.filter(x=>x.sev!=='fout').length+' aandachtspunt(en)'):'Alles klopt: alle offertes rekenen sluitend door in preview, PDF en Odoo-regels.'}</div>
+      {auditRes.map((x,i)=><div key={i} style={{display:'flex',gap:10,fontSize:12.5,padding:'3px 0',alignItems:'baseline'}}>
+        <span style={{fontWeight:700,color:x.sev==='fout'?'#b3261e':'#b45309',minWidth:54}}>{x.sev}</span>
+        <span style={{fontFamily:"'JetBrains Mono',monospace",color:'#6b706e'}}>{x.ref}</span>
+        <span style={{color:'#9a9a94'}}>{x.proj}</span><span style={{color:'#071412'}}>{x.msg}</span>
+      </div>)}
+    </div>}
 
     {showAnalytics&&(()=>{
       const parentsA=archive.filter(e=>kindOf(e)!=='change_order'&&kindOf(e)!=='delivery');

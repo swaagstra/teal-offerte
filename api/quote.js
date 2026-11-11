@@ -28,7 +28,7 @@ async function redis(cmd) {
   return j.result;
 }
 const cleanWs = (v) => String(v || '').replace(/[^a-z0-9]/gi, '').slice(0, 40);
-const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const genId = () => Date.now().toString(36) + require('node:crypto').randomBytes(6).toString('hex');
 const nowIso = () => new Date().toISOString();
 
 async function getRec(id) {
@@ -244,9 +244,11 @@ module.exports = async (req, res) => {
       if (!rec) return res.status(404).json({ error: 'not-found' });
       const action = body && body.action;
       if (action === 'accept') {
-        const name = String((body && body.name) || '').trim().slice(0, 120);
+        const name = String((body && body.name) || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 120);
         if (!name) return res.status(400).json({ error: 'name-required' });
-        const email = String((body && body.email) || '').trim().slice(0, 160);
+        const emailRaw = String((body && body.email) || '').trim().slice(0, 160);
+        // Strikt: één adres, geen regeleinden/spaties (voorkomt mail-header-injectie via To:).
+        const email = /^[^\s@<>,;"'\r\n]+@[^\s@<>,;"'\r\n]+\.[^\s@<>,;"'\r\n]+$/.test(emailRaw) ? emailRaw : '';
         const pdf = (body && typeof body.pdf === 'string' && body.pdf.length < 6000000) ? body.pdf : null;
         const filename = String((body && body.filename) || 'offerte.pdf').replace(/[\r\n"]/g, '').slice(0, 120);
         if (rec.status !== 'accepted' && rec.expiresAt && Date.now() > new Date(rec.expiresAt).getTime()) return res.status(403).json({ error: 'expired' });
