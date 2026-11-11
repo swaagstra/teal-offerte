@@ -189,7 +189,7 @@ function priceDefaults(){return {v:1,updatedAt:null,
   install:{lead:INSTALL_RATES.lead,crew:INSTALL_RATES.crew,travelIntl:INSTALL_RATES.travelIntl,halfNL:INSTALL_RATES.halfNL,ot:INSTALL_RATES.ot,km:INSTALL_RATES.km,trans:INSTALL_RATES.trans,standby:600,coordPct:10,conPct:10,perDiemStd:PERDIEM_STD,perDiemCity:PERDIEM_CITY},
   resCost:{...INSTALL_RESCOST},
   handling:HANDLING_BRACKETS.map(b=>({max:b.max===Infinity?null:b.max,pct:b.pct})),
-  coordPct:COORD_MARGIN};}
+  coordPct:COORD_MARGIN,targetMargin:0.25};}
 let PRICE=priceDefaults();
 function mergePrices(saved){
   const def=priceDefaults();if(!saved||typeof saved!=='object')return def;
@@ -456,7 +456,7 @@ const I={
     totaalOverzicht:'Totaaloverzicht',
     tealFees:'Block A: TEAL Fees',inkoopTotal:'Block B: Inkoop (incl. handling + risk)',
     subTotal:'Block C: Onderaannemers (incl. coord.)',totaalExcl:'Totaal excl. BTW',
-    kost:'kost',margeLabel:'Marge',target:'Target: 25-35%',
+    kost:'kost',margeLabel:'Marge',target:'Doelmarge instellen: Dashboard → Prijskaart',
     // Planning tab
     planningTitle:'Planning (indicatief)',fase:'Fase',startWeek:'Start (week)',duurWeken:'Duur (weken)',
     startdatum:'Startdatum',weken:'weken',
@@ -519,7 +519,7 @@ const I={
     totaalOverzicht:'Summary',
     tealFees:'Block A: TEAL Fees',inkoopTotal:'Block B: Procurement (incl. handling + risk)',
     subTotal:'Block C: Subcontractors (incl. coord.)',totaalExcl:'Total excl. VAT',
-    kost:'cost',margeLabel:'Margin',target:'Target: 25-35%',
+    kost:'cost',margeLabel:'Margin',target:'Set target: Dashboard → Price card',
     planningTitle:'Planning (indicative)',fase:'Phase',startWeek:'Start (week)',duurWeken:'Duration (weeks)',
     startdatum:'Start date',weken:'weeks',
     betalingsschema:'Payment Schedule',mijlpaal:'Milestone',bedragExcl:'Amount ex. VAT',
@@ -596,7 +596,7 @@ function genRef(type){
   return `${type==='build'?'B':'A'}-${yy}${mm}${dd}-1`;
 }
 
-function marginStatus(p){return p>=.20?'ok':p>=.10?'warn':'bad'}
+function marginStatus(p){const t=(typeof PRICE!=='undefined'&&PRICE&&PRICE.targetMargin)||0.25;return p>=t?'ok':p>=t-0.10?'warn':'bad'}
 
 function defaultAnnexes(){return {
   assumptions:{enabled:false,items:[
@@ -1567,6 +1567,23 @@ function ScopeTab({data:d,set}){
   </>;
 }
 
+// Live margebewaking: staat boven elke tab van de editor en zegt wat er aan de doelmarge ontbreekt.
+function MarginGuard({d}){
+  const b=primaryBundle(d);let tot;try{tot=calcTotals(b);}catch(e){return null;}
+  if(!(tot.grandClient>0))return null;
+  const tg=PRICE.targetMargin||0.25;const m=tot.margin;const st=marginStatus(m);
+  const need=m<tg?Math.max(0,tot.grandCost/(1-tg)-tot.grandClient):0;
+  let worst=null;
+  (b.phases||[]).forEach((ph,i)=>{const pd=tot.phaseData[i];if(ph.enabled===false||!pd||!(pd.cost>0))return;const rev=pd.client+pd.cont;if(!(rev>0))return;const pm=(rev-pd.cost)/rev;if(!worst||pm<worst.m)worst={m:pm,name:ph.customName||t(ph.name,d.lang)};});
+  const col={ok:['#e8f5e9','#1e6b3a'],warn:['#fff8e1','#8a6d00'],bad:['#fce4ec','#b3261e']}[st];
+  const NL=d.lang!=='en';
+  return <div style={{position:'sticky',top:0,zIndex:5,display:'flex',gap:14,alignItems:'baseline',flexWrap:'wrap',background:col[0],color:col[1],borderRadius:6,padding:'8px 14px',margin:'0 0 12px',fontSize:13,fontWeight:600}}>
+    <span>{NL?'Marge':'Margin'} {Math.round(m*1000)/10}% · {fmtE(tot.grandClient-tot.grandCost)}</span>
+    <span style={{fontWeight:400}}>{NL?'doel ≥ ':'target ≥ '}{Math.round(tg*100)}%</span>
+    {need>0.5&&<span>{NL?'Nog ':'Add '}{fmtE(need)}{NL?' omzet nodig voor de doelmarge':' revenue to reach target'}</span>}
+    {worst&&worst.m<tg&&<span style={{fontWeight:400}}>{NL?'Laagste fase: ':'Lowest phase: '}{worst.name} ({Math.round(worst.m*100)}%)</span>}
+  </div>;
+}
 // ── Budget Tab ──
 function BudgetTab({data:d,set}){
   const L=d.lang;
@@ -3806,6 +3823,7 @@ function PriceCardSettings(){
         <span className="sm muted">toeslag</span><NumField value={Math.round(b.pct*1000)/10} onCommit={v=>upHand(i,{pct:v/100})} w={56}/><span className="sm muted">%</span>
       </div>)}
     </div>
+    <div className="flex g8" style={{alignItems:'center',marginTop:8}}><span className="sm">Doelmarge per offerte (ondergrens)</span><NumField value={Math.round((card.targetMargin||0.25)*1000)/10} onCommit={v=>commit({...card,targetMargin:Math.min(0.9,Math.max(0,v/100))})} w={56}/><span className="sm muted">%</span></div>
     <div className="flex g8" style={{alignItems:'center',marginTop:8}}><span className="sm">Coördinatietoeslag onderaannemers</span><NumField value={Math.round(card.coordPct*1000)/10} onCommit={v=>commit({...card,coordPct:v/100})} w={56}/><span className="sm muted">%</span></div>
 
     <div className="flex g8" style={{marginTop:16,alignItems:'center'}}>
@@ -5250,6 +5268,7 @@ function App(){
           </div>
           <button className="btn btn-g btn-sm" onClick={()=>bumpVersion(d._archiveId)}>Nieuwe versie</button>
         </div>
+        {tab!=='preview'&&!isChild&&d.kind!=='change_order'&&d.kind!=='delivery'&&d.kind!=='discharge'&&!isReportKind(d.kind)&&<MarginGuard d={d}/>}
         {(tab==='project'||tab==='all')&&<React.Fragment>{tab==='all'&&<div className="card-h" style={{fontSize:15,margin:'8px 0 14px',paddingBottom:8,borderBottom:'2px solid var(--teal-dark)'}}>{d.lang==='nl'?'Project':'Project'}</div>}<ProjectTab data={d} set={setDWithArchive}/></React.Fragment>}
         {(tab==='scope'||tab==='budget'||tab==='all')&&(()=>{
           const optIdx=(d.multiOption&&d.options&&d.options.length)?Math.min(activeOptIdx,d.options.length-1):null;
